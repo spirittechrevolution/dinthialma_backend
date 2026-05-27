@@ -43,6 +43,10 @@ public class SecurityConfig {
     "/actuator/health",
     // Auth – endpoints publics
     "/v1/auth/login",
+    "/v1/auth/login-pin",
+    "/pin/reset",
+    "/pin/reset/send-otp",
+    "/pin/reset/verify-otp",
     "/v1/auth/login/phone",
     "/v1/auth/register/send-otp",
     "/v1/auth/register/verify-otp",

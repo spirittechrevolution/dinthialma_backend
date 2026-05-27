@@ -1,6 +1,8 @@
 package com.africa.dinthialma_backend.auth.dto;
 
+import com.africa.dinthialma_backend.auth.codeList.ClientType;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -26,4 +28,18 @@ public class LoginRequest {
 
   @NotBlank(message = "Le mot de passe est obligatoire")
   private String password;
+
+  /**
+   * Type de client – détermine la durée de vie de la session PIN créée après le login.
+   *
+   * <ul>
+   *   <li>{@code WEB} → TTL 24 h
+   *   <li>{@code MOBILE} → TTL 30 jours
+   * </ul>
+   */
+  @NotNull(message = "Le type de client (WEB ou MOBILE) est obligatoire")
+  private ClientType clientType;
+
+  /** Informations sur l'appareil (optionnel) – ex. {@code "Chrome 124 / Windows 11"}. */
+  private String deviceInfo;
 }

@@ -1,7 +1,12 @@
 package com.africa.dinthialma_backend.auth.entity;
 
 import com.africa.dinthialma_backend.common.base.BaseEntity;
-import jakarta.persistence.*;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
@@ -79,6 +84,14 @@ public class User extends BaseEntity {
    */
   @Column(name = "pin_locked_until")
   private LocalDateTime pinLockedUntil;
+
+  /**
+   * Date/heure de la dernière configuration du PIN. Utilisé pour forcer le renouvellement du PIN
+   * tous les {@code Constants.Pin.EXPIRY_DAYS} jours (par défaut 90). {@code null} = PIN jamais
+   * configuré.
+   */
+  @Column(name = "pin_created_at")
+  private LocalDateTime pinCreatedAt;
 
   // ─── Relations ────────────────────────────────────────────────────
 

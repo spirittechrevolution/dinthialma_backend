@@ -1,6 +1,17 @@
 package com.africa.dinthialma_backend.auth.controller;
 
-import com.africa.dinthialma_backend.auth.dto.*;
+import com.africa.dinthialma_backend.auth.dto.LoginRequest;
+import com.africa.dinthialma_backend.auth.dto.LoginResponse;
+import com.africa.dinthialma_backend.auth.dto.LogoutRequest;
+import com.africa.dinthialma_backend.auth.dto.PinLoginRequest;
+import com.africa.dinthialma_backend.auth.dto.PinResetRequest;
+import com.africa.dinthialma_backend.auth.dto.PinSetupRequest;
+import com.africa.dinthialma_backend.auth.dto.RefreshTokenRequest;
+import com.africa.dinthialma_backend.auth.dto.RegisterCompleteRequest;
+import com.africa.dinthialma_backend.auth.dto.RegisterResponse;
+import com.africa.dinthialma_backend.auth.dto.ResetPasswordByPhoneRequest;
+import com.africa.dinthialma_backend.auth.dto.SendOtpRequest;
+import com.africa.dinthialma_backend.auth.dto.VerifyOtpRequest;
 import com.africa.dinthialma_backend.auth.service.interfaces.KeycloakAuthService;
 import com.africa.dinthialma_backend.auth.service.interfaces.LoginService;
 import com.africa.dinthialma_backend.auth.service.interfaces.PasswordResetService;
@@ -57,6 +68,27 @@ public class AuthController {
             Constants.Message.SUCCESS_BODY,
             Constants.Status.OK,
             ResponseMessageConstants.AUTH_LOGIN_SUCCESS,
+            tokens));
+  }
+
+  // ─── Refresh token ────────────────────────────────────────────────
+
+  @PostMapping("/refresh")
+  @Operation(
+      summary = "Rafraîchir les tokens JWT",
+      description = "Échange un refresh_token Keycloak valide contre de nouveaux tokens JWT.")
+  @ApiResponses({
+    @ApiResponse(responseCode = "200", description = "Nouveaux tokens retournés"),
+    @ApiResponse(responseCode = "401", description = "Refresh token invalide ou expiré"),
+  })
+  public ResponseEntity<CustomResponse> refresh(@RequestBody @Valid RefreshTokenRequest request)
+      throws CustomException {
+    LoginResponse tokens = keycloakAuthService.refreshToken(request.getRefreshToken());
+    return ResponseEntity.ok(
+        new CustomResponse(
+            Constants.Message.SUCCESS_BODY,
+            Constants.Status.OK,
+            "Token rafraîchi avec succès",
             tokens));
   }
 

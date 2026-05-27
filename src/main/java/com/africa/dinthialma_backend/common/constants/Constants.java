@@ -33,6 +33,7 @@ public final class Constants {
     public static final String REGISTRATION = "REGISTRATION";
     public static final String RESET_PASSWORD = "RESET_PASSWORD";
     public static final String RESET_PIN = "RESET_PIN";
+    public static final String PHONE_CHANGE = "PHONE_CHANGE";
 
     private OtpPurpose() {}
   }
@@ -47,6 +48,11 @@ public final class Constants {
 
     /** Durée du verrouillage en minutes après MAX_ATTEMPTS échecs. */
     public static final int LOCK_DURATION_MINUTES = 30;
+
+    /**
+     * Durée de validité du PIN en jours. Passé ce délai, l'utilisateur doit reconfigurer son PIN.
+     */
+    public static final long EXPIRY_DAYS = 90;
 
     /**
      * PINs triviaux interdits (suites, répétitions). Le service valide que le PIN fourni n'est pas
