@@ -1,5 +1,6 @@
 package com.africa.dinthialma_backend.tontine.repository;
 
+import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import java.util.List;
 import java.util.Optional;
@@ -28,7 +29,7 @@ public interface TontineRepository extends JpaRepository<Tontine, UUID> {
    * <p>Inclut aussi les tontines qu'il administre s'il est inscrit comme cotisant.
    */
   @Query(
-      "SELECT DISTINCT t FROM Tontine t"
+      "SELECT t FROM Tontine t"
           + " JOIN TontineMembre m ON m.tontine = t"
           + " WHERE m.user.id = :userId"
           + "   AND m.deletedAt IS NULL"
@@ -41,7 +42,7 @@ public interface TontineRepository extends JpaRepository<Tontine, UUID> {
    * <p>Utilisé pour construire la liste "Mes tontines" (ADMIN + MEMBER).
    */
   @Query(
-      "SELECT DISTINCT t FROM Tontine t"
+      "SELECT t FROM Tontine t"
           + " WHERE t.deletedAt IS NULL"
           + "   AND ("
           + "     t.creePar.id = :userId"
@@ -51,4 +52,10 @@ public interface TontineRepository extends JpaRepository<Tontine, UUID> {
           + "     )"
           + "   )")
   List<Tontine> findVisibleByUserId(@Param("userId") UUID userId);
+
+  /** Compte les tontines non supprimées par statut – pour les stats dashboard. */
+  long countByStatutAndDeletedAtIsNull(TontineStatut statut);
+
+  /** Total tontines non supprimées. */
+  long countByDeletedAtIsNull();
 }

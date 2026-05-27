@@ -265,6 +265,78 @@ public class KeycloakAuthServiceImpl implements KeycloakAuthService {
     }
   }
 
+  @Override
+  public void disableUser(String keycloakId) throws CustomException {
+    log.debug("Désactivation utilisateur Keycloak : keycloakId={}", keycloakId);
+    try {
+      UserRepresentation userRep =
+          keycloakAdminClient
+              .realm(keycloakProperties.getRealm())
+              .users()
+              .get(keycloakId)
+              .toRepresentation();
+      userRep.setEnabled(false);
+      keycloakAdminClient
+          .realm(keycloakProperties.getRealm())
+          .users()
+          .get(keycloakId)
+          .update(userRep);
+      log.info("Utilisateur Keycloak désactivé : keycloakId={}", keycloakId);
+    } catch (Exception e) {
+      log.error("Échec désactivation Keycloak {} : {}", keycloakId, e.getMessage());
+      throw new CustomException(
+          HttpStatus.BAD_GATEWAY, "Impossible de désactiver le compte dans l'IAM");
+    }
+  }
+
+  @Override
+  public void enableUser(String keycloakId) throws CustomException {
+    log.debug("Réactivation utilisateur Keycloak : keycloakId={}", keycloakId);
+    try {
+      UserRepresentation userRep =
+          keycloakAdminClient
+              .realm(keycloakProperties.getRealm())
+              .users()
+              .get(keycloakId)
+              .toRepresentation();
+      userRep.setEnabled(true);
+      keycloakAdminClient
+          .realm(keycloakProperties.getRealm())
+          .users()
+          .get(keycloakId)
+          .update(userRep);
+      log.info("Utilisateur Keycloak réactivé : keycloakId={}", keycloakId);
+    } catch (Exception e) {
+      log.error("Échec réactivation Keycloak {} : {}", keycloakId, e.getMessage());
+      throw new CustomException(
+          HttpStatus.BAD_GATEWAY, "Impossible de réactiver le compte dans l'IAM");
+    }
+  }
+
+  @Override
+  public void removeRole(String keycloakId, String roleName) throws CustomException {
+    log.debug("Retrait du rôle '{}' de keycloakId={}", roleName, keycloakId);
+    try {
+      RoleRepresentation roleRep =
+          keycloakAdminClient
+              .realm(keycloakProperties.getRealm())
+              .roles()
+              .get(roleName)
+              .toRepresentation();
+      keycloakAdminClient
+          .realm(keycloakProperties.getRealm())
+          .users()
+          .get(keycloakId)
+          .roles()
+          .realmLevel()
+          .remove(List.of(roleRep));
+      log.info("Rôle '{}' retiré de keycloakId={}", roleName, keycloakId);
+    } catch (Exception e) {
+      log.error("Échec retrait rôle '{}' de {} : {}", roleName, keycloakId, e.getMessage());
+      throw new CustomException(HttpStatus.BAD_GATEWAY, "Impossible de retirer le rôle dans l'IAM");
+    }
+  }
+
   // ─── Helpers ──────────────────────────────────────────────────────
 
   private String buildTokenUrl() {
