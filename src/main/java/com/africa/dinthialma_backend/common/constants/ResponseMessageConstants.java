@@ -5,7 +5,7 @@ public final class ResponseMessageConstants {
 
   private ResponseMessageConstants() {}
 
-  // ─── Auth ─────────────────────────────────────────────────────────
+  // ─── Auth ─────────────────────────────────────────────────────────────
   public static final String AUTH_LOGIN_SUCCESS = "Connexion réussie";
   public static final String AUTH_LOGIN_FAILURE = "Identifiants incorrects";
   public static final String AUTH_LOGOUT_SUCCESS = "Déconnexion réussie";
@@ -22,7 +22,7 @@ public final class ResponseMessageConstants {
   public static final String AUTH_OTP_NOT_VERIFIED = "Veuillez d'abord vérifier votre OTP";
   public static final String AUTH_ACCOUNT_DISABLED = "Ce compte est désactivé";
 
-  // ─── PIN ──────────────────────────────────────────────────────────
+  // ─── PIN ──────────────────────────────────────────────────────────────
   public static final String AUTH_PIN_SETUP_SUCCESS = "Code PIN configuré avec succès";
   public static final String AUTH_PIN_ALREADY_SET =
       "Un code PIN est déjà configuré. Utilisez la réinitialisation pour le changer";
@@ -39,7 +39,7 @@ public final class ResponseMessageConstants {
   public static final String AUTH_PIN_INVALID_FORMAT =
       "Le code PIN doit contenir exactement 6 chiffres";
 
-  // ─── Session ──────────────────────────────────────────────────────
+  // ─── Session ──────────────────────────────────────────────────────────
   public static final String AUTH_SESSION_EXPIRED =
       "Session expirée. Veuillez vous reconnecter avec votre mot de passe";
   public static final String AUTH_SESSION_NOT_FOUND =
@@ -47,7 +47,7 @@ public final class ResponseMessageConstants {
   public static final String AUTH_SESSION_REVOKED = "Session révoquée avec succès";
   public static final String AUTH_SESSION_ALL_REVOKED = "Toutes les sessions ont été révoquées";
 
-  // ─── Tontine ──────────────────────────────────────────────────────
+  // ─── Tontine ──────────────────────────────────────────────────────────
   public static final String TONTINE_CREATE_SUCCESS = "Tontine créée avec succès";
   public static final String TONTINE_UPDATE_SUCCESS = "Tontine mise à jour avec succès";
   public static final String TONTINE_DELETE_SUCCESS = "Tontine supprimée avec succès";
@@ -55,25 +55,37 @@ public final class ResponseMessageConstants {
   public static final String TONTINE_LIST_SUCCESS = "Liste des tontines récupérée avec succès";
   public static final String TONTINE_NOT_FOUND = "Tontine introuvable";
   public static final String TONTINE_ACCESS_DENIED = "Accès non autorisé à cette tontine";
+  public static final String TONTINE_ACTIVATED = "Tontine activée avec succès";
+  public static final String TONTINE_SUSPENDED = "Tontine suspendue avec succès";
 
-  // ─── Membre ──────────────────────────────────────────────────────
+  // ─── Cycle ────────────────────────────────────────────────────────────
+  public static final String CYCLE_LIST_SUCCESS = "Liste des cycles récupérée avec succès";
+  public static final String CYCLE_GET_SUCCESS = "Cycle récupéré avec succès";
+  public static final String CYCLE_NOT_FOUND = "Cycle introuvable";
+  public static final String CYCLE_OPENED = "Cycle ouvert avec succès";
+  public static final String CYCLE_CLOSED = "Cycle clôturé avec succès";
+
+  // ─── Membre ──────────────────────────────────────────────────────────
   public static final String MEMBER_ADD_SUCCESS = "Membre ajouté avec succès";
   public static final String MEMBER_REMOVE_SUCCESS = "Membre retiré avec succès";
   public static final String MEMBER_LIST_SUCCESS = "Liste des membres récupérée avec succès";
   public static final String MEMBER_NOT_FOUND = "Membre introuvable";
   public static final String MEMBER_ALREADY_EXISTS = "Ce membre est déjà dans la tontine";
+  public static final String MEMBER_STATUT_UPDATED = "Statut du membre mis à jour avec succès";
 
-  // ─── Cotisation ───────────────────────────────────────────────────
+  // ─── Cotisation ───────────────────────────────────────────────────────
   public static final String CONTRIBUTION_RECORD_SUCCESS = "Cotisation enregistrée avec succès";
   public static final String CONTRIBUTION_LIST_SUCCESS =
       "Historique des cotisations récupéré avec succès";
+  public static final String CONTRIBUTION_GET_SUCCESS = "Cotisation récupérée avec succès";
   public static final String CONTRIBUTION_NOT_FOUND = "Cotisation introuvable";
+  public static final String CONTRIBUTION_VALIDATED = "Cotisation validée avec succès";
 
-  // ─── Notification ─────────────────────────────────────────────────
+  // ─── Notification ─────────────────────────────────────────────────────
   public static final String NOTIFICATION_SENT = "Notification envoyée avec succès";
   public static final String NOTIFICATION_SEND_FAILURE = "Échec de l'envoi de la notification";
 
-  // ─── CodeList ─────────────────────────────────────────────────────
+  // ─── CodeList ─────────────────────────────────────────────────────────
   public static final String CODELIST_GET_SUCCESS = "Référentiel récupéré avec succès";
   public static final String CODELIST_GET_FAILURE_NOT_FOUND = "Code list introuvable";
   public static final String CODELIST_GET_FAILURE_BAD_REQUEST = "Identifiant de code list invalide";
