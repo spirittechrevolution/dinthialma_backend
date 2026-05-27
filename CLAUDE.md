@@ -12,54 +12,178 @@
 
 ---
 
+## Matrice des rôles
+
+| Rôle | Realm Keycloak | Qui est-ce ? |
+|------|----------------|--------------|
+| `SUPER_ADMIN` | `DINTHIALMA_SUPER_ADMIN` | Équipe Dinthialma – accès total plateforme |
+| `ADMIN` | `DINTHIALMA_ADMIN` | Créateur/gestionnaire d'une tontine |
+| `MEMBER` | `DINTHIALMA_MEMBER` | Cotisant membre d'une tontine |
+| `USER` | `DINTHIALMA_USER` | Tout compte inscrit (rôle de base) |
+
+> **Règle** : les rôles se cumulent (ex. ADMIN + USER, MEMBER + USER).  
+> La logique d'accès par tontine est applicative : être ADMIN ne suffit pas, il faut être le **créateur de la tontine** concernée.
+
+---
+
+## Matrice d'accès par fonctionnalité
+
+### 🔐 Auth (`/v1/auth`)
+
+| Endpoint | Méthode | Public | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
+|----------|---------|--------|------|--------|-------|-------------|-------|
+| `/login` | POST | ✅ | ✅ | ✅ | ✅ | ✅ | username(phone/email) + password + clientType |
+| `/logout` | POST | ✅ | ✅ | ✅ | ✅ | ✅ | révoque session Keycloak |
+| `/refresh` | POST | ✅ | ✅ | ✅ | ✅ | ✅ | refresh_token → nouveaux tokens |
+| `/register/send-otp` | POST | ✅ | – | – | – | – | envoie OTP SMS |
+| `/register/verify-otp` | POST | ✅ | – | – | – | – | vérifie OTP |
+| `/register/complete` | POST | ✅ | – | – | – | – | finalise inscription |
+| `/forgot-password/send-otp` | POST | ✅ | – | – | – | – | anti-énumération |
+| `/forgot-password/verify-otp` | POST | ✅ | – | – | – | – | |
+| `/forgot-password/reset` | POST | ✅ | – | – | – | – | |
+| `/pin/setup` | POST | ❌ | ✅ | ✅ | ✅ | ✅ | 🔒 JWT requis |
+| `/login-pin` | POST | ✅ | ✅ | ✅ | ✅ | ✅ | nécessite session active |
+| `/pin/reset/send-otp` | POST | ✅ | – | – | – | – | |
+| `/pin/reset/verify-otp` | POST | ✅ | – | – | – | – | |
+| `/pin/reset` | POST | ✅ | – | – | – | – | |
+
+### 👤 Profil utilisateur (`/v1/profile`)
+
+| Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
+|----------|---------|------|--------|-------|-------------|-------|
+| `/` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 voir son propre profil |
+| `/` | PUT | ✅ | ✅ | ✅ | ✅ | 🔒 firstName, lastName, email |
+| `/phone/request-change` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 OTP envoyé au nouveau numéro |
+| `/phone/verify` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 vérifie OTP + change partout |
+
+### 🏦 Tontines (`/v1/tontines`)
+
+| Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
+|----------|---------|------|--------|-------|-------------|-------|
+| `/` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 tout auth peut créer → devient ADMIN |
+| `/` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 SUPER_ADMIN voit tout ; autres voient les leurs |
+| `/{id}` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 ¹membre de la tontine ²créateur |
+| `/{id}` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 BROUILLON seulement |
+| `/{id}` | DELETE | ❌ | ❌ | ✅² | ✅ | 🔒 soft delete, BROUILLON seulement |
+| `/{id}/activer` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 BROUILLON/SUSPENDUE → ACTIVE |
+| `/{id}/suspendre` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 ACTIVE → SUSPENDUE |
+
+### 👥 Membres (`/v1/tontines/{tontineId}/membres`)
+
+| Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
+|----------|---------|------|--------|-------|-------------|-------|
+| `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
+| `/` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 ajouter un cotisant → rôle MEMBER attribué |
+| `/{membreId}` | DELETE | ❌ | ❌ | ✅² | ✅ | 🔒 soft delete, statut → SORTI |
+| `/{membreId}/statut` | PATCH | ❌ | ❌ | ✅² | ✅ | 🔒 ACTIF / SUSPENDU / SORTI |
+
+### 💰 Cotisations (`/v1/tontines/{tontineId}/cotisations`)
+
+| Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
+|----------|---------|------|--------|-------|-------------|-------|
+| `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 ¹MEMBER voit les siennes seulement |
+| `/{id}` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
+| `/` | POST | ❌ | ✅¹ | ❌ | ✅ | 🔒 le cotisant enregistre son paiement |
+| `/{id}/valider` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 EN_ATTENTE → VALIDE |
+
+### 🔄 Cycles (`/v1/tontines/{tontineId}/cycles`)
+
+| Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
+|----------|---------|------|--------|-------|-------------|-------|
+| `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
+| `/{cycleId}` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
+| `/` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 mode MANUEL uniquement |
+| `/{cycleId}/cloturer` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 EN_COURS → TERMINE, calcul jackpot |
+
+> ¹ = membre de cette tontine · ² = créateur de cette tontine
+
+### 📊 Dashboard Admin (`/v1/admin`)
+
+| Endpoint | Méthode | ADMIN | SUPER_ADMIN | Description |
+|----------|---------|-------|-------------|-------------|
+| `/dashboard` | GET | ❌ | ✅ | Statistiques globales plateforme |
+| `/dashboard/tontines` | GET | ❌ | ✅ | Toutes tontines + statuts |
+| `/dashboard/users` | GET | ❌ | ✅ | Tous les utilisateurs (pageable) |
+| `/dashboard/users/{id}` | GET | ❌ | ✅ | Détail utilisateur |
+| `/dashboard/users/{id}/disable` | POST | ❌ | ✅ | Désactiver un compte |
+| `/dashboard/users/{id}/enable` | POST | ❌ | ✅ | Réactiver un compte |
+| `/dashboard/users/{id}/roles` | PUT | ❌ | ✅ | Modifier les rôles |
+| `/dashboard/contributions` | GET | ❌ | ✅ | Toutes cotisations (filtrables) |
+| `/my-dashboard` | GET | ✅ | ✅ | Métriques de l'admin pour ses tontines |
+
+### 📊 Dashboard Super Admin — métriques clés
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  SUPER ADMIN DASHBOARD                                      │
+├─────────────────┬───────────────────┬───────────────────────┤
+│ Utilisateurs    │ Tontines          │ Finances              │
+│ • Total         │ • Total           │ • Cotisations ce mois │
+│ • Actifs        │ • Actives         │ • Jackpots remis      │
+│ • Nouveaux /mois│ • En attente      │ • Commissions totales │
+│ • Désactivés    │ • Clôturées       │ • Retards en cours    │
+├─────────────────┴───────────────────┴───────────────────────┤
+│ Activité récente (dernières 24h)                            │
+│ • Nouveaux inscrits · Connexions · Cotisations enregistrées │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Architecture des modules
 
 ```
 src/main/java/com/africa/dinthialma_backend/
-├── auth/           ✅ Auth, inscription OTP, Keycloak, PIN
-│   ├── codeList/       UserRole (SUPER_ADMIN, ADMIN, MEMBER, USER), ClientType (WEB, MOBILE)
+├── auth/           ✅ Auth, inscription OTP, Keycloak, PIN, profil
+│   ├── codeList/       UserRole, ClientType
 │   ├── config/         KeycloakClientConfig, KeycloakProperties
-│   ├── controller/     AuthController (login, logout, register, forgot-password, PIN)
+│   ├── controller/     AuthController, UserProfileController
 │   ├── dto/            LoginRequest/Response, RegisterCompleteRequest/Response,
-│   │                   SendOtpRequest, VerifyOtpRequest, LogoutRequest,
-│   │                   ForgotPasswordRequest, ResetPasswordByPhoneRequest, RequestUser,
-│   │                   PinSetupRequest, PinLoginRequest, PinResetRequest
-│   ├── entity/         User, OtpVerification, UserRoleAssignment, UserSession
+│   │                   RefreshTokenRequest, UserProfileResponse, UpdateProfileRequest,
+│   │                   PhoneChangeRequest, PhoneChangeVerifyRequest, …
+│   ├── entity/         User, OtpVerification, UserRoleAssignment, UserSession,
+│   │                   PhoneChangeRequestEntity
 │   ├── repository/     UserRepository, OtpVerificationRepository,
-│   │                   UserRoleAssignmentRepository, UserSessionRepository
+│   │                   UserRoleAssignmentRepository, UserSessionRepository,
+│   │                   PhoneChangeRequestRepository
 │   └── service/
-│       ├── interfaces/ KeycloakAuthService, RegistrationService,
-│       │               PasswordResetService, PinService, UserSessionService
-│       └── impl/       KeycloakAuthServiceImpl, RegistrationServiceImpl,
-│                       PasswordResetServiceImpl, PinServiceImpl, UserSessionServiceImpl
-├── tontine/        🔲 Gestion des tontines (entités créées)
-│   ├── codeList/       TontineStatut, ModeCycle, CycleStatut
-│   └── entity/         Tontine, CycleTontine
-├── member/         🔲 Membres des tontines (entités créées)
-│   ├── codeList/       MembreRole, MembreStatut
-│   └── entity/         TontineMembre
-├── contribution/   🔲 Cotisations (entités créées)
+│       ├── interfaces/ KeycloakAuthService, LoginService, RegistrationService,
+│       │               PasswordResetService, PinService, UserSessionService,
+│       │               UserProfileService
+│       └── impl/       (implémentations correspondantes)
+├── tontine/        ✅ Complet (entités + repo + service + controller)
+│   ├── codeList/       TontineStatut, ModeCycle, CycleStatut, CommissionType
+│   ├── controller/     TontineController, CycleController
+│   ├── dto/            CreateTontineRequest, UpdateTontineRequest, TontineResponse,
+│   │                   CycleResponse, OpenCycleRequest
+│   ├── entity/         Tontine, CycleTontine, TontineCommission
+│   ├── repository/     TontineRepository, CycleTontineRepository,
+│   │                   TontineCommissionRepository
+│   └── service/
+│       ├── interfaces/ TontineService, CycleService
+│       └── impl/       TontineServiceImpl, CycleServiceImpl
+├── member/         ✅ Complet (entités + repo + service + controller)
+│   ├── codeList/       MembreStatut
+│   ├── controller/     MembreController
+│   ├── dto/            AddMembreRequest, MembreResponse, UpdateMembreStatutRequest
+│   ├── entity/         TontineMembre
+│   ├── repository/     TontineMembreRepository
+│   └── service/
+│       ├── interfaces/ MembreService
+│       └── impl/       MembreServiceImpl
+├── contribution/   ✅ Complet (entités + repo + service + controller)
 │   ├── codeList/       CotisationStatut
-│   └── entity/         Cotisation
-├── notification/   ✅ SMS (LAfricaMobile)
-│   └── service/        SmsService
+│   ├── controller/     CotisationController
+│   ├── dto/            RecordCotisationRequest, CotisationResponse
+│   ├── entity/         Cotisation
+│   ├── repository/     CotisationRepository
+│   └── service/
+│       ├── interfaces/ CotisationService
+│       └── impl/       CotisationServiceImpl
+├── notification/   ✅ SMS (LAfricaMobile) – mock mode dev
+├── admin/          🔲 TODO – DashboardController, DashboardService
 ├── common/         ✅ BaseEntity, exceptions, CustomResponse, utils, CodeList, Audit
-│   ├── audit/          ✅ TontineAuditLog, AuditAction
-│   ├── base/           BaseEntity (id UUID, createdAt, updatedAt)
-│   ├── codelist/       ✅ LaCodeList — entité, DTO, repo, service, controller
-│   │   ├── controller/     LaCodeListController (GET public /type/{type}, CRUD admin)
-│   │   ├── dto/            LaCodeListDto (from() + toEntity())
-│   │   ├── entity/         LaCodeList (type, value, description, isSystemAssign)
-│   │   ├── repository/     LaCodeListRepository (CrudRepository + findAllByType)
-│   │   └── service/
-│   │       ├── interfaces/ LaCodeListService
-│   │       └── impl/       LaCodeListServiceImpl
-│   ├── constants/      Constants, ResponseMessageConstants
-│   ├── exception/      CustomException, ApiExceptionHandler + hiérarchie
-│   ├── response/       CustomResponse
-│   └── util/           RoleGuard, RequestHeaderParser (+ extractKeycloakId()),
-│                       KeycloakJwtRolesConverter, OtpUtils, TokenEncryptionUtil
-└── config/         ✅ SecurityConfig, OpenApiConfig, CustomEntryPoint/AccessDenied
+└── config/         ✅ SecurityConfig, OpenApiConfig, BootstrapService
 ```
 
 ---
@@ -73,40 +197,60 @@ src/main/java/com/africa/dinthialma_backend/
 | 1 | Routes publiques (`WHITELIST`) | Aucun JWT requis |
 | 2 | Toutes les autres routes | JWT Keycloak obligatoire |
 
-Routes publiques : `/api-docs/**`, `/swagger-ui/**`, `/actuator/health`, `/v1/auth/**` (sauf reset-password forcé admin).
+Routes publiques : `/api-docs/**`, `/swagger-ui/**`, `/actuator/health`,
+`/v1/auth/login`, `/v1/auth/logout`, `/v1/auth/register/**`,
+`/v1/auth/forgot-password/**`, `/v1/auth/login-pin`, `/v1/auth/pin/reset/**`,
+`/v1/code-list/type/**`
 
-### Rôles Keycloak (`UserRole` enum) — Realm `dinthialma`
+### Vérification des droits — pattern service
 
-| UserRole | Realm Keycloak | Périmètre |
-|----------|----------------|-----------|
-| `SUPER_ADMIN` | `DINTHIALMA_SUPER_ADMIN` | Accès total, administration plateforme |
-| `ADMIN` | `DINTHIALMA_ADMIN` | Administrateur de groupe / tontine |
-| `MEMBER` | `DINTHIALMA_MEMBER` | Membre d'une tontine |
-
-### Vérification des rôles dans les contrôleurs
+La vérification d'accès se fait dans la couche service (pas le contrôleur) :
 
 ```java
-// Exiger un rôle spécifique
-RequestUser caller = RoleGuard.requireAnyRole(requestHeaderParser, httpRequest, UserRole.ADMIN);
+// Dans un ServiceImpl :
+private void assertIsCreatorOrSuperAdmin(User caller, Tontine tontine) throws CustomException {
+    if (isSuperAdmin(caller)) return;
+    if (!tontine.getCreePar().getId().equals(caller.getId()))
+        throw new ForbiddenException(ResponseMessageConstants.TONTINE_ACCESS_DENIED);
+}
 
-// Exiger ADMIN ou SUPER_ADMIN
-RequestUser caller = RoleGuard.requireAdmin(requestHeaderParser, httpRequest);
-
-// Super admin uniquement
-RequestUser caller = RoleGuard.requireSuperAdmin(requestHeaderParser, httpRequest);
+private boolean isSuperAdmin(User user) {
+    return roleAssignmentRepository.existsByUserIdAndRole(user.getId(), UserRole.SUPER_ADMIN);
+}
 ```
 
 ---
 
 ## Conventions de code
 
-- **Formatage** : Google Java Format via `fmt-maven-plugin` – `./mvnw fmt:apply` en local, `fmt:check` en CI
-- **Lombok** : `@Getter`, `@Setter`, `@NoArgsConstructor`, `@AllArgsConstructor`, `@SuperBuilder` sur les entités ; `@RequiredArgsConstructor` sur les services et controllers
-- **Entités** : toutes étendent `BaseEntity` (id UUID auto-généré, createdAt, updatedAt) via `@SuperBuilder`
-- **Soft delete** : champ `deletedAt` (`LocalDateTime`, null = actif) – jamais de suppression physique
+- **Formatage** : Google Java Format via `fmt-maven-plugin` – `./mvnw fmt:apply`
+- **Lombok** : `@Getter @Setter @NoArgsConstructor @AllArgsConstructor @SuperBuilder` entités ; `@RequiredArgsConstructor` services/controllers
+- **Entités** : toutes étendent `BaseEntity` (id UUID, createdAt, updatedAt)
+- **Soft delete** : `deletedAt` (`LocalDateTime`, null = actif) – jamais de suppression physique
 - **Réponses API** : toujours `CustomResponse(status, statusCode, message, data)`
-- **Exceptions** : hiérarchie `CustomException` capturée par `ApiExceptionHandler` → réponse JSON normalisée
-- **Services** : interface dans `service/interfaces/` + implémentation dans `service/impl/` ; `@Transactional` sur les méthodes d'écriture
+- **Exceptions** : hiérarchie `CustomException` → `ApiExceptionHandler` → JSON normalisé
+- **Services** : interface dans `service/interfaces/` + impl dans `service/impl/` ; `@Transactional` sur écriture
+- **Phone** : toujours stocké SANS le `+` (normalisé via `PhoneUtils.normalize()` en entrée)
+
+### ⛔ Imports — règle absolue : PAS de wildcard `*`
+
+**Interdit** :
+```java
+import com.africa.dinthialma_backend.auth.dto.*;       // ❌
+import jakarta.persistence.*;                           // ❌
+import java.util.*;                                     // ❌
+```
+
+**Obligatoire** : chaque classe sur sa propre ligne :
+```java
+import com.africa.dinthialma_backend.auth.dto.LoginRequest;    // ✅
+import jakarta.persistence.Column;                              // ✅
+import java.util.List;                                          // ✅
+```
+
+**Pourquoi** : les imports `*` créent des conflits de noms silencieux (ex. `PhoneChangeRequest`
+en `dto/` et en `entity/`). Java résout l'import explicite en priorité, rendant le comportement
+imprévisible. Un conflit réel a déjà cassé la compilation dans ce projet.
 
 ### Pattern contrôleur type
 
@@ -114,26 +258,23 @@ RequestUser caller = RoleGuard.requireSuperAdmin(requestHeaderParser, httpReques
 @RestController
 @RequestMapping("/v1/module")
 @RequiredArgsConstructor
-@Tag(name = "...", description = "...")
+@Tag(name = "Module", description = "...")
+@SecurityRequirement(name = "bearerAuth")
 public class ModuleController {
 
   private final ModuleService moduleService;
-  private final RequestHeaderParser requestHeaderParser;
+  private final RequestHeaderParser headerParser;
 
   @PostMapping
-  @Operation(summary = "...", security = @SecurityRequirement(name = "bearerAuth"))
+  @Operation(summary = "Créer ...", description = "🔒 Rôles : ADMIN, SUPER_ADMIN")
   public ResponseEntity<CustomResponse> create(
       @RequestBody @Valid CreateRequest request,
       HttpServletRequest httpRequest) throws CustomException {
 
-    RequestUser caller = RoleGuard.requireAnyRole(requestHeaderParser, httpRequest, UserRole.ADMIN);
-    ModuleResponse response = moduleService.create(caller.getSub(), request);
+    String keycloakId = headerParser.extractKeycloakId(httpRequest);
+    ModuleResponse response = moduleService.create(keycloakId, request);
     return ResponseEntity.status(HttpStatus.CREATED)
-        .body(new CustomResponse(
-            Constants.Message.SUCCESS_BODY,
-            Constants.Status.CREATED,
-            ResponseMessageConstants.MODULE_CREATE_SUCCESS,
-            response));
+        .body(new CustomResponse("success", 201, MODULE_CREATE_SUCCESS, response));
   }
 }
 ```
@@ -144,8 +285,14 @@ public class ModuleController {
 
 - **Schéma** : `dinthialma`
 - **Migrations** : Flyway (`src/main/resources/db/migration/V*__*.sql`)
-- `ddl-auto: none` — Flyway est **la seule** source de vérité pour le schéma
-- Toute nouvelle table ou colonne = nouvelle migration versionnée
+- `ddl-auto: none` — Flyway est **la seule** source de vérité
+
+### Règles migrations
+
+- PAS de `DEFAULT` ni `CHECK` SQL dans les migrations (géré Java/service)
+- PAS de `uniqueConstraints` dans les annotations JPA (contraintes uniquement en SQL)
+- UUIDs pour les colonnes de code list : fournis manuellement (pas `gen_random_uuid()`)
+- Toujours utiliser `IF NOT EXISTS` pour les `CREATE TABLE` et `ADD COLUMN IF NOT EXISTS`
 
 ### Migrations actuelles
 
@@ -154,29 +301,116 @@ public class ModuleController {
 | V001 | `create_schema.sql` | Schéma `dinthialma` |
 | V002 | `create_users.sql` | `users` |
 | V003 | `create_otp_verifications.sql` | `otp_verifications` |
-| V004 | `create_la_code_list.sql` | `la_code_list` (table seule, sans seeds) |
-| V005 | `create_tontines.sql` | `tontines` (statut, mode_cycle, cree_par) |
-| V006 | `create_tontine_membres.sql` | `tontine_membres` (cotisants uniquement, sans colonne role) |
-| V007 | `create_cycles_tontine.sql` | `cycles_tontine` (beneficiaire_id, montant_jackpot, date_remise) |
-| V008 | `create_cotisations.sql` | `cotisations` (statut EN_ATTENTE→VALIDE, valide_par) |
-| V009 | `create_tontine_audit_log.sql` | `tontine_audit_log` (table_name, record_id, action, champ, ancienne_val, nouvelle_val) |
-| V010 | `seed_frequence_tontine.sql` | Seeds FREQUENCE_TONTINE (5 valeurs, UUIDs fixes) |
-| V011 | `seed_methode_paiement.sql` | Seeds METHODE_PAIEMENT (4 valeurs, UUIDs fixes) |
-| V012 | `seed_statut_cotisation.sql` | Seeds STATUT_COTISATION (3 valeurs, UUIDs fixes) |
-| V013 | `seed_ordre_beneficiaire.sql` | Seeds ORDRE_BENEFICIAIRE (3 valeurs, UUIDs fixes) |
-| V014 | `create_user_roles.sql` | `user_roles` (rôles multiples, synced_to_keycloak) |
-| V015 | `create_tontine_commissions.sql` | `tontine_commissions` (POURCENTAGE_JACKPOT, FRAIS_FIXES_PAR_CYCLE, FRAIS_ADHESION) |
-| V016 | `create_user_sessions.sql` | `user_sessions` (refresh_token_hash, device_info, last_used_at, expires_at) |
-| V017 | `alter_user_sessions_token_column.sql` | `user_sessions.refresh_token_hash` → TEXT (stocke AES-256-GCM chiffré) |
+| V004 | `create_la_code_list.sql` | `la_code_list` |
+| V005 | `create_tontines.sql` | `tontines` |
+| V006 | `create_tontine_membres.sql` | `tontine_membres` |
+| V007 | `create_cycles_tontine.sql` | `cycles_tontine` |
+| V008 | `create_cotisations.sql` | `cotisations` |
+| V009 | `create_tontine_audit_log.sql` | `tontine_audit_log` |
+| V010 | `seed_frequence_tontine.sql` | Seeds FREQUENCE_TONTINE |
+| V011 | `seed_methode_paiement.sql` | Seeds METHODE_PAIEMENT |
+| V012 | `seed_statut_cotisation.sql` | Seeds STATUT_COTISATION |
+| V013 | `seed_ordre_beneficiaire.sql` | Seeds ORDRE_BENEFICIAIRE |
+| V014 | `create_user_roles.sql` | `user_roles` |
+| V015 | `create_tontine_commissions.sql` | `tontine_commissions` |
+| V016 | `create_user_sessions.sql` | `user_sessions` |
+| V017 | `alter_user_sessions_token_column.sql` | `refresh_token_hash` → TEXT |
+| V018 | `add_pin_created_at.sql` | `users.pin_created_at` (expiration PIN 90j) |
+| V019 | `create_phone_change_requests.sql` | `phone_change_requests` |
 
-Prochaine version disponible : **V018**
+Prochaine version disponible : **V020**
 
-### Règle seeds codelist
-Chaque type de codelist = **1 migration dédiée**. Les UUIDs sont fournis manuellement (pas de gen_random_uuid). Template :
-```sql
-INSERT INTO dinthialma.la_code_list (id, type, value, description, is_system_assign) VALUES
-  ('<uuid>', 'MON_TYPE', 'MA_VALEUR', 'Mon libellé', TRUE);
-```
+---
+
+## Fonctionnalités & Statut
+
+### Module Auth ✅ (complet)
+
+| Feature | Statut |
+|---------|--------|
+| Login (phone/email + password) | ✅ |
+| Login PIN (WEB/MOBILE) | ✅ |
+| Inscription OTP 3 étapes | ✅ |
+| Reset mot de passe OTP | ✅ |
+| Reset PIN OTP | ✅ |
+| Refresh token | ✅ |
+| Setup PIN | ✅ |
+| PIN expiration 90 jours | ✅ |
+| Lockout PIN 5 tentatives/30min | ✅ |
+
+### Module Profil ✅ (complet)
+
+| Feature | Statut |
+|---------|--------|
+| Voir son profil | ✅ |
+| Modifier profil (nom, email) | ✅ |
+| Changer de numéro (OTP) | ✅ |
+
+> **Changement de numéro** : les tontines/memberships sont liés à l'`id` UUID, pas au numéro.
+> Le changement ne casse aucune relation.
+
+### Module Tontine ✅ (complet)
+
+| Feature | Statut | Accès |
+|---------|--------|-------|
+| Créer une tontine | ✅ | 🔒 tout auth |
+| Lister tontines | ✅ | 🔒 SUPER_ADMIN : toutes ; autres : les leurs |
+| Détail tontine | ✅ | 🔒 membres + créateur + SUPER_ADMIN |
+| Modifier tontine (BROUILLON) | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Supprimer tontine (BROUILLON) | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Activer tontine | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Suspendre tontine | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Génération auto cycles (AUTOMATIQUE) | ✅ | AUTO à l'activation |
+
+### Module Membre ✅ (complet)
+
+| Feature | Statut | Accès |
+|---------|--------|-------|
+| Ajouter cotisant | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Retirer cotisant | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Liste cotisants | ✅ | 🔒 membres + créateur + SUPER_ADMIN |
+| Modifier statut (ACTIF/SUSPENDU/SORTI) | ✅ | 🔒 créateur + SUPER_ADMIN |
+
+### Module Cotisation ✅ (complet)
+
+| Feature | Statut | Accès |
+|---------|--------|-------|
+| Enregistrer cotisation | ✅ | 🔒 cotisant lui-même |
+| Valider cotisation | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Liste cotisations | ✅ | 🔒 MEMBER voit les siennes ; admin voit tout |
+| Détail cotisation | ✅ | 🔒 propriétaire + créateur + SUPER_ADMIN |
+
+### Module Cycle ✅ (complet)
+
+| Feature | Statut | Accès |
+|---------|--------|-------|
+| Liste cycles | ✅ | 🔒 membres + créateur + SUPER_ADMIN |
+| Détail cycle | ✅ | 🔒 membres + créateur + SUPER_ADMIN |
+| Ouvrir cycle (MANUEL) | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Clôturer cycle | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Activation cycle suivant (AUTOMATIQUE) | ✅ | AUTO à la clôture |
+| Calcul jackpot = somme cotisations VALIDEES | ✅ | AUTO à la clôture |
+| EN_ATTENTE → EN_RETARD à la clôture | ✅ | AUTO à la clôture |
+
+### Module Dashboard Admin 🔲 (prochain sprint)
+
+| Feature | Statut | Accès |
+|---------|--------|-------|
+| Dashboard global (stats plateforme) | 🔲 TODO | 🔒 SUPER_ADMIN |
+| Liste tous utilisateurs | 🔲 TODO | 🔒 SUPER_ADMIN |
+| Désactiver/activer compte | 🔲 TODO | 🔒 SUPER_ADMIN |
+| Modifier rôles | 🔲 TODO | 🔒 SUPER_ADMIN |
+| Dashboard mes tontines (résumé admin) | 🔲 TODO | 🔒 ADMIN+ |
+| Journal d'audit | 🔲 TODO | 🔒 SUPER_ADMIN |
+
+### Module Notification 🔲
+
+| Feature | Statut |
+|---------|--------|
+| SMS OTP | ✅ (mock dev) |
+| Rappel cotisation | 🔲 TODO |
+| Annonce bénéficiaire jackpot | 🔲 TODO |
+| Alerte retard | 🔲 TODO |
 
 ---
 
@@ -184,11 +418,9 @@ INSERT INTO dinthialma.la_code_list (id, type, value, description, is_system_ass
 
 ```
 docker/docker-compose.yml   # PostgreSQL, Keycloak, pgAdmin, Dozzle
-                            # + profil full-stack  : Backend
-                            # + profil monitoring  : Prometheus, Grafana
 ```
 
-### Ports (évitent les conflits avec ubax-platform)
+### Ports
 
 | Service | Port hôte |
 |---------|-----------|
@@ -197,31 +429,23 @@ docker/docker-compose.yml   # PostgreSQL, Keycloak, pgAdmin, Dozzle
 | Keycloak | `8280` |
 | pgAdmin | `5051` |
 | Dozzle | `8889` |
-| Prometheus | `9091` |
-| Grafana | `3002` |
 
 ```bash
-# Infrastructure seule (PostgreSQL + Keycloak + pgAdmin + Dozzle)
+# Infrastructure seule
 cd docker && docker compose up -d
 
-# Avec le backend compilé
-cd docker && docker compose --profile full-stack up -d
-
-# Avec le monitoring
-cd docker && docker compose --profile monitoring up -d
-
-# Démarrage IDE (recommandé en dev)
+# Dev IDE
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
-### Prérequis Keycloak
+### Prérequis Keycloak (1 seule fois)
 
-Après `docker compose up -d`, configurer le realm dans l'interface Keycloak :
 1. Aller sur http://localhost:8280
 2. Créer le realm `dinthialma`
-3. Créer le client `dinthialma-client` (type `confidential`, `client_credentials`)
-4. Créer les rôles realm : `DINTHIALMA_SUPER_ADMIN`, `DINTHIALMA_ADMIN`, `DINTHIALMA_MEMBER`
-5. Copier le client secret dans `docker/.env` → `KEYCLOAK_CLIENT_SECRET`
+3. Créer le client `dinthialma-client` (confidential, service accounts enabled)
+4. Créer les rôles realm : `DINTHIALMA_USER`, `DINTHIALMA_MEMBER`, `DINTHIALMA_ADMIN`, `DINTHIALMA_SUPER_ADMIN`
+5. Dans User Profile (realm settings) : ajouter l'attribut `phone`
+6. Copier le client secret → `docker/.env` → `KEYCLOAK_CLIENT_SECRET`
 
 ---
 
@@ -229,48 +453,33 @@ Après `docker compose up -d`, configurer le realm dans l'interface Keycloak :
 
 | Variable | Défaut local | Description |
 |----------|-------------|-------------|
-| `KEYCLOAK_CLIENT_ID` | – | **Requis** – client Keycloak |
-| `KEYCLOAK_CLIENT_SECRET` | – | **Requis** – secret client |
-| `BOOTSTRAP_ENABLED` | `true` | Créer le super admin au 1er démarrage |
-| `SECURITY_ENABLED` | `true` | Mettre à `false` uniquement en dev |
-| `DB_HOST/PORT/NAME` | `localhost/5434/db-dinthialma` | PostgreSQL |
-
-Voir `docker/.env.example` pour la liste complète.
-
----
-
-## CI/CD (GitHub Actions)
-
-| Workflow | Déclencheur | Stages |
-|----------|-------------|--------|
-| `ci-branches.yml` | Push `feature/**`, `hotfix/**`, `bugfix/**` | Format → Test |
-| `docker-publish.yml` | Push `main`, `develop` | Format → Test → Build → Push Docker Hub → Deploy VPS → Health Check |
-
-### Secrets GitHub requis
-
-```
-DOCKER_HUB_USERNAME   · DOCKER_HUB_TOKEN
-VPS_HOST              · VPS_USER          · VPS_SSH_PRIVATE_KEY
-```
+| `KEYCLOAK_CLIENT_ID` | – | **Requis** |
+| `KEYCLOAK_CLIENT_SECRET` | – | **Requis** |
+| `KEYCLOAK_ADMIN_USER` | `admin` | Admin realm master (KeycloakClientConfig) |
+| `KEYCLOAK_ADMIN_PASSWORD` | `admin` | Admin realm master |
+| `BOOTSTRAP_ENABLED` | `true` | Créer SUPER_ADMIN au 1er démarrage |
+| `BOOTSTRAP_SUPER_ADMIN_PHONE` | `221783703310` | Sans le `+` |
+| `TOKEN_ENCRYPTION_KEY` | *(dev default)* | Clé AES-256 pour refresh tokens |
 
 ---
 
-## Fonctionnalités MVP à développer
+## Prochaines étapes recommandées
 
-| Module | Statut | Description |
-|--------|--------|-------------|
-| Auth | ✅ Complet | Login, inscription OTP, reset mot de passe, PIN WEB+MOBILE |
-| Tontine | 🔶 Entités OK | CRUD tontines, activation, génération cycles |
-| Membre | 🔶 Entités OK | Ajout/retrait membres, ordre bénéficiaires |
-| Cotisation | 🔶 Entités OK | Enregistrement, validation manuelle, retards |
-| Jackpot (Cycles) | 🔶 Entités OK | Prochain bénéficiaire, historique remises |
-| Audit | 🔶 Entités OK | Traçabilité des modifications (AuditService à créer) |
-| Notification | 🔲 TODO | Rappels SMS, annonce bénéficiaire |
+```
+✦ Sprint 1 – Auth + Profil   ✅ TERMINÉ
+✦ Sprint 2 – Tontine core    ✅ TERMINÉ
+  → TontineService + TontineController  ✅
+  → MembreService + MembreController    ✅
+  → CotisationService + CotisationController ✅
+  → CycleService + CycleController      ✅
 
-### Prochaines étapes recommandées (V010+)
-1. Repositories JPA pour chaque entité
-2. Services : TontineService (créer, activer, générer cycles)
-3. Services : MembreService (ajouter, gérer ordre jackpot)
-4. Services : CotisationService (enregistrer, valider, marquer retard)
-5. Controllers + DTOs pour chaque module
-6. AuditService (logger automatiquement les changements de statut)
+✦ Sprint 3 – Dashboard Admin
+  1. DashboardService (métriques SUPER_ADMIN + métriques admin tontine)
+  2. AdminController (/v1/admin/dashboard)
+  3. AdminUserController (activer/désactiver/roles)
+
+✦ Sprint 4 – Notifications & Audit
+  1. SchedulerService (rappels SMS cotisations, annonce bénéficiaire)
+  2. AuditService (TontineAuditLog automatique sur mutations)
+  3. TontineCommission (gestion commissions par tontine)
+```

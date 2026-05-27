@@ -79,6 +79,7 @@ public class PinServiceImpl implements PinService {
     user.setPinHash(pinHash);
     user.setPinAttempts(0);
     user.setPinLockedUntil(null);
+    user.setPinCreatedAt(LocalDateTime.now()); // ← horodatage pour expiration 90j
     userRepository.save(user);
 
     log.info("Code PIN configuré pour userId={}", user.getId());
@@ -107,6 +108,18 @@ public class PinServiceImpl implements PinService {
     // Vérifier que le PIN est configuré
     if (user.getPinHash() == null) {
       throw new BadRequestException(ResponseMessageConstants.AUTH_PIN_NOT_CONFIGURED);
+    }
+
+    // Vérifier l'expiration du PIN (90 jours)
+    if (user.getPinCreatedAt() != null) {
+      long daysOld = ChronoUnit.DAYS.between(user.getPinCreatedAt(), LocalDateTime.now());
+      if (daysOld >= Constants.Pin.EXPIRY_DAYS) {
+        log.warn("PIN expiré pour userId={} ({}j)", user.getId(), daysOld);
+        throw new BadRequestException(
+            "Votre code PIN a expiré après "
+                + Constants.Pin.EXPIRY_DAYS
+                + " jours. Veuillez en configurer un nouveau via l'option 'Réinitialiser mon PIN'.");
+      }
     }
 
     // Vérifier le verrouillage
@@ -248,6 +261,7 @@ public class PinServiceImpl implements PinService {
     user.setPinHash(ARGON2.encode(request.getNewPin()));
     user.setPinAttempts(0);
     user.setPinLockedUntil(null);
+    user.setPinCreatedAt(LocalDateTime.now()); // ← renouvellement de l'horodatage
     userRepository.save(user);
 
     // Révoquer toutes les sessions (sécurité post-reset)
