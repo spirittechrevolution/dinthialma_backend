@@ -1,0 +1,254 @@
+# ===================================================================
+# Dinthialma Backend – Infrastructure Docker (PRODUCTION – VPS)
+# ===================================================================
+#
+# Services              | Port hôte  | Accès
+# ——————————————————————| ————————— | ————————————————————————————————
+# Nginx (reverse proxy) | 80         | http://<VPS_IP>
+# Backend API           | (interne)  | http://<VPS_IP>/api
+# Keycloak              | (interne)  | http://<VPS_IP>/auth
+# pgAdmin               | 5051       | http://<VPS_IP>:5051
+# Dozzle (logs)         | 8889       | http://<VPS_IP>:8889
+# Prometheus            | 9091       | http://<VPS_IP>:9091
+# Grafana               | 3002       | http://<VPS_IP>:3002
+#
+# Image Docker Hub : spirittechrevolution/dinthialma-backend
+#
+# Démarrage : cd /opt/dinthialma && docker compose -f docker-compose.vps.yml up -d
+# ===================================================================
+
+services:
+
+  # ─────────────────────────────────────────────────────────────────
+  # PostgreSQL 17 – Serveur unique, 2 bases de données
+  # ─────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:17-alpine
+    container_name: dinthialma-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    # Pas d'exposition de port hôte en production — accès interne uniquement
+    networks:
+      - dinthialma-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ─────────────────────────────────────────────────────────────────
+  # pgAdmin 4 – Interface web PostgreSQL
+  # ─────────────────────────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: dinthialma-pgadmin-prod
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    ports:
+      - "5051:80"
+    networks:
+      - dinthialma-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ─────────────────────────────────────────────────────────────────
+  # Keycloak 26 – IAM / OAuth2 / OIDC (production)
+  #   ⚠️  HTTP activé car pas encore de TLS sur le VPS
+  #       Ajouter Certbot + HTTPS quand un domaine sera configuré
+  # ─────────────────────────────────────────────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1.5
+    container_name: dinthialma-keycloak-prod
+    restart: unless-stopped
+    command: start-dev
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: postgres
+      KC_DB_URL_DATABASE: ${KEYCLOAK_DB_NAME}
+      KC_DB_USERNAME: ${POSTGRES_USER}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_HTTP_PORT: 8080
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HOSTNAME: ${VPS_IP}
+      KC_HOSTNAME_PORT: 80
+      KC_HOSTNAME_ADMIN: "http://${VPS_IP}/auth"
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_LOG_LEVEL: info
+      JAVA_OPTS_APPEND: "-Xms256m -Xmx512m"
+    networks:
+      - dinthialma-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/health/ready || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  # ─────────────────────────────────────────────────────────────────
+  # Backend Spring Boot – image Docker Hub
+  # ─────────────────────────────────────────────────────────────────
+  backend:
+    image: spirittechrevolution/dinthialma-backend:${BACKEND_TAG:-latest}
+    container_name: dinthialma-backend-prod
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB}
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KEYCLOAK_URL: http://keycloak:8080/auth
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      KEYCLOAK_ISSUER_URI: http://${VPS_IP}/auth/realms/${KEYCLOAK_REALM}
+      MAIL_HOST: ${MAIL_HOST}
+      MAIL_PORT: ${MAIL_PORT}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_FROM: ${MAIL_FROM}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME}
+      LAM_SMS_URL: ${LAM_SMS_URL}
+      LAM_ACCOUNT_ID: ${LAM_ACCOUNT_ID}
+      LAM_PASSWORD: ${LAM_PASSWORD}
+      LAM_SENDER: ${LAM_SENDER}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      BOOTSTRAP_ENABLED: ${BOOTSTRAP_ENABLED:-false}
+      BOOTSTRAP_SUPER_ADMIN_EMAIL: ${BOOTSTRAP_SUPER_ADMIN_EMAIL}
+      BOOTSTRAP_SUPER_ADMIN_FIRST_NAME: ${BOOTSTRAP_SUPER_ADMIN_FIRST_NAME}
+      BOOTSTRAP_SUPER_ADMIN_LAST_NAME: ${BOOTSTRAP_SUPER_ADMIN_LAST_NAME}
+      BOOTSTRAP_SUPER_ADMIN_PHONE: ${BOOTSTRAP_SUPER_ADMIN_PHONE}
+      SERVER_SERVLET_CONTEXT_PATH: /api
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: docker
+    networks:
+      - dinthialma-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ─────────────────────────────────────────────────────────────────
+  # Nginx – Reverse proxy (API + Keycloak)
+  # ─────────────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: dinthialma-nginx-prod
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      # - "443:443"   # À activer quand le domaine + SSL seront configurés
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - dinthialma-net
+    depends_on:
+      - backend
+      - keycloak
+
+  # ─────────────────────────────────────────────────────────────────
+  # Prometheus – Collecte des métriques
+  # ─────────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: dinthialma-prometheus-prod
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.vps.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=15d'
+    ports:
+      - "9091:9090"
+    networks:
+      - dinthialma-net
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ─────────────────────────────────────────────────────────────────
+  # Grafana – Dashboards de monitoring
+  # ─────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: dinthialma-grafana-prod
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-dinthialma-grafana-2026}
+      GF_SERVER_ROOT_URL: http://%(domain)s:3002/
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3002:3000"
+    networks:
+      - dinthialma-net
+    depends_on:
+      - prometheus
+
+  # ─────────────────────────────────────────────────────────────────
+  # Dozzle – Logs en temps réel
+  # ─────────────────────────────────────────────────────────────────
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dinthialma-dozzle-prod
+    restart: unless-stopped
+    ports:
+      - "8889:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      DOZZLE_LEVEL: info
+      DOZZLE_TAILSIZE: 500
+    networks:
+      - dinthialma-net
+
+# ─── Volumes persistants ──────────────────────────────────────────
+volumes:
+  postgres_data:
+    name: dinthialma-postgres-prod-data
+  pgadmin_data:
+    name: dinthialma-pgadmin-prod-data
+  prometheus_data:
+    name: dinthialma-prometheus-prod-data
+  grafana_data:
+    name: dinthialma-grafana-prod-data
+
+# ─── Réseau interne ───────────────────────────────────────────────
+networks:
+  dinthialma-net:
+    name: dinthialma-prod-net
+    driver: bridge

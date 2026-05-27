@@ -1,0 +1,37 @@
+# ===================================================================
+# Dinthialma Backend – .dockerignore
+# Exclut les fichiers inutiles du contexte Docker → build plus rapide
+# ===================================================================
+
+# IntelliJ / IDE
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# VS Code
+.vscode/
+
+# Maven build output (le builder utilise mvnw directement)
+target/
+
+# Git
+.git/
+.gitignore
+
+# Docker (évite la récursivité)
+docker/
+Dockerfile
+
+# Logs
+*.log
+logs/
+
+# Documentation
+*.md
+HELP.md
+mvp
+
+# OS
+.DS_Store
+Thumbs.db

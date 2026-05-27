@@ -1,0 +1,358 @@
+# Cahier des Charges — Projet Dinthialma
+
+## 1. Présentation du projet
+
+### Nom du projet
+
+**Dinthialma**
+
+### Type de projet
+
+Application web et mobile de gestion de tontines et d’épargne collective.
+
+### Vision
+
+Digitaliser les tontines traditionnelles africaines afin de :
+
+* améliorer la transparence,
+* simplifier le suivi des cotisations,
+* renforcer la confiance entre membres,
+* faciliter l’épargne communautaire.
+
+---
+
+# 2. Contexte et problématique
+
+Dans beaucoup de groupes :
+
+* les tontines sont gérées via WhatsApp,
+* cahiers papier,
+* appels téléphoniques,
+* ou mémoire humaine.
+
+Cela entraîne :
+
+* oublis,
+* erreurs,
+* manque de visibilité,
+* conflits,
+* retards,
+* mauvaise organisation.
+
+Le projet Dinthialma vise à fournir une plateforme simple permettant :
+
+* le suivi numérique des tontines,
+* la consultation des cotisations,
+* l’organisation des bénéficiaires,
+* et la transparence des opérations.
+
+---
+
+# 3. Objectifs du projet
+
+## Objectif principal
+
+Créer un MVP fonctionnel permettant à des groupes de gérer leurs tontines de manière simple et transparente.
+
+---
+
+# 4. Public cible
+
+## Cibles principales
+
+* groupes d’amis,
+* chauffeurs,
+* commerçants,
+* familles,
+* associations,
+* petites communautés locales.
+
+---
+
+# 5. Fonctionnalités MVP
+
+## 5.1 Authentification
+
+### Fonctionnalités
+
+* inscription utilisateur,
+* connexion,
+* déconnexion,
+* gestion profil simple.
+
+### Données utilisateur
+
+* prénom,
+* nom,
+* téléphone,
+* mot de passe.
+
+---
+
+# 5.2 Gestion des tontines
+
+## Création d’une tontine
+
+L’utilisateur peut :
+
+* créer une tontine,
+* définir :
+
+  * nom,
+  * montant cotisation,
+  * fréquence,
+  * nombre de membres,
+  * ordre des bénéficiaires.
+
+---
+
+## Liste des tontines
+
+Afficher :
+
+* nom du groupe,
+* nombre membres,
+* montant,
+* fréquence,
+* prochain bénéficiaire.
+
+---
+
+# 5.3 Gestion des membres
+
+Fonctionnalités :
+
+* ajout de membres,
+* affichage liste membres,
+* gestion ordre bénéficiaires.
+
+---
+
+# 5.4 Gestion des cotisations
+
+Le système doit permettre :
+
+* validation manuelle des paiements,
+* suivi des cotisations,
+* affichage des retards.
+
+Les paiements peuvent être effectués via :
+
+* Wave,
+* Orange Money,
+* Free Money,
+* cash.
+
+---
+
+# 5.5 Historique
+
+Chaque membre doit pouvoir consulter :
+
+* ses cotisations,
+* les paiements du groupe,
+* les bénéficiaires précédents,
+* les dates de paiement.
+
+---
+
+# 5.6 Jackpot / bénéficiaire
+
+Le système doit afficher :
+
+* prochain bénéficiaire,
+* date prévue,
+* historique des remises.
+
+---
+
+# 5.7 Notifications
+
+Notifications simples :
+
+* rappel cotisation,
+* retard paiement,
+* annonce bénéficiaire.
+
+Canaux :
+
+* SMS,
+* notification web simple.
+
+---
+
+# 6. Fonctionnalités hors MVP
+
+Ne pas développer dans la première version :
+
+* wallet interne,
+* paiement automatique,
+* crédit,
+* microfinance,
+* IA,
+* blockchain,
+* crypto,
+* scoring financier.
+
+---
+
+# 7. Architecture technique
+
+## Frontend Web
+
+React
+
+### Technologies
+
+* Vite,
+* TailwindCSS,
+* React Router,
+* Axios,
+* React Query.
+
+---
+
+# Backend
+
+Spring Boot
+
+### Responsabilités
+
+* API REST,
+* authentification,
+* gestion groupes,
+* cotisations,
+* notifications.
+
+---
+
+# Base de données
+
+PostgreSQL.
+
+---
+
+# Hébergement
+
+* VPS [Contabo](https://contabo.com?utm_source=chatgpt.com)
+* Nom de domaine dédié.
+
+---
+
+# 8. Contraintes techniques
+
+## L’application doit être :
+
+* responsive,
+* mobile-first,
+* simple,
+* rapide,
+* légère,
+* adaptée aux connexions lentes.
+
+---
+
+# 9. UX/UI
+
+## Principes UX
+
+* simplicité,
+* clarté,
+* gros boutons mobiles,
+* navigation intuitive.
+
+## Design
+
+* moderne,
+* minimaliste,
+* inspiré finance communautaire africaine.
+
+---
+
+# 10. Sécurité
+
+## Exigences
+
+* JWT Authentication,
+* protection routes privées,
+* mots de passe hashés,
+* validation données backend.
+
+---
+
+# 11. Performance
+
+Le système doit :
+
+* charger rapidement,
+* fonctionner sur smartphones modestes,
+* supporter plusieurs groupes simultanément.
+
+---
+
+# 12. Structure des rôles
+
+## Administrateur de groupe
+
+Peut :
+
+* créer groupe,
+* ajouter membres,
+* valider paiements,
+* gérer ordre bénéficiaires.
+
+---
+
+## Membre
+
+Peut :
+
+* consulter groupe,
+* suivre cotisations,
+* voir historique,
+* recevoir notifications.
+
+---
+
+# 13. Planning MVP estimatif
+
+| Phase         |        Durée |
+| ------------- | -----------: |
+| Conception    |    1 semaine |
+| Frontend MVP  | 2–3 semaines |
+| Backend MVP   | 2–3 semaines |
+| Tests terrain |   2 semaines |
+| Corrections   | 1–2 semaines |
+
+Durée totale estimée :
+
+### 6 à 10 semaines.
+
+---
+
+# 14. Critères de réussite MVP
+
+Le MVP sera considéré réussi si :
+
+* des utilisateurs réels créent des groupes,
+* les cotisations sont suivies régulièrement,
+* les utilisateurs reviennent chaque semaine,
+* les groupes utilisent réellement la plateforme,
+* la confiance et la transparence sont améliorées.
+
+---
+
+# 15. Vision future
+
+Après validation du MVP :
+
+## Évolutions possibles
+
+* application mobile native,
+* intégration paiements mobile money,
+* automatisation cotisations,
+* statistiques avancées,
+* épargne personnelle,
+* API Wave,
+* API Orange Money,
+* modèle premium/SaaS.

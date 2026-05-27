@@ -1,0 +1,43 @@
+# ===================================================================
+# Dinthialma Backend – Profil TEST
+# ===================================================================
+# Utilisé par les tests d'intégration avec Testcontainers
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5434/db-dinthialma-test
+    username: postgres
+    password: dinthialma123
+
+  flyway:
+    enabled: true
+    default-schema: dinthialma
+    schemas: dinthialma
+    locations: classpath:db/migration
+
+  jpa:
+    show-sql: false
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8280/realms/dinthialma
+
+keycloak:
+  realm: dinthialma
+  auth-server-url: http://localhost:8280
+  client-id: dinthialma-client
+  client-secret: test-secret
+
+dinthialma:
+  security:
+    enabled: false
+  bootstrap:
+    enabled: false
+
+logging:
+  level:
+    com.africa.dinthialma_backend: DEBUG
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN

@@ -1,0 +1,15 @@
+# ===================================================================
+# Dinthialma Backend – Profil DOCKER (VPS / production)
+# ===================================================================
+# Actif quand SPRING_PROFILES_ACTIVE=docker (défini dans docker-compose)
+# Toutes les valeurs sensibles passent par les variables d'environnement
+# injectées par docker-compose — ne rien hardcoder ici.
+
+logging:
+  level:
+    root: WARN
+    com.africa.dinthialma_backend: INFO
+    org.springframework.web: WARN
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+    org.hibernate.orm.jdbc.bind: WARN
