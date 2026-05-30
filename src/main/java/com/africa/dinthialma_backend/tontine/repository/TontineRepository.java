@@ -5,6 +5,8 @@ import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -19,6 +21,9 @@ public interface TontineRepository extends JpaRepository<Tontine, UUID> {
 
   /** Toutes les tontines non supprimées (usage SUPER_ADMIN). */
   List<Tontine> findByDeletedAtIsNull();
+
+  /** Toutes les tontines non supprimées paginées (usage SUPER_ADMIN). */
+  Page<Tontine> findByDeletedAtIsNull(Pageable pageable);
 
   /** Tontine non supprimée par id. */
   Optional<Tontine> findByIdAndDeletedAtIsNull(UUID id);
@@ -52,6 +57,29 @@ public interface TontineRepository extends JpaRepository<Tontine, UUID> {
           + "     )"
           + "   )")
   List<Tontine> findVisibleByUserId(@Param("userId") UUID userId);
+
+  @Query(
+      value =
+          "SELECT t FROM Tontine t"
+              + " WHERE t.deletedAt IS NULL"
+              + "   AND ("
+              + "     t.creePar.id = :userId"
+              + "     OR EXISTS ("
+              + "       SELECT 1 FROM TontineMembre m"
+              + "       WHERE m.tontine = t AND m.user.id = :userId AND m.deletedAt IS NULL"
+              + "     )"
+              + "   )",
+      countQuery =
+          "SELECT COUNT(t) FROM Tontine t"
+              + " WHERE t.deletedAt IS NULL"
+              + "   AND ("
+              + "     t.creePar.id = :userId"
+              + "     OR EXISTS ("
+              + "       SELECT 1 FROM TontineMembre m"
+              + "       WHERE m.tontine = t AND m.user.id = :userId AND m.deletedAt IS NULL"
+              + "     )"
+              + "   )")
+  Page<Tontine> findVisibleByUserId(@Param("userId") UUID userId, Pageable pageable);
 
   /** Compte les tontines non supprimées par statut – pour les stats dashboard. */
   long countByStatutAndDeletedAtIsNull(TontineStatut statut);

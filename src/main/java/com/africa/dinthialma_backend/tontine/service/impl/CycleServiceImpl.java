@@ -20,15 +20,20 @@ import com.africa.dinthialma_backend.tontine.dto.CycleResponse;
 import com.africa.dinthialma_backend.tontine.dto.OpenCycleRequest;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
+import com.africa.dinthialma_backend.tontine.entity.TontineCommission;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
+import com.africa.dinthialma_backend.tontine.repository.TontineCommissionRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import com.africa.dinthialma_backend.tontine.service.interfaces.CycleService;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,6 +48,7 @@ public class CycleServiceImpl implements CycleService {
   private final TontineRepository tontineRepository;
   private final TontineMembreRepository membreRepository;
   private final CotisationRepository cotisationRepository;
+  private final TontineCommissionRepository commissionRepository;
   private final UserRepository userRepository;
   private final UserRoleAssignmentRepository roleAssignmentRepository;
 
@@ -50,16 +56,15 @@ public class CycleServiceImpl implements CycleService {
 
   @Override
   @Transactional(readOnly = true)
-  public List<CycleResponse> listCycles(String keycloakId, UUID tontineId) throws CustomException {
+  public Page<CycleResponse> listCycles(String keycloakId, UUID tontineId, Pageable pageable)
+      throws CustomException {
     User caller = findUserByKeycloakId(keycloakId);
     Tontine tontine = findTontineById(tontineId);
     assertCanAccess(caller, tontine);
 
     return cycleRepository
-        .findByTontine_IdAndDeletedAtIsNullOrderByNumeroCycleAsc(tontineId)
-        .stream()
-        .map(CycleResponse::from)
-        .toList();
+        .findByTontine_IdAndDeletedAtIsNull(tontineId, pageable)
+        .map(CycleResponse::from);
   }
 
   @Override
@@ -149,7 +154,7 @@ public class CycleServiceImpl implements CycleService {
       throw new BadRequestException("Seul un cycle EN_COURS peut être clôturé");
     }
 
-    // Calculer le jackpot = somme des cotisations VALIDEES du cycle
+    // 1. Jackpot brut = somme des cotisations VALIDEES du cycle
     BigDecimal jackpot =
         cotisationRepository
             .findByCycle_IdAndStatutAndDeletedAtIsNull(cycleId, CotisationStatut.VALIDE)
@@ -157,8 +162,29 @@ public class CycleServiceImpl implements CycleService {
             .map(c -> c.getMontant() != null ? c.getMontant() : BigDecimal.ZERO)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
+    // 2. Calculer les commissions actives de la tontine
+    List<TontineCommission> commissions =
+        commissionRepository.findByTontine_IdAndDeletedAtIsNull(tontineId);
+
+    BigDecimal totalCommission = BigDecimal.ZERO;
+    for (TontineCommission commission : commissions) {
+      BigDecimal part =
+          switch (commission.getType()) {
+            case POURCENTAGE_JACKPOT ->
+                jackpot
+                    .multiply(commission.getValeur())
+                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            case FRAIS_FIXES_PAR_CYCLE -> commission.getValeur();
+            case FRAIS_ADHESION -> BigDecimal.ZERO; // prélevé à l'adhésion, pas sur le jackpot
+          };
+      totalCommission = totalCommission.add(part);
+    }
+
+    // 3. Stocker les 3 montants et clôturer
     cycle.setStatut(CycleStatut.TERMINE);
     cycle.setMontantJackpot(jackpot);
+    cycle.setMontantCommission(totalCommission);
+    cycle.setMontantNet(jackpot.subtract(totalCommission));
     cycle.setDateRemise(LocalDate.now());
 
     cycleRepository.save(cycle);
@@ -177,7 +203,13 @@ public class CycleServiceImpl implements CycleService {
       activateNextCycle(tontineId, cycle.getNumeroCycle() + 1);
     }
 
-    log.info("Cycle clôturé – tontineId={} cycleId={} jackpot={}", tontineId, cycleId, jackpot);
+    log.info(
+        "Cycle clôturé – tontineId={} cycleId={} jackpot={} commission={} net={}",
+        tontineId,
+        cycleId,
+        jackpot,
+        totalCommission,
+        jackpot.subtract(totalCommission));
     return CycleResponse.from(cycle);
   }
 

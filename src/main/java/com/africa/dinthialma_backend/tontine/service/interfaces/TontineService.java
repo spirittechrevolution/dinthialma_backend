@@ -4,8 +4,9 @@ import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.tontine.dto.CreateTontineRequest;
 import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.dto.UpdateTontineRequest;
-import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 /** Service métier pour la gestion des tontines. */
 public interface TontineService {
@@ -35,7 +36,7 @@ public interface TontineService {
    *   <li>Autres → tontines créées + tontines où l'utilisateur est cotisant
    * </ul>
    */
-  List<TontineResponse> listTontines(String keycloakId) throws CustomException;
+  Page<TontineResponse> listTontines(String keycloakId, Pageable pageable) throws CustomException;
 
   /**
    * Met à jour les informations d'une tontine.

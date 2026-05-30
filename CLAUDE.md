@@ -181,7 +181,13 @@ src/main/java/com/africa/dinthialma_backend/
 │       ├── interfaces/ CotisationService
 │       └── impl/       CotisationServiceImpl
 ├── notification/   ✅ SMS (LAfricaMobile) – mock mode dev
-├── admin/          🔲 TODO – DashboardController, DashboardService
+    ├── admin/          ✅ Complet (GlobalDashboard + gestion users + MyDashboard)
+│   ├── controller/     AdminDashboardController
+│   ├── dto/            GlobalDashboardResponse, AdminUserResponse,
+│   │                   UpdateUserRolesRequest, MyDashboardResponse
+│   └── service/
+│       ├── interfaces/ AdminDashboardService
+│       └── impl/       AdminDashboardServiceImpl
 ├── common/         ✅ BaseEntity, exceptions, CustomResponse, utils, CodeList, Audit
 └── config/         ✅ SecurityConfig, OpenApiConfig, BootstrapService
 ```
@@ -231,6 +237,7 @@ private boolean isSuperAdmin(User user) {
 - **Exceptions** : hiérarchie `CustomException` → `ApiExceptionHandler` → JSON normalisé
 - **Services** : interface dans `service/interfaces/` + impl dans `service/impl/` ; `@Transactional` sur écriture
 - **Phone** : toujours stocké SANS le `+` (normalisé via `PhoneUtils.normalize()` en entrée)
+- **JPQL** : pas de `SELECT DISTINCT` dans les repositories — PostgreSQL gère la déduplication nativement
 
 ### ⛔ Imports — règle absolue : PAS de wildcard `*`
 
@@ -392,15 +399,17 @@ Prochaine version disponible : **V020**
 | Calcul jackpot = somme cotisations VALIDEES | ✅ | AUTO à la clôture |
 | EN_ATTENTE → EN_RETARD à la clôture | ✅ | AUTO à la clôture |
 
-### Module Dashboard Admin 🔲 (prochain sprint)
+### Module Dashboard Admin ✅ (complet)
 
 | Feature | Statut | Accès |
 |---------|--------|-------|
-| Dashboard global (stats plateforme) | 🔲 TODO | 🔒 SUPER_ADMIN |
-| Liste tous utilisateurs | 🔲 TODO | 🔒 SUPER_ADMIN |
-| Désactiver/activer compte | 🔲 TODO | 🔒 SUPER_ADMIN |
-| Modifier rôles | 🔲 TODO | 🔒 SUPER_ADMIN |
-| Dashboard mes tontines (résumé admin) | 🔲 TODO | 🔒 ADMIN+ |
+| Dashboard global (stats plateforme) | ✅ | 🔒 SUPER_ADMIN |
+| Liste tous utilisateurs (pageable) | ✅ | 🔒 SUPER_ADMIN |
+| Détail utilisateur | ✅ | 🔒 SUPER_ADMIN |
+| Désactiver compte | ✅ | 🔒 SUPER_ADMIN |
+| Réactiver compte | ✅ | 🔒 SUPER_ADMIN |
+| Modifier rôles (replace-all idempotent) | ✅ | 🔒 SUPER_ADMIN |
+| Dashboard mes tontines (résumé admin) | ✅ | 🔒 ADMIN+ |
 | Journal d'audit | 🔲 TODO | 🔒 SUPER_ADMIN |
 
 ### Module Notification 🔲
@@ -463,23 +472,204 @@ cd docker && docker compose up -d
 
 ---
 
-## Prochaines étapes recommandées
+## Roadmap des sprints
 
 ```
-✦ Sprint 1 – Auth + Profil   ✅ TERMINÉ
-✦ Sprint 2 – Tontine core    ✅ TERMINÉ
-  → TontineService + TontineController  ✅
-  → MembreService + MembreController    ✅
-  → CotisationService + CotisationController ✅
-  → CycleService + CycleController      ✅
+✦ Sprint 1 – Auth + Profil          ✅ TERMINÉ
+✦ Sprint 2 – Tontine core           ✅ TERMINÉ
+  → TontineService + TontineController        ✅
+  → MembreService + MembreController          ✅
+  → CotisationService + CotisationController  ✅
+  → CycleService + CycleController            ✅
 
-✦ Sprint 3 – Dashboard Admin
-  1. DashboardService (métriques SUPER_ADMIN + métriques admin tontine)
-  2. AdminController (/v1/admin/dashboard)
-  3. AdminUserController (activer/désactiver/roles)
+✦ Sprint 3 – Dashboard Admin        ✅ TERMINÉ
+  → AdminDashboardService (GlobalDashboard + MyDashboard)  ✅
+  → AdminDashboardController (7 endpoints)                 ✅
+  → Gestion utilisateurs (disable/enable/roles)            ✅
 
-✦ Sprint 4 – Notifications & Audit
+✦ Sprint 4 – Notifications & Audit  🚧 EN COURS
   1. SchedulerService (rappels SMS cotisations, annonce bénéficiaire)
   2. AuditService (TontineAuditLog automatique sur mutations)
   3. TontineCommission (gestion commissions par tontine)
 ```
+
+---
+
+## Sprint 4 – Notifications & Audit
+
+### Ce qui existe déjà (ne pas recréer)
+
+| Fichier | État |
+|---|---|
+| `common/audit/TontineAuditLog.java` | ✅ entité immuable (pas d'updatedAt, étend rien) |
+| `common/audit/AuditAction.java` | ✅ enum `CREATE / UPDATE / DELETE` |
+| `V009__create_tontine_audit_log.sql` | ✅ table + index en base |
+| `tontine/entity/TontineCommission.java` | ✅ entité + soft delete + `CommissionType` |
+| `tontine/repository/TontineCommissionRepository.java` | ✅ queries de base |
+| `V015__create_tontine_commissions.sql` | ✅ table + `UNIQUE(tontine_id, type)` |
+| `notification/service/SmsService.java` | ✅ `sendContributionReminder` + `sendJackpotNotification` |
+
+### 4.1 — AuditService
+
+**Fichiers à créer :**
+- `common/audit/TontineAuditLogRepository.java`
+- `common/audit/AuditService.java` (interface)
+- `common/audit/AuditServiceImpl.java`
+
+**Interface :**
+```java
+public interface AuditService {
+    void log(User caller, String tableName, UUID recordId,
+             AuditAction action, String champ,
+             String ancienneVal, String nouvelleVal);
+
+    void logCreate(User caller, String tableName, UUID recordId);
+    void logDelete(User caller, String tableName, UUID recordId);
+}
+```
+
+**Où brancher l'audit (injecter `AuditService` dans les ServiceImpl existants) :**
+
+| ServiceImpl | Méthode | Action |
+|---|---|---|
+| `TontineServiceImpl` | `createTontine` | `logCreate("tontines", id)` |
+| `TontineServiceImpl` | `updateTontine` | `log(... "statut", ancien, nouveau)` pour chaque champ modifié |
+| `TontineServiceImpl` | `deleteTontine` | `logDelete("tontines", id)` |
+| `TontineServiceImpl` | `activateTontine` | `log(... "statut", "BROUILLON", "ACTIVE")` |
+| `TontineServiceImpl` | `suspendTontine` | `log(... "statut", "ACTIVE", "SUSPENDUE")` |
+| `MembreServiceImpl` | ajout membre | `logCreate("tontine_membres", id)` |
+| `MembreServiceImpl` | changement statut | `log(... "statut", ancien, nouveau)` |
+| `CotisationServiceImpl` | enregistrement | `logCreate("cotisations", id)` |
+| `CotisationServiceImpl` | validation | `log(... "statut", "EN_ATTENTE", "VALIDE")` |
+| `CycleServiceImpl` | `openCycle` | `logCreate("cycles_tontine", id)` |
+| `CycleServiceImpl` | `closeCycle` | `log(... "statut", "EN_COURS", "TERMINE")` |
+
+### 4.2 — SchedulerService
+
+Ajouter `@EnableScheduling` sur `DinthialmaBackendApplication`.
+
+**Fichier à créer :** `notification/service/SchedulerService.java`
+
+```java
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class SchedulerService {
+
+    private final SmsService smsService;
+    private final CycleTontineRepository cycleRepository;
+    private final CotisationRepository cotisationRepository;
+    private final TontineMembreRepository membreRepository;
+
+    // Rappel quotidien à 8h — cotisations EN_ATTENTE sur cycle EN_COURS
+    @Scheduled(cron = "0 0 8 * * *")
+    public void rappelCotisationsEnAttente() { ... }
+
+    // Appel direct depuis CycleServiceImpl.activateNextCycle + openCycle
+    // (pas @Scheduled — déclenché à la logique métier)
+    public void annoncerBeneficiaire(CycleTontine cycle) { ... }
+}
+```
+
+**Logique `rappelCotisationsEnAttente` :**
+1. Récupérer tous les `CycleTontine` avec `statut = EN_COURS`
+2. Pour chaque cycle, trouver les `Cotisation` avec `statut = EN_ATTENTE`
+3. Via `cotisation.getMembre().getUser().getPhone()` → appeler `smsService.sendContributionReminder`
+
+**Logique `annoncerBeneficiaire` :**
+- Récupérer `cycle.getBeneficiaire().getUser().getPhone()` + montant jackpot prévu
+- Appeler `smsService.sendJackpotNotification`
+- Brancher dans `CycleServiceImpl` : appeler après `next.setStatut(EN_COURS)` dans `activateNextCycle`, et après la création du cycle dans `openCycle`
+
+### 4.3 — TontineCommission CRUD
+
+#### Modèle métier
+
+L'admin (gestionnaire) de la tontine définit ses règles de commission sur sa tontine.
+À la clôture de chaque cycle, les commissions sont calculées automatiquement et déduites du jackpot brut.
+Le bénéficiaire reçoit le **montant net** (jackpot - commissions).
+
+**Exemple concret :**
+```
+Tontine : 100 membres × 5 000 FCFA/jour
+Jackpot brut (montantJackpot)  = 500 000 FCFA
+Commission POURCENTAGE_JACKPOT = 4 %  → 20 000 FCFA prélevés par le gestionnaire
+Montant net (montantNet)       = 480 000 FCFA remis au bénéficiaire
+```
+
+#### Types de commission (`CommissionType`)
+
+| Type | Calcul | Prélevé sur |
+|---|---|---|
+| `POURCENTAGE_JACKPOT` | `jackpot × valeur / 100` | Jackpot de chaque cycle |
+| `FRAIS_FIXES_PAR_CYCLE` | `valeur` FCFA fixe | Jackpot de chaque cycle |
+| `FRAIS_ADHESION` | `valeur` FCFA unique | Payé à l'entrée du membre — **pas déduit du jackpot** |
+
+Contrainte : `UNIQUE(tontine_id, type)` déjà en base — lever `ConflictException` si doublon.
+
+#### Impact sur `CycleTontine` — 2 champs à ajouter
+
+`CycleTontine` ne stocke actuellement que `montantJackpot` (brut).
+Il faut ajouter :
+
+| Champ Java | Colonne SQL | Description |
+|---|---|---|
+| `montantCommission` | `montant_commission DECIMAL(12,2)` | Total prélevé par le gestionnaire |
+| `montantNet` | `montant_net DECIMAL(12,2)` | Reçu par le bénéficiaire |
+
+**Migration V020 :** `ALTER TABLE dinthialma.cycles_tontine ADD COLUMN IF NOT EXISTS ...` (x2)
+
+#### Calcul à la clôture (`CycleServiceImpl.closeCycle`)
+
+Ajouter après le calcul du jackpot brut, avec injection de `TontineCommissionRepository` :
+
+```java
+List<TontineCommission> commissions =
+    commissionRepository.findByTontine_IdAndDeletedAtIsNull(tontineId);
+
+BigDecimal totalCommission = BigDecimal.ZERO;
+for (TontineCommission c : commissions) {
+    BigDecimal part = switch (c.getType()) {
+        case POURCENTAGE_JACKPOT ->
+            jackpot.multiply(c.getValeur())
+                   .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+        case FRAIS_FIXES_PAR_CYCLE -> c.getValeur();
+        case FRAIS_ADHESION        -> BigDecimal.ZERO; // pas sur jackpot
+    };
+    totalCommission = totalCommission.add(part);
+}
+
+cycle.setMontantJackpot(jackpot);
+cycle.setMontantCommission(totalCommission);
+cycle.setMontantNet(jackpot.subtract(totalCommission));
+```
+
+#### Fichiers à créer
+
+- `tontine/dto/CreateCommissionRequest.java` — `type: CommissionType`, `valeur: BigDecimal`, `description: String`
+- `tontine/dto/UpdateCommissionRequest.java` — `valeur: BigDecimal` (nullable), `description: String` (nullable)
+- `tontine/dto/CommissionResponse.java`
+- `tontine/service/interfaces/CommissionService.java`
+- `tontine/service/impl/CommissionServiceImpl.java`
+- `tontine/controller/CommissionController.java`
+
+**Endpoints :**
+```
+POST   /v1/tontines/{tontineId}/commissions         → créer (créateur + SUPER_ADMIN)
+GET    /v1/tontines/{tontineId}/commissions         → lister actives (membres + créateur + SUPER_ADMIN)
+PUT    /v1/tontines/{tontineId}/commissions/{id}    → modifier valeur/description (créateur + SUPER_ADMIN)
+DELETE /v1/tontines/{tontineId}/commissions/{id}    → soft delete (créateur + SUPER_ADMIN)
+```
+
+#### Fichiers à modifier
+
+| Fichier | Modification |
+|---|---|
+| `tontine/entity/CycleTontine.java` | + `montantCommission`, + `montantNet` |
+| `tontine/dto/CycleResponse.java` | + les 2 champs dans `from()` |
+| `tontine/service/impl/CycleServiceImpl.java` | + calcul commission dans `closeCycle` + injection `TontineCommissionRepository` |
+| `db/migration/V020__add_commission_to_cycles.sql` | `ALTER TABLE cycles_tontine ADD COLUMN` (x2) |
+
+### Prochaine migration disponible
+
+**V020** — `ALTER TABLE dinthialma.cycles_tontine ADD COLUMN IF NOT EXISTS montant_commission ...`

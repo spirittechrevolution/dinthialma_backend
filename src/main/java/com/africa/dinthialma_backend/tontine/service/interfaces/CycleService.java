@@ -3,8 +3,9 @@ package com.africa.dinthialma_backend.tontine.service.interfaces;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.tontine.dto.CycleResponse;
 import com.africa.dinthialma_backend.tontine.dto.OpenCycleRequest;
-import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 /** Service métier pour la gestion des cycles de tontine. */
 public interface CycleService {
@@ -14,7 +15,8 @@ public interface CycleService {
    *
    * <p>Accès : membres + admin + SUPER_ADMIN.
    */
-  List<CycleResponse> listCycles(String keycloakId, UUID tontineId) throws CustomException;
+  Page<CycleResponse> listCycles(String keycloakId, UUID tontineId, Pageable pageable)
+      throws CustomException;
 
   /**
    * Récupère un cycle par son identifiant.

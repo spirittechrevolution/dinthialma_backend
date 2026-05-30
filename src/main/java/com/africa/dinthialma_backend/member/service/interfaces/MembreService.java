@@ -4,8 +4,9 @@ import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.member.dto.AddMembreRequest;
 import com.africa.dinthialma_backend.member.dto.MembreResponse;
 import com.africa.dinthialma_backend.member.dto.UpdateMembreStatutRequest;
-import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 /** Service métier pour la gestion des cotisants d'une tontine. */
 public interface MembreService {
@@ -36,7 +37,8 @@ public interface MembreService {
    *
    * <p>Accès : membres de la tontine + admin + SUPER_ADMIN.
    */
-  List<MembreResponse> listMembres(String keycloakId, UUID tontineId) throws CustomException;
+  Page<MembreResponse> listMembres(String keycloakId, UUID tontineId, Pageable pageable)
+      throws CustomException;
 
   /**
    * Modifie le statut d'un cotisant ({@code ACTIF} / {@code SUSPENDU} / {@code SORTI}).

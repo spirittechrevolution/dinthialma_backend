@@ -5,6 +5,8 @@ import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -19,6 +21,9 @@ public interface TontineMembreRepository extends JpaRepository<TontineMembre, UU
    */
   List<TontineMembre> findByTontine_IdAndDeletedAtIsNullOrderByOrdreJackpotAscCreatedAtAsc(
       UUID tontineId);
+
+  /** Membres non supprimés d'une tontine paginés (tri via Pageable). */
+  Page<TontineMembre> findByTontine_IdAndDeletedAtIsNull(UUID tontineId, Pageable pageable);
 
   /** Membres actifs d'une tontine (pour génération des cycles). */
   List<TontineMembre> findByTontine_IdAndStatutAndDeletedAtIsNull(

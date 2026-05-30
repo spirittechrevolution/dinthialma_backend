@@ -12,9 +12,12 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -59,10 +62,14 @@ public class CycleController {
       description =
           "Retourne tous les cycles triés par numéro croissant. Accès : membres + créateur + SUPER_ADMIN.")
   public ResponseEntity<CustomResponse> listCycles(
-      @PathVariable UUID tontineId, HttpServletRequest httpRequest) throws CustomException {
+      @PathVariable UUID tontineId,
+      @PageableDefault(size = 20, sort = "numeroCycle", direction = Sort.Direction.ASC)
+          Pageable pageable,
+      HttpServletRequest httpRequest)
+      throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
-    List<CycleResponse> cycles = cycleService.listCycles(keycloakId, tontineId);
+    Page<CycleResponse> cycles = cycleService.listCycles(keycloakId, tontineId, pageable);
 
     return ResponseEntity.ok(
         new CustomResponse(SUCCESS, OK, ResponseMessageConstants.CYCLE_LIST_SUCCESS, cycles));
