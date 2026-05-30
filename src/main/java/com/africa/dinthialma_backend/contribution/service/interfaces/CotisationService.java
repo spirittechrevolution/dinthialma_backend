@@ -3,8 +3,9 @@ package com.africa.dinthialma_backend.contribution.service.interfaces;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
-import java.util.List;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 /** Service métier pour la gestion des cotisations. */
 public interface CotisationService {
@@ -43,8 +44,8 @@ public interface CotisationService {
    * @param tontineId identifiant de la tontine
    * @param cycleId filtre optionnel (null = tous les cycles)
    */
-  List<CotisationResponse> listCotisations(String keycloakId, UUID tontineId, UUID cycleId)
-      throws CustomException;
+  Page<CotisationResponse> listCotisations(
+      String keycloakId, UUID tontineId, UUID cycleId, Pageable pageable) throws CustomException;
 
   /**
    * Récupère une cotisation par son identifiant.

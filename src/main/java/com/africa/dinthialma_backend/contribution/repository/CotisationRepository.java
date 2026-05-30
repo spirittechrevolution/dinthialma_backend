@@ -7,6 +7,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -19,14 +21,28 @@ public interface CotisationRepository extends JpaRepository<Cotisation, UUID> {
   /** Cotisations d'un cycle. */
   List<Cotisation> findByCycle_IdAndDeletedAtIsNull(UUID cycleId);
 
+  /** Cotisations d'un cycle paginées. */
+  Page<Cotisation> findByCycle_IdAndDeletedAtIsNull(UUID cycleId, Pageable pageable);
+
   /** Cotisations d'une tontine (tous cycles confondus). */
   List<Cotisation> findByTontine_IdAndDeletedAtIsNull(UUID tontineId);
+
+  /** Cotisations d'une tontine paginées. */
+  Page<Cotisation> findByTontine_IdAndDeletedAtIsNull(UUID tontineId, Pageable pageable);
 
   /** Cotisations d'un membre (tous cycles confondus). */
   List<Cotisation> findByMembre_IdAndDeletedAtIsNull(UUID membreId);
 
   /** Cotisations d'un membre pour une tontine donnée. */
   List<Cotisation> findByTontine_IdAndMembre_IdAndDeletedAtIsNull(UUID tontineId, UUID membreId);
+
+  /** Cotisations d'un membre pour une tontine donnée paginées. */
+  Page<Cotisation> findByTontine_IdAndMembre_IdAndDeletedAtIsNull(
+      UUID tontineId, UUID membreId, Pageable pageable);
+
+  /** Cotisations d'un membre pour un cycle donné paginées. */
+  Page<Cotisation> findByCycle_IdAndMembre_IdAndDeletedAtIsNull(
+      UUID cycleId, UUID membreId, Pageable pageable);
 
   /** Cotisation par id sans soft-delete. */
   Optional<Cotisation> findByIdAndDeletedAtIsNull(UUID id);

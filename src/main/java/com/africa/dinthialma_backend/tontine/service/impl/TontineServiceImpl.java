@@ -34,6 +34,8 @@ import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -108,23 +110,22 @@ public class TontineServiceImpl implements TontineService {
 
   @Override
   @Transactional(readOnly = true)
-  public List<TontineResponse> listTontines(String keycloakId) throws CustomException {
+  public Page<TontineResponse> listTontines(String keycloakId, Pageable pageable)
+      throws CustomException {
     User caller = findUserByKeycloakId(keycloakId);
 
-    List<Tontine> tontines;
+    Page<Tontine> tontines;
     if (isSuperAdmin(caller)) {
-      tontines = tontineRepository.findByDeletedAtIsNull();
+      tontines = tontineRepository.findByDeletedAtIsNull(pageable);
     } else {
-      tontines = tontineRepository.findVisibleByUserId(caller.getId());
+      tontines = tontineRepository.findVisibleByUserId(caller.getId(), pageable);
     }
 
-    return tontines.stream()
-        .map(
-            t -> {
-              int count = (int) membreRepository.countByTontine_IdAndDeletedAtIsNull(t.getId());
-              return TontineResponse.from(t, count);
-            })
-        .toList();
+    return tontines.map(
+        t -> {
+          int count = (int) membreRepository.countByTontine_IdAndDeletedAtIsNull(t.getId());
+          return TontineResponse.from(t, count);
+        });
   }
 
   // ─── Mise à jour ─────────────────────────────────────────────────────────

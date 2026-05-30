@@ -81,6 +81,16 @@ public final class ResponseMessageConstants {
   public static final String CONTRIBUTION_NOT_FOUND = "Cotisation introuvable";
   public static final String CONTRIBUTION_VALIDATED = "Cotisation validée avec succès";
 
+  // Commission
+  public static final String COMMISSION_CREATE_SUCCESS = "Commission créée avec succès";
+  public static final String COMMISSION_UPDATE_SUCCESS = "Commission mise à jour avec succès";
+  public static final String COMMISSION_DELETE_SUCCESS = "Commission supprimée avec succès";
+  public static final String COMMISSION_LIST_SUCCESS =
+      "Liste des commissions récupérée avec succès";
+  public static final String COMMISSION_NOT_FOUND = "Commission introuvable";
+  public static final String COMMISSION_ALREADY_EXISTS =
+      "Une commission de ce type existe déjà sur cette tontine";
+
   // Admin Dashboard
   public static final String ADMIN_DASHBOARD_SUCCESS = "Dashboard récupéré avec succès";
   public static final String ADMIN_MY_DASHBOARD_SUCCESS =

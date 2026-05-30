@@ -24,10 +24,11 @@ import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -135,8 +136,8 @@ public class CotisationServiceImpl implements CotisationService {
 
   @Override
   @Transactional(readOnly = true)
-  public List<CotisationResponse> listCotisations(String keycloakId, UUID tontineId, UUID cycleId)
-      throws CustomException {
+  public Page<CotisationResponse> listCotisations(
+      String keycloakId, UUID tontineId, UUID cycleId, Pageable pageable) throws CustomException {
 
     User caller = findUserByKeycloakId(keycloakId);
     Tontine tontine = findTontineById(tontineId);
@@ -144,29 +145,32 @@ public class CotisationServiceImpl implements CotisationService {
     boolean isAdminOrSuper =
         isSuperAdmin(caller) || tontine.getCreePar().getId().equals(caller.getId());
 
-    List<Cotisation> cotisations;
+    if (isAdminOrSuper) {
+      if (cycleId != null) {
+        return cotisationRepository
+            .findByCycle_IdAndDeletedAtIsNull(cycleId, pageable)
+            .map(CotisationResponse::from);
+      }
+      return cotisationRepository
+          .findByTontine_IdAndDeletedAtIsNull(tontineId, pageable)
+          .map(CotisationResponse::from);
+    }
+
+    // Un membre ne voit que ses propres cotisations (filtre en base)
+    TontineMembre membreCaller =
+        membreRepository
+            .findByTontine_IdAndUser_IdAndDeletedAtIsNull(tontineId, caller.getId())
+            .orElseThrow(
+                () -> new ForbiddenException(ResponseMessageConstants.TONTINE_ACCESS_DENIED));
 
     if (cycleId != null) {
-      cotisations = cotisationRepository.findByCycle_IdAndDeletedAtIsNull(cycleId);
-    } else {
-      cotisations = cotisationRepository.findByTontine_IdAndDeletedAtIsNull(tontineId);
+      return cotisationRepository
+          .findByCycle_IdAndMembre_IdAndDeletedAtIsNull(cycleId, membreCaller.getId(), pageable)
+          .map(CotisationResponse::from);
     }
-
-    // Un membre ne voit que ses propres cotisations
-    if (!isAdminOrSuper) {
-      TontineMembre membreCaller =
-          membreRepository
-              .findByTontine_IdAndUser_IdAndDeletedAtIsNull(tontineId, caller.getId())
-              .orElseThrow(
-                  () -> new ForbiddenException(ResponseMessageConstants.TONTINE_ACCESS_DENIED));
-
-      cotisations =
-          cotisations.stream()
-              .filter(c -> c.getMembre().getId().equals(membreCaller.getId()))
-              .toList();
-    }
-
-    return cotisations.stream().map(CotisationResponse::from).toList();
+    return cotisationRepository
+        .findByTontine_IdAndMembre_IdAndDeletedAtIsNull(tontineId, membreCaller.getId(), pageable)
+        .map(CotisationResponse::from);
   }
 
   // ─── Récupération unique ──────────────────────────────────────────────────

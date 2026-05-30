@@ -65,9 +65,17 @@ public class CycleTontine extends BaseEntity {
   @Column(name = "date_fin", nullable = false)
   private LocalDate dateFin;
 
-  /** Montant total collecté et remis au bénéficiaire. */
+  /** Somme brute des cotisations validées du cycle. */
   @Column(name = "montant_jackpot", precision = 12, scale = 2)
   private BigDecimal montantJackpot;
+
+  /** Total des commissions prélevées par le gestionnaire sur ce cycle. */
+  @Column(name = "montant_commission", precision = 12, scale = 2)
+  private BigDecimal montantCommission;
+
+  /** Montant net remis au bénéficiaire (montantJackpot - montantCommission). */
+  @Column(name = "montant_net", precision = 12, scale = 2)
+  private BigDecimal montantNet;
 
   /** Statut courant du cycle. */
   @Enumerated(EnumType.STRING)

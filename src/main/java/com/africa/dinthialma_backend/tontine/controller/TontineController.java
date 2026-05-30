@@ -13,9 +13,12 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -81,11 +84,14 @@ public class TontineController {
       description =
           "SUPER_ADMIN : toutes les tontines. Autres : tontines créées + tontines où l'utilisateur "
               + "est cotisant.")
-  public ResponseEntity<CustomResponse> listTontines(HttpServletRequest httpRequest)
+  public ResponseEntity<CustomResponse> listTontines(
+      @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
+          Pageable pageable,
+      HttpServletRequest httpRequest)
       throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
-    List<TontineResponse> tontines = tontineService.listTontines(keycloakId);
+    Page<TontineResponse> tontines = tontineService.listTontines(keycloakId, pageable);
 
     return ResponseEntity.ok(
         new CustomResponse(SUCCESS, OK, ResponseMessageConstants.TONTINE_LIST_SUCCESS, tontines));

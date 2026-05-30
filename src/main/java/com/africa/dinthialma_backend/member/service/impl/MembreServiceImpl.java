@@ -23,10 +23,11 @@ import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -125,7 +126,7 @@ public class MembreServiceImpl implements MembreService {
 
   @Override
   @Transactional(readOnly = true)
-  public List<MembreResponse> listMembres(String keycloakId, UUID tontineId)
+  public Page<MembreResponse> listMembres(String keycloakId, UUID tontineId, Pageable pageable)
       throws CustomException {
 
     User caller = findUserByKeycloakId(keycloakId);
@@ -133,10 +134,8 @@ public class MembreServiceImpl implements MembreService {
     assertCanAccess(caller, tontine);
 
     return membreRepository
-        .findByTontine_IdAndDeletedAtIsNullOrderByOrdreJackpotAscCreatedAtAsc(tontineId)
-        .stream()
-        .map(MembreResponse::from)
-        .toList();
+        .findByTontine_IdAndDeletedAtIsNull(tontineId, pageable)
+        .map(MembreResponse::from);
   }
 
   // ─── Modification du statut ──────────────────────────────────────────────

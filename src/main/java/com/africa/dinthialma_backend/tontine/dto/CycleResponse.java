@@ -20,6 +20,8 @@ public class CycleResponse {
   private LocalDate dateDebut;
   private LocalDate dateFin;
   private BigDecimal montantJackpot;
+  private BigDecimal montantCommission;
+  private BigDecimal montantNet;
   private CycleStatut statut;
   private LocalDate dateRemise;
 
@@ -52,6 +54,8 @@ public class CycleResponse {
         .dateDebut(cycle.getDateDebut())
         .dateFin(cycle.getDateFin())
         .montantJackpot(cycle.getMontantJackpot())
+        .montantCommission(cycle.getMontantCommission())
+        .montantNet(cycle.getMontantNet())
         .statut(cycle.getStatut())
         .dateRemise(cycle.getDateRemise())
         .beneficiaire(beneficiaireInfo)
