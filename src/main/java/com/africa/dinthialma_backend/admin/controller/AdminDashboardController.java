@@ -10,6 +10,11 @@ import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -58,8 +63,20 @@ public class AdminDashboardController {
   @Operation(
       summary = "Dashboard global plateforme",
       description =
-          "Métriques globales : utilisateurs, tontines, finances, activité 24h. "
-              + "🔒 Rôle requis : SUPER_ADMIN.")
+          "🔒 Rôle requis : **SUPER_ADMIN**.\n\n"
+              + "Métriques globales en temps réel :\n\n"
+              + "- **Utilisateurs** : total, actifs, désactivés, nouveaux ce mois\n"
+              + "- **Tontines** : total, par statut (BROUILLON, ACTIVE, SUSPENDUE, TERMINEE)\n"
+              + "- **Finances** : cotisations EN_ATTENTE, EN_RETARD, montant validé ce mois\n"
+              + "- **Activité 24h** : nouveaux inscrits, cotisations enregistrées")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Métriques globales",
+        content = @Content(schema = @Schema(implementation = GlobalDashboardResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit – SUPER_ADMIN requis"),
+  })
   public ResponseEntity<CustomResponse> getGlobalDashboard(HttpServletRequest httpRequest)
       throws CustomException {
 
@@ -77,8 +94,17 @@ public class AdminDashboardController {
   @Operation(
       summary = "Liste paginée des utilisateurs",
       description =
-          "Retourne tous les utilisateurs non supprimés (pageable). "
-              + "🔒 Rôle requis : SUPER_ADMIN.")
+          "🔒 Rôle requis : **SUPER_ADMIN**.\n\n"
+              + "Retourne tous les utilisateurs non supprimés de la plateforme.\n\n"
+              + "Pagination : `?page=0&size=20&sort=createdAt,desc`")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Page d'utilisateurs",
+        content = @Content(schema = @Schema(implementation = AdminUserResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit – SUPER_ADMIN requis"),
+  })
   public ResponseEntity<CustomResponse> listUsers(
       @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
           Pageable pageable,
@@ -93,9 +119,27 @@ public class AdminDashboardController {
   }
 
   @GetMapping("/dashboard/users/{userId}")
-  @Operation(summary = "Détail d'un utilisateur", description = "🔒 Rôle requis : SUPER_ADMIN.")
+  @Operation(
+      summary = "Détail d'un utilisateur",
+      description =
+          "🔒 Rôle requis : **SUPER_ADMIN**.\n\nRetourne le profil complet d'un utilisateur.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Détail utilisateur",
+        content = @Content(schema = @Schema(implementation = AdminUserResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit – SUPER_ADMIN requis"),
+    @ApiResponse(responseCode = "404", description = "Utilisateur introuvable"),
+  })
   public ResponseEntity<CustomResponse> getUserDetail(
-      @PathVariable UUID userId, HttpServletRequest httpRequest) throws CustomException {
+      @Parameter(
+              description = "UUID de l'utilisateur",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID userId,
+      HttpServletRequest httpRequest)
+      throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
     AdminUserResponse response = adminDashboardService.getUserDetail(keycloakId, userId);
@@ -108,11 +152,28 @@ public class AdminDashboardController {
   @Operation(
       summary = "Désactiver un compte utilisateur",
       description =
-          "Désactive le compte (active = false + Keycloak disabled). "
-              + "Un SUPER_ADMIN ne peut pas se désactiver lui-même. "
-              + "🔒 Rôle requis : SUPER_ADMIN.")
+          "🔒 Rôle requis : **SUPER_ADMIN**.\n\n"
+              + "Désactive le compte (active = false) et le désactive également dans Keycloak."
+              + " L'utilisateur ne peut plus se connecter.\n\n"
+              + "Un SUPER_ADMIN ne peut pas se désactiver lui-même.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Compte désactivé",
+        content = @Content(schema = @Schema(implementation = AdminUserResponse.class))),
+    @ApiResponse(responseCode = "400", description = "Impossible de se désactiver soi-même"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit – SUPER_ADMIN requis"),
+    @ApiResponse(responseCode = "404", description = "Utilisateur introuvable"),
+  })
   public ResponseEntity<CustomResponse> disableUser(
-      @PathVariable UUID userId, HttpServletRequest httpRequest) throws CustomException {
+      @Parameter(
+              description = "UUID de l'utilisateur à désactiver",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID userId,
+      HttpServletRequest httpRequest)
+      throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
     AdminUserResponse response = adminDashboardService.disableUser(keycloakId, userId);
@@ -124,9 +185,26 @@ public class AdminDashboardController {
   @PostMapping("/dashboard/users/{userId}/enable")
   @Operation(
       summary = "Réactiver un compte utilisateur",
-      description = "Réactive un compte désactivé. 🔒 Rôle requis : SUPER_ADMIN.")
+      description =
+          "🔒 Rôle requis : **SUPER_ADMIN**.\n\n"
+              + "Réactive un compte désactivé (active = true) et le réactive dans Keycloak.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Compte réactivé",
+        content = @Content(schema = @Schema(implementation = AdminUserResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit – SUPER_ADMIN requis"),
+    @ApiResponse(responseCode = "404", description = "Utilisateur introuvable"),
+  })
   public ResponseEntity<CustomResponse> enableUser(
-      @PathVariable UUID userId, HttpServletRequest httpRequest) throws CustomException {
+      @Parameter(
+              description = "UUID de l'utilisateur à réactiver",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID userId,
+      HttpServletRequest httpRequest)
+      throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
     AdminUserResponse response = adminDashboardService.enableUser(keycloakId, userId);
@@ -139,10 +217,30 @@ public class AdminDashboardController {
   @Operation(
       summary = "Modifier les rôles d'un utilisateur",
       description =
-          "Remplace l'ensemble des rôles (replace-all idempotent). Le rôle USER est "
-              + "toujours conservé. 🔒 Rôle requis : SUPER_ADMIN.")
+          "🔒 Rôle requis : **SUPER_ADMIN**.\n\n"
+              + "**Replace-all idempotent** : les rôles fournis remplacent complètement les rôles"
+              + " existants.\n\n"
+              + "Règles :\n"
+              + "- Le rôle USER est toujours conservé même s'il n'est pas dans la liste\n"
+              + "- Les rôles Keycloak sont synchronisés simultanément\n\n"
+              + "Exemple : `{\"roles\": [\"USER\", \"ADMIN\"]}` → attribue ADMIN, retire MEMBER si"
+              + " présent")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Rôles mis à jour",
+        content = @Content(schema = @Schema(implementation = AdminUserResponse.class))),
+    @ApiResponse(responseCode = "400", description = "Rôles invalides"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit – SUPER_ADMIN requis"),
+    @ApiResponse(responseCode = "404", description = "Utilisateur introuvable"),
+  })
   public ResponseEntity<CustomResponse> updateUserRoles(
-      @PathVariable UUID userId,
+      @Parameter(
+              description = "UUID de l'utilisateur",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID userId,
       @RequestBody @Valid UpdateUserRolesRequest request,
       HttpServletRequest httpRequest)
       throws CustomException {
@@ -161,9 +259,18 @@ public class AdminDashboardController {
   @Operation(
       summary = "Mon tableau de bord admin",
       description =
-          "Métriques de chaque tontine gérée par l'admin appelant : cotisations en attente, "
-              + "en retard, cycle en cours, montant total validé. "
-              + "🔒 Rôle requis : tout utilisateur authentifié ayant créé au moins une tontine.")
+          "🔒 Rôles : tout utilisateur authentifié ayant créé au moins une tontine.\n\n"
+              + "Métriques personnelles pour chaque tontine gérée par l'appelant :\n\n"
+              + "- Cotisations EN_ATTENTE et EN_RETARD\n"
+              + "- Montant total validé\n"
+              + "- Cycle EN_COURS avec bénéficiaire désigné")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Tableau de bord de l'admin",
+        content = @Content(schema = @Schema(implementation = MyDashboardResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+  })
   public ResponseEntity<CustomResponse> getMyDashboard(HttpServletRequest httpRequest)
       throws CustomException {
 

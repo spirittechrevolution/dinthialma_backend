@@ -9,6 +9,11 @@ import com.africa.dinthialma_backend.tontine.dto.CreateCommissionRequest;
 import com.africa.dinthialma_backend.tontine.dto.UpdateCommissionRequest;
 import com.africa.dinthialma_backend.tontine.service.interfaces.CommissionService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -60,12 +65,32 @@ public class CommissionController {
   @Operation(
       summary = "Créer une commission",
       description =
-          "Définit une règle de commission sur une tontine. "
-              + "Un seul enregistrement par type est autorisé (POURCENTAGE_JACKPOT, "
-              + "FRAIS_FIXES_PAR_CYCLE, FRAIS_ADHESION). "
-              + "🔒 Réservé au créateur de la tontine et au SUPER_ADMIN.")
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "Définit une règle de commission appliquée automatiquement à chaque clôture de"
+              + " cycle.\n\n"
+              + "**Types disponibles :**\n"
+              + "- `POURCENTAGE_JACKPOT` : ex. 4 % → 20 000 FCFA prélevés sur un jackpot de 500 000"
+              + " FCFA\n"
+              + "- `FRAIS_FIXES_PAR_CYCLE` : montant fixe FCFA déduit à chaque clôture\n"
+              + "- `FRAIS_ADHESION` : prélevé à l'entrée du membre, **ne réduit pas le jackpot**\n\n"
+              + "**Contrainte** : maximum 1 commission par type (erreur 409 si doublon).")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "201",
+        description = "Commission créée",
+        content = @Content(schema = @Schema(implementation = CommissionResponse.class))),
+    @ApiResponse(responseCode = "400", description = "Données invalides"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine introuvable"),
+    @ApiResponse(responseCode = "409", description = "Commission de ce type déjà configurée"),
+  })
   public ResponseEntity<CustomResponse> createCommission(
-      @PathVariable UUID tontineId,
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
       @RequestBody @Valid CreateCommissionRequest request,
       HttpServletRequest httpRequest)
       throws CustomException {
@@ -86,10 +111,24 @@ public class CommissionController {
   @Operation(
       summary = "Lister les commissions actives",
       description =
-          "Retourne toutes les commissions non supprimées de la tontine. "
-              + "🔒 Accès : membres, créateur, SUPER_ADMIN.")
+          "🔒 Rôles : membres de la tontine, créateur, SUPER_ADMIN.\n\n"
+              + "Retourne toutes les commissions non supprimées de la tontine."
+              + " Les membres peuvent ainsi voir les frais de gestion appliqués.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Page de commissions",
+        content = @Content(schema = @Schema(implementation = CommissionResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine introuvable"),
+  })
   public ResponseEntity<CustomResponse> listCommissions(
-      @PathVariable UUID tontineId,
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
       @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.ASC)
           Pageable pageable,
       HttpServletRequest httpRequest)
@@ -110,11 +149,30 @@ public class CommissionController {
   @Operation(
       summary = "Modifier une commission",
       description =
-          "Met à jour la valeur et/ou la description d'une commission. "
-              + "🔒 Réservé au créateur de la tontine et au SUPER_ADMIN.")
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "Met à jour la valeur et/ou la description d'une commission existante."
+              + " Les champs null ne sont pas modifiés.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Commission mise à jour",
+        content = @Content(schema = @Schema(implementation = CommissionResponse.class))),
+    @ApiResponse(responseCode = "400", description = "Données invalides"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine ou commission introuvable"),
+  })
   public ResponseEntity<CustomResponse> updateCommission(
-      @PathVariable UUID tontineId,
-      @PathVariable UUID commissionId,
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
+      @Parameter(
+              description = "UUID de la commission",
+              example = "990e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID commissionId,
       @RequestBody @Valid UpdateCommissionRequest request,
       HttpServletRequest httpRequest)
       throws CustomException {
@@ -134,10 +192,27 @@ public class CommissionController {
   @Operation(
       summary = "Supprimer une commission (soft delete)",
       description =
-          "Suppression logique de la commission. Elle ne sera plus appliquée aux prochains cycles. "
-              + "🔒 Réservé au créateur de la tontine et au SUPER_ADMIN.")
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "Suppression logique. La commission ne sera plus appliquée aux prochains cycles."
+              + " Le même type peut être recréé ultérieurement.")
+  @ApiResponses({
+    @ApiResponse(responseCode = "200", description = "Commission supprimée"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine ou commission introuvable"),
+  })
   public ResponseEntity<CustomResponse> deleteCommission(
-      @PathVariable UUID tontineId, @PathVariable UUID commissionId, HttpServletRequest httpRequest)
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
+      @Parameter(
+              description = "UUID de la commission",
+              example = "990e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID commissionId,
+      HttpServletRequest httpRequest)
       throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);

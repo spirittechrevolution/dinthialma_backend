@@ -1,5 +1,6 @@
 package com.africa.dinthialma_backend.auth.codeList;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
@@ -17,6 +18,11 @@ import lombok.RequiredArgsConstructor;
  *   <li>{@link #SUPER_ADMIN} → attribution manuelle par la plateforme
  * </ul>
  */
+@Schema(
+    description =
+        "Rôle Keycloak de l'utilisateur. Les rôles sont cumulatifs."
+            + " USER = base (inscription), MEMBER = cotisant d'une tontine,"
+            + " ADMIN = créateur d'une tontine, SUPER_ADMIN = équipe Dinthialma (accès total).")
 @Getter
 @RequiredArgsConstructor
 public enum UserRole {

@@ -9,6 +9,11 @@ import com.africa.dinthialma_backend.member.dto.MembreResponse;
 import com.africa.dinthialma_backend.member.dto.UpdateMembreStatutRequest;
 import com.africa.dinthialma_backend.member.service.interfaces.MembreService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -62,9 +67,24 @@ public class MembreController {
   @Operation(
       summary = "Lister les cotisants d'une tontine",
       description =
-          "Retourne les cotisants triés par ordre jackpot. Accès : membres + créateur + SUPER_ADMIN.")
+          "🔒 Rôles : membres de la tontine, créateur, SUPER_ADMIN.\n\n"
+              + "Retourne les cotisants triés par ordre jackpot (position dans la rotation).\n\n"
+              + "Pagination : `?page=0&size=20&sort=ordreJackpot,asc`")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Page de cotisants",
+        content = @Content(schema = @Schema(implementation = MembreResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine introuvable"),
+  })
   public ResponseEntity<CustomResponse> listMembres(
-      @PathVariable UUID tontineId,
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
       @PageableDefault(size = 20, sort = "ordreJackpot", direction = Sort.Direction.ASC)
           Pageable pageable,
       HttpServletRequest httpRequest)
@@ -83,10 +103,28 @@ public class MembreController {
   @Operation(
       summary = "Ajouter un cotisant",
       description =
-          "Ajoute un utilisateur comme cotisant dans la tontine. L'utilisateur se voit attribuer "
-              + "le rôle DINTHIALMA_MEMBER. Réservé au créateur et au SUPER_ADMIN.")
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "Ajoute un utilisateur comme cotisant. L'utilisateur doit avoir un compte"
+              + " Dinthialma existant. Il reçoit automatiquement le rôle **DINTHIALMA_MEMBER**.\n\n"
+              + "Si `ordreJackpot` est null, le membre est placé en fin de liste.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "201",
+        description = "Cotisant ajouté",
+        content = @Content(schema = @Schema(implementation = MembreResponse.class))),
+    @ApiResponse(
+        responseCode = "400",
+        description = "Utilisateur déjà membre de la tontine ou tontine complète"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine ou utilisateur introuvable"),
+  })
   public ResponseEntity<CustomResponse> addMembre(
-      @PathVariable UUID tontineId,
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
       @RequestBody @Valid AddMembreRequest request,
       HttpServletRequest httpRequest)
       throws CustomException {
@@ -106,9 +144,27 @@ public class MembreController {
   @Operation(
       summary = "Retirer un cotisant (soft delete)",
       description =
-          "Suppression logique du cotisant (statut → SORTI). Réservé au créateur et au SUPER_ADMIN.")
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "Suppression logique du cotisant (statut → SORTI, deletedAt renseigné)."
+              + " Le membre ne voit plus la tontine.")
+  @ApiResponses({
+    @ApiResponse(responseCode = "200", description = "Cotisant retiré"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine ou membre introuvable"),
+  })
   public ResponseEntity<CustomResponse> removeMembre(
-      @PathVariable UUID tontineId, @PathVariable UUID membreId, HttpServletRequest httpRequest)
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
+      @Parameter(
+              description = "UUID du membre (tontine_membres.id)",
+              example = "770e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID membreId,
+      HttpServletRequest httpRequest)
       throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
@@ -124,11 +180,32 @@ public class MembreController {
   @Operation(
       summary = "Modifier le statut d'un cotisant",
       description =
-          "Change le statut d'un cotisant : ACTIF / SUSPENDU / SORTI. "
-              + "Réservé au créateur et au SUPER_ADMIN.")
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "Transitions de statut autorisées :\n\n"
+              + "- **ACTIF** : activer ou réactiver un membre suspendu\n"
+              + "- **SUSPENDU** : suspension temporaire (ne peut plus cotiser)\n"
+              + "- **SORTI** : retrait définitif")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Statut mis à jour",
+        content = @Content(schema = @Schema(implementation = MembreResponse.class))),
+    @ApiResponse(responseCode = "400", description = "Transition de statut invalide"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine ou membre introuvable"),
+  })
   public ResponseEntity<CustomResponse> updateStatut(
-      @PathVariable UUID tontineId,
-      @PathVariable UUID membreId,
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
+      @Parameter(
+              description = "UUID du membre (tontine_membres.id)",
+              example = "770e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID membreId,
       @RequestBody @Valid UpdateMembreStatutRequest request,
       HttpServletRequest httpRequest)
       throws CustomException {
