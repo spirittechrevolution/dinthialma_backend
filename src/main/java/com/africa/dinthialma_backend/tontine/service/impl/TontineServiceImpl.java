@@ -6,6 +6,7 @@ import com.africa.dinthialma_backend.auth.entity.UserRoleAssignment;
 import com.africa.dinthialma_backend.auth.repository.UserRepository;
 import com.africa.dinthialma_backend.auth.repository.UserRoleAssignmentRepository;
 import com.africa.dinthialma_backend.auth.service.interfaces.KeycloakAuthService;
+import com.africa.dinthialma_backend.common.audit.AuditService;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
@@ -62,6 +63,7 @@ public class TontineServiceImpl implements TontineService {
   private final UserRepository userRepository;
   private final UserRoleAssignmentRepository roleAssignmentRepository;
   private final KeycloakAuthService keycloakAuthService;
+  private final AuditService auditService;
 
   // ─── Création ────────────────────────────────────────────────────────────
 
@@ -90,6 +92,7 @@ public class TontineServiceImpl implements TontineService {
     // Attribuer le rôle ADMIN si l'utilisateur ne l'a pas encore
     assignRoleIfAbsent(caller, UserRole.ADMIN);
 
+    auditService.logCreate(caller, "tontines", saved.getId());
     log.info("Tontine créée – id={} par userId={}", saved.getId(), caller.getId());
     return TontineResponse.from(saved, 0);
   }
@@ -142,14 +145,65 @@ public class TontineServiceImpl implements TontineService {
       throw new BadRequestException("La tontine ne peut être modifiée qu'en statut BROUILLON");
     }
 
-    if (request.getNom() != null) tontine.setNom(request.getNom().trim());
-    if (request.getDescription() != null) tontine.setDescription(request.getDescription());
-    if (request.getMontant() != null) tontine.setMontant(request.getMontant());
-    if (request.getFrequence() != null) tontine.setFrequence(request.getFrequence());
-    if (request.getOrdreBeneficiaire() != null)
+    if (request.getNom() != null) {
+      auditService.log(caller, "tontines", id, "nom", tontine.getNom(), request.getNom().trim());
+      tontine.setNom(request.getNom().trim());
+    }
+    if (request.getDescription() != null) {
+      auditService.log(
+          caller,
+          "tontines",
+          id,
+          "description",
+          tontine.getDescription(),
+          request.getDescription());
+      tontine.setDescription(request.getDescription());
+    }
+    if (request.getMontant() != null) {
+      auditService.log(
+          caller,
+          "tontines",
+          id,
+          "montant",
+          tontine.getMontant().toPlainString(),
+          request.getMontant().toPlainString());
+      tontine.setMontant(request.getMontant());
+    }
+    if (request.getFrequence() != null) {
+      auditService.log(
+          caller, "tontines", id, "frequence", tontine.getFrequence(), request.getFrequence());
+      tontine.setFrequence(request.getFrequence());
+    }
+    if (request.getOrdreBeneficiaire() != null) {
+      auditService.log(
+          caller,
+          "tontines",
+          id,
+          "ordreBeneficiaire",
+          tontine.getOrdreBeneficiaire(),
+          request.getOrdreBeneficiaire());
       tontine.setOrdreBeneficiaire(request.getOrdreBeneficiaire());
-    if (request.getDateDebut() != null) tontine.setDateDebut(request.getDateDebut());
-    if (request.getNombreMembres() != null) tontine.setNombreMembres(request.getNombreMembres());
+    }
+    if (request.getDateDebut() != null) {
+      auditService.log(
+          caller,
+          "tontines",
+          id,
+          "dateDebut",
+          tontine.getDateDebut().toString(),
+          request.getDateDebut().toString());
+      tontine.setDateDebut(request.getDateDebut());
+    }
+    if (request.getNombreMembres() != null) {
+      auditService.log(
+          caller,
+          "tontines",
+          id,
+          "nombreMembres",
+          String.valueOf(tontine.getNombreMembres()),
+          String.valueOf(request.getNombreMembres()));
+      tontine.setNombreMembres(request.getNombreMembres());
+    }
 
     Tontine saved = tontineRepository.save(tontine);
     int nombreMembres = (int) membreRepository.countByTontine_IdAndDeletedAtIsNull(id);
@@ -170,6 +224,7 @@ public class TontineServiceImpl implements TontineService {
 
     tontine.setDeletedAt(LocalDateTime.now());
     tontineRepository.save(tontine);
+    auditService.logDelete(caller, "tontines", id);
     log.info("Tontine supprimée (soft delete) – id={}", id);
   }
 
@@ -187,6 +242,7 @@ public class TontineServiceImpl implements TontineService {
           "La tontine doit être en BROUILLON ou SUSPENDUE pour être activée");
     }
 
+    String oldStatut = tontine.getStatut().name();
     tontine.setStatut(TontineStatut.ACTIVE);
 
     // En mode AUTOMATIQUE, générer les cycles si pas encore générés
@@ -197,6 +253,7 @@ public class TontineServiceImpl implements TontineService {
 
     Tontine saved = tontineRepository.save(tontine);
     int nombreMembres = (int) membreRepository.countByTontine_IdAndDeletedAtIsNull(id);
+    auditService.log(caller, "tontines", id, "statut", oldStatut, TontineStatut.ACTIVE.name());
     log.info("Tontine activée – id={}", id);
     return TontineResponse.from(saved, nombreMembres);
   }
@@ -216,6 +273,13 @@ public class TontineServiceImpl implements TontineService {
     tontine.setStatut(TontineStatut.SUSPENDUE);
     Tontine saved = tontineRepository.save(tontine);
     int nombreMembres = (int) membreRepository.countByTontine_IdAndDeletedAtIsNull(id);
+    auditService.log(
+        caller,
+        "tontines",
+        id,
+        "statut",
+        TontineStatut.ACTIVE.name(),
+        TontineStatut.SUSPENDUE.name());
     log.info("Tontine suspendue – id={}", id);
     return TontineResponse.from(saved, nombreMembres);
   }

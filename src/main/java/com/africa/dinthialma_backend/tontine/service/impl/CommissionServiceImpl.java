@@ -4,6 +4,7 @@ import com.africa.dinthialma_backend.auth.codeList.UserRole;
 import com.africa.dinthialma_backend.auth.entity.User;
 import com.africa.dinthialma_backend.auth.repository.UserRepository;
 import com.africa.dinthialma_backend.auth.repository.UserRoleAssignmentRepository;
+import com.africa.dinthialma_backend.common.audit.AuditService;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.ConflictException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
@@ -39,6 +40,7 @@ public class CommissionServiceImpl implements CommissionService {
   private final TontineMembreRepository membreRepository;
   private final UserRepository userRepository;
   private final UserRoleAssignmentRepository roleAssignmentRepository;
+  private final AuditService auditService;
 
   // ─── Création ────────────────────────────────────────────────────────────
 
@@ -67,6 +69,7 @@ public class CommissionServiceImpl implements CommissionService {
             .build();
 
     TontineCommission saved = commissionRepository.save(commission);
+    auditService.logCreate(caller, "tontine_commissions", saved.getId());
     log.info(
         "Commission créée – tontineId={} type={} valeur={}",
         tontineId,
@@ -104,8 +107,26 @@ public class CommissionServiceImpl implements CommissionService {
 
     TontineCommission commission = findCommissionById(tontineId, commissionId);
 
-    if (request.getValeur() != null) commission.setValeur(request.getValeur());
-    if (request.getDescription() != null) commission.setDescription(request.getDescription());
+    if (request.getValeur() != null) {
+      auditService.log(
+          caller,
+          "tontine_commissions",
+          commissionId,
+          "valeur",
+          commission.getValeur().toPlainString(),
+          request.getValeur().toPlainString());
+      commission.setValeur(request.getValeur());
+    }
+    if (request.getDescription() != null) {
+      auditService.log(
+          caller,
+          "tontine_commissions",
+          commissionId,
+          "description",
+          commission.getDescription(),
+          request.getDescription());
+      commission.setDescription(request.getDescription());
+    }
 
     TontineCommission saved = commissionRepository.save(commission);
     log.info("Commission mise à jour – id={} tontineId={}", commissionId, tontineId);
@@ -125,6 +146,7 @@ public class CommissionServiceImpl implements CommissionService {
     TontineCommission commission = findCommissionById(tontineId, commissionId);
     commission.setDeletedAt(LocalDateTime.now());
     commissionRepository.save(commission);
+    auditService.logDelete(caller, "tontine_commissions", commissionId);
     log.info("Commission supprimée (soft delete) – id={} tontineId={}", commissionId, tontineId);
   }
 

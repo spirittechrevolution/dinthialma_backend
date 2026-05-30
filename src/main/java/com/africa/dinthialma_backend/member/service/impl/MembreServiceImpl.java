@@ -6,6 +6,7 @@ import com.africa.dinthialma_backend.auth.entity.UserRoleAssignment;
 import com.africa.dinthialma_backend.auth.repository.UserRepository;
 import com.africa.dinthialma_backend.auth.repository.UserRoleAssignmentRepository;
 import com.africa.dinthialma_backend.auth.service.interfaces.KeycloakAuthService;
+import com.africa.dinthialma_backend.common.audit.AuditService;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.ConflictException;
@@ -43,6 +44,7 @@ public class MembreServiceImpl implements MembreService {
   private final UserRepository userRepository;
   private final UserRoleAssignmentRepository roleAssignmentRepository;
   private final KeycloakAuthService keycloakAuthService;
+  private final AuditService auditService;
 
   // ─── Ajout d'un membre ───────────────────────────────────────────────────
 
@@ -92,6 +94,7 @@ public class MembreServiceImpl implements MembreService {
     // Attribuer le rôle MEMBER si pas encore assigné
     assignRoleIfAbsent(targetUser, UserRole.MEMBER);
 
+    auditService.logCreate(caller, "tontine_membres", saved.getId());
     log.info(
         "Membre ajouté – tontineId={} userId={} membreId={}",
         tontineId,
@@ -158,9 +161,12 @@ public class MembreServiceImpl implements MembreService {
       throw new BadRequestException("Un membre SORTI ne peut être que réactivé");
     }
 
+    String oldStatut = membre.getStatut().name();
     membre.setStatut(request.getStatut());
     TontineMembre saved = membreRepository.save(membre);
 
+    auditService.log(
+        caller, "tontine_membres", membreId, "statut", oldStatut, request.getStatut().name());
     log.info("Statut membre modifié – membreId={} statut={}", membreId, request.getStatut());
     return MembreResponse.from(saved);
   }

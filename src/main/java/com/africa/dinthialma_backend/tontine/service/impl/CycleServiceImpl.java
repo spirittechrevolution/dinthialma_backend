@@ -4,6 +4,7 @@ import com.africa.dinthialma_backend.auth.codeList.UserRole;
 import com.africa.dinthialma_backend.auth.entity.User;
 import com.africa.dinthialma_backend.auth.repository.UserRepository;
 import com.africa.dinthialma_backend.auth.repository.UserRoleAssignmentRepository;
+import com.africa.dinthialma_backend.common.audit.AuditService;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
@@ -13,6 +14,7 @@ import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
+import com.africa.dinthialma_backend.notification.service.SchedulerService;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
@@ -51,6 +53,8 @@ public class CycleServiceImpl implements CycleService {
   private final TontineCommissionRepository commissionRepository;
   private final UserRepository userRepository;
   private final UserRoleAssignmentRepository roleAssignmentRepository;
+  private final AuditService auditService;
+  private final SchedulerService schedulerService;
 
   // ─── Lecture ─────────────────────────────────────────────────────────────
 
@@ -133,6 +137,8 @@ public class CycleServiceImpl implements CycleService {
             .build();
 
     CycleTontine saved = cycleRepository.save(cycle);
+    auditService.logCreate(caller, "cycles_tontine", saved.getId());
+    schedulerService.annoncerBeneficiaire(saved);
     log.info(
         "Cycle manuel ouvert – tontineId={} cycleId={} num={}", tontineId, saved.getId(), nextNum);
     return CycleResponse.from(saved);
@@ -188,6 +194,13 @@ public class CycleServiceImpl implements CycleService {
     cycle.setDateRemise(LocalDate.now());
 
     cycleRepository.save(cycle);
+    auditService.log(
+        caller,
+        "cycles_tontine",
+        cycleId,
+        "statut",
+        CycleStatut.EN_COURS.name(),
+        CycleStatut.TERMINE.name());
 
     // Passer les cotisations EN_ATTENTE restantes à EN_RETARD
     cotisationRepository
@@ -223,6 +236,7 @@ public class CycleServiceImpl implements CycleService {
             next -> {
               next.setStatut(CycleStatut.EN_COURS);
               cycleRepository.save(next);
+              schedulerService.annoncerBeneficiaire(next);
               log.info("Cycle suivant activé – cycleId={} num={}", next.getId(), nextNum);
             });
   }
