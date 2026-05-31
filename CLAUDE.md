@@ -93,7 +93,16 @@
 | `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
 | `/{cycleId}` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
 | `/` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 mode MANUEL uniquement |
-| `/{cycleId}/cloturer` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 EN_COURS → TERMINE, calcul jackpot |
+| `/{cycleId}/cloturer` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 EN_COURS → TERMINE, calcul jackpot + commissions |
+
+### 💸 Commissions (`/v1/tontines/{tontineId}/commissions`)
+
+| Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
+|----------|---------|------|--------|-------|-------------|-------|
+| `/` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 max 1 par type |
+| `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
+| `/{commissionId}` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 valeur + description |
+| `/{commissionId}` | DELETE | ❌ | ❌ | ✅² | ✅ | 🔒 soft delete |
 
 > ¹ = membre de cette tontine · ² = créateur de cette tontine
 
@@ -153,15 +162,16 @@ src/main/java/com/africa/dinthialma_backend/
 │       └── impl/       (implémentations correspondantes)
 ├── tontine/        ✅ Complet (entités + repo + service + controller)
 │   ├── codeList/       TontineStatut, ModeCycle, CycleStatut, CommissionType
-│   ├── controller/     TontineController, CycleController
+│   ├── controller/     TontineController, CycleController, CommissionController
 │   ├── dto/            CreateTontineRequest, UpdateTontineRequest, TontineResponse,
-│   │                   CycleResponse, OpenCycleRequest
+│   │                   CycleResponse, OpenCycleRequest, CreateCommissionRequest,
+│   │                   UpdateCommissionRequest, CommissionResponse
 │   ├── entity/         Tontine, CycleTontine, TontineCommission
 │   ├── repository/     TontineRepository, CycleTontineRepository,
 │   │                   TontineCommissionRepository
 │   └── service/
-│       ├── interfaces/ TontineService, CycleService
-│       └── impl/       TontineServiceImpl, CycleServiceImpl
+│       ├── interfaces/ TontineService, CycleService, CommissionService
+│       └── impl/       TontineServiceImpl, CycleServiceImpl, CommissionServiceImpl
 ├── member/         ✅ Complet (entités + repo + service + controller)
 │   ├── codeList/       MembreStatut
 │   ├── controller/     MembreController
@@ -238,6 +248,26 @@ private boolean isSuperAdmin(User user) {
 - **Services** : interface dans `service/interfaces/` + impl dans `service/impl/` ; `@Transactional` sur écriture
 - **Phone** : toujours stocké SANS le `+` (normalisé via `PhoneUtils.normalize()` en entrée)
 - **JPQL** : pas de `SELECT DISTINCT` dans les repositories — PostgreSQL gère la déduplication nativement
+
+### Pagination — pattern standard
+
+Tous les endpoints de liste retournent `Page<T>` (Spring Data) :
+- Contrôleur : `@PageableDefault(size = 20, ...)` avec le tri naturel du domaine
+- Service interface : `Page<T>` en retour, `Pageable` en paramètre
+- Repository : surcharge `Page<T> findBy...(... Pageable)` à côté de la version `List<T>` conservée pour usage interne
+
+**Defaults par domaine :**
+
+| Domaine | Sort par défaut | Direction |
+|---------|----------------|-----------|
+| Tontines | `createdAt` | DESC |
+| Cycles | `numeroCycle` | ASC |
+| Membres | `ordreJackpot` | ASC |
+| Cotisations | `createdAt` | DESC |
+| Commissions | `createdAt` | ASC |
+| Users (admin) | `createdAt` | DESC |
+
+Query params client : `?page=0&size=20&sort=createdAt,desc`
 
 ### ⛔ Imports — règle absolue : PAS de wildcard `*`
 
@@ -324,8 +354,9 @@ public class ModuleController {
 | V017 | `alter_user_sessions_token_column.sql` | `refresh_token_hash` → TEXT |
 | V018 | `add_pin_created_at.sql` | `users.pin_created_at` (expiration PIN 90j) |
 | V019 | `create_phone_change_requests.sql` | `phone_change_requests` |
+| V020 | `add_commission_to_cycles.sql` | `cycles_tontine.montant_commission`, `montant_net` |
 
-Prochaine version disponible : **V020**
+Prochaine version disponible : **V021**
 
 ---
 
@@ -396,8 +427,19 @@ Prochaine version disponible : **V020**
 | Ouvrir cycle (MANUEL) | ✅ | 🔒 créateur + SUPER_ADMIN |
 | Clôturer cycle | ✅ | 🔒 créateur + SUPER_ADMIN |
 | Activation cycle suivant (AUTOMATIQUE) | ✅ | AUTO à la clôture |
-| Calcul jackpot = somme cotisations VALIDEES | ✅ | AUTO à la clôture |
+| Calcul jackpot brut = somme cotisations VALIDEES | ✅ | AUTO à la clôture |
+| Déduction commissions → montantNet | ✅ | AUTO à la clôture |
 | EN_ATTENTE → EN_RETARD à la clôture | ✅ | AUTO à la clôture |
+
+### Module Commission ✅ (complet)
+
+| Feature | Statut | Accès |
+|---------|--------|-------|
+| Créer une commission (max 1 par type) | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Lister commissions actives | ✅ | 🔒 membres + créateur + SUPER_ADMIN |
+| Modifier commission (valeur + description) | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Supprimer commission (soft delete) | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Calcul automatique à la clôture du cycle | ✅ | AUTO — FRAIS_ADHESION exclus du jackpot |
 
 ### Module Dashboard Admin ✅ (complet)
 
@@ -487,15 +529,27 @@ cd docker && docker compose up -d
   → AdminDashboardController (7 endpoints)                 ✅
   → Gestion utilisateurs (disable/enable/roles)            ✅
 
-✦ Sprint 4 – Notifications & Audit  🚧 EN COURS
-  1. SchedulerService (rappels SMS cotisations, annonce bénéficiaire)
-  2. AuditService (TontineAuditLog automatique sur mutations)
-  3. TontineCommission (gestion commissions par tontine)
+✦ Sprint 4 – Notifications & Audit  ✅ TERMINÉ
+  4.1 SchedulerService (rappel 8h + annonce bénéficiaire)                ✅ FAIT
+  4.2 AuditService (TontineAuditLog sur 14 mutations)                    ✅ FAIT
+  4.3 TontineCommission CRUD + calcul commission à la clôture            ✅ FAIT
+  4.4 Pagination Page<T> sur tous les endpoints de liste                 ✅ FAIT
 ```
 
 ---
 
 ## Sprint 4 – Notifications & Audit
+
+### ✅ Réalisé dans ce sprint
+
+| Tâche | Fichiers modifiés / créés |
+|---|---|
+| **4.3 Commission CRUD** | `CreateCommissionRequest`, `UpdateCommissionRequest`, `CommissionResponse`, `CommissionService`, `CommissionServiceImpl`, `CommissionController` |
+| **4.3 Calcul commission** | `CycleServiceImpl.closeCycle` + injection `TontineCommissionRepository` |
+| **4.3 Migration V020** | `cycles_tontine.montant_commission`, `montant_net` |
+| **4.4 Pagination** | `Page<T>` + `Pageable` sur les 5 list endpoints (tontines, cycles, membres, cotisations, commissions) |
+
+### 🔲 Restant dans ce sprint
 
 ### Ce qui existe déjà (ne pas recréer)
 
@@ -644,32 +698,8 @@ cycle.setMontantCommission(totalCommission);
 cycle.setMontantNet(jackpot.subtract(totalCommission));
 ```
 
-#### Fichiers à créer
-
-- `tontine/dto/CreateCommissionRequest.java` — `type: CommissionType`, `valeur: BigDecimal`, `description: String`
-- `tontine/dto/UpdateCommissionRequest.java` — `valeur: BigDecimal` (nullable), `description: String` (nullable)
-- `tontine/dto/CommissionResponse.java`
-- `tontine/service/interfaces/CommissionService.java`
-- `tontine/service/impl/CommissionServiceImpl.java`
-- `tontine/controller/CommissionController.java`
-
-**Endpoints :**
-```
-POST   /v1/tontines/{tontineId}/commissions         → créer (créateur + SUPER_ADMIN)
-GET    /v1/tontines/{tontineId}/commissions         → lister actives (membres + créateur + SUPER_ADMIN)
-PUT    /v1/tontines/{tontineId}/commissions/{id}    → modifier valeur/description (créateur + SUPER_ADMIN)
-DELETE /v1/tontines/{tontineId}/commissions/{id}    → soft delete (créateur + SUPER_ADMIN)
-```
-
-#### Fichiers à modifier
-
-| Fichier | Modification |
-|---|---|
-| `tontine/entity/CycleTontine.java` | + `montantCommission`, + `montantNet` |
-| `tontine/dto/CycleResponse.java` | + les 2 champs dans `from()` |
-| `tontine/service/impl/CycleServiceImpl.java` | + calcul commission dans `closeCycle` + injection `TontineCommissionRepository` |
-| `db/migration/V020__add_commission_to_cycles.sql` | `ALTER TABLE cycles_tontine ADD COLUMN` (x2) |
+#### 4.3 ✅ FAIT — tous les fichiers sont créés et fonctionnels.
 
 ### Prochaine migration disponible
 
-**V020** — `ALTER TABLE dinthialma.cycles_tontine ADD COLUMN IF NOT EXISTS montant_commission ...`
+**V021** — réservée pour Sprint 4.1/4.2 (notifications / audit)

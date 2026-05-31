@@ -4,6 +4,7 @@ import com.africa.dinthialma_backend.auth.codeList.UserRole;
 import com.africa.dinthialma_backend.auth.entity.User;
 import com.africa.dinthialma_backend.auth.repository.UserRepository;
 import com.africa.dinthialma_backend.auth.repository.UserRoleAssignmentRepository;
+import com.africa.dinthialma_backend.common.audit.AuditService;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.ConflictException;
@@ -45,6 +46,7 @@ public class CotisationServiceImpl implements CotisationService {
   private final TontineMembreRepository membreRepository;
   private final UserRepository userRepository;
   private final UserRoleAssignmentRepository roleAssignmentRepository;
+  private final AuditService auditService;
 
   // ─── Enregistrement ──────────────────────────────────────────────────────
 
@@ -87,6 +89,7 @@ public class CotisationServiceImpl implements CotisationService {
             .build();
 
     Cotisation saved = cotisationRepository.save(cotisation);
+    auditService.logCreate(caller, "cotisations", saved.getId());
     log.info(
         "Cotisation enregistrée – tontineId={} cycleId={} membreId={} id={}",
         tontineId,
@@ -128,6 +131,13 @@ public class CotisationServiceImpl implements CotisationService {
     cotisation.setDateValidation(LocalDateTime.now());
 
     Cotisation saved = cotisationRepository.save(cotisation);
+    auditService.log(
+        caller,
+        "cotisations",
+        cotisationId,
+        "statut",
+        CotisationStatut.EN_ATTENTE.name(),
+        CotisationStatut.VALIDE.name());
     log.info("Cotisation validée – cotisationId={} par userId={}", cotisationId, caller.getId());
     return CotisationResponse.from(saved);
   }

@@ -1,6 +1,7 @@
 package com.africa.dinthialma_backend.tontine.dto;
 
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -13,50 +14,74 @@ import java.time.LocalDate;
 import lombok.Getter;
 import lombok.Setter;
 
-/** Corps de requête pour la création d'une tontine. */
+@Schema(
+    description =
+        "Corps de la requête de création d'une tontine."
+            + " L'utilisateur appelant devient automatiquement l'administrateur (créateur) de la"
+            + " tontine et se voit attribuer le rôle DINTHIALMA_ADMIN."
+            + " La tontine est créée en statut BROUILLON.")
 @Getter
 @Setter
 public class CreateTontineRequest {
 
-  /** Nom du groupe de tontine. */
+  @Schema(
+      description = "Nom du groupe de tontine (max 150 caractères)",
+      example = "Tontine Famille Diallo")
   @NotBlank
   @Size(max = 150)
   private String nom;
 
-  /** Description optionnelle. */
+  @Schema(
+      description = "Description optionnelle du groupe",
+      example = "Tontine mensuelle de la famille Diallo")
   private String description;
 
-  /** Montant de cotisation par membre par cycle (FCFA). */
-  @NotNull @Positive private BigDecimal montant;
+  @Schema(description = "Montant de cotisation par membre par cycle en FCFA", example = "5000")
+  @NotNull
+  @Positive
+  private BigDecimal montant;
 
-  /**
-   * Fréquence de cotisation – réf. code list type {@code FREQUENCE_TONTINE}.
-   *
-   * <p>Ex : {@code HEBDOMADAIRE}, {@code MENSUEL}, {@code TRIMESTRIEL}.
-   */
-  @NotBlank private String frequence;
+  @Schema(
+      description =
+          "Fréquence de cotisation – code de la liste FREQUENCE_TONTINE."
+              + " Exemples : HEBDOMADAIRE, MENSUEL, TRIMESTRIEL."
+              + " Voir GET /v1/code-list/type/FREQUENCE_TONTINE pour la liste complète.",
+      example = "MENSUEL")
+  @NotBlank
+  private String frequence;
 
-  /**
-   * Ordre de désignation des bénéficiaires – réf. code list type {@code ORDRE_BENEFICIAIRE}.
-   *
-   * <p>Ex : {@code FIXE}, {@code ALEATOIRE}.
-   */
-  @NotBlank private String ordreBeneficiaire;
+  @Schema(
+      description =
+          "Ordre de désignation des bénéficiaires – code de la liste ORDRE_BENEFICIAIRE."
+              + " Exemples : FIXE (défini à l'avance), ALEATOIRE (tirage au sort)."
+              + " Voir GET /v1/code-list/type/ORDRE_BENEFICIAIRE.",
+      example = "FIXE")
+  @NotBlank
+  private String ordreBeneficiaire;
 
-  /**
-   * Mode de gestion des cycles.
-   *
-   * <ul>
-   *   <li>{@code AUTOMATIQUE} – tous les cycles générés à l'activation.
-   *   <li>{@code MANUEL} – l'admin ouvre chaque cycle au moment voulu.
-   * </ul>
-   */
-  @NotNull private ModeCycle modeCycle;
+  @Schema(
+      description =
+          "Mode de gestion des cycles : AUTOMATIQUE = tous les cycles générés à l'activation,"
+              + " MANUEL = l'admin ouvre chaque cycle manuellement.",
+      example = "AUTOMATIQUE",
+      allowableValues = {"AUTOMATIQUE", "MANUEL"})
+  @NotNull
+  private ModeCycle modeCycle;
 
-  /** Date de démarrage du premier cycle. */
-  @NotNull @FutureOrPresent private LocalDate dateDebut;
+  @Schema(
+      description = "Date de démarrage du premier cycle (aujourd'hui ou dans le futur)",
+      example = "2024-07-01")
+  @NotNull
+  @FutureOrPresent
+  private LocalDate dateDebut;
 
-  /** Nombre total de membres attendus (= nombre de cycles à générer). Minimum 2, maximum 100. */
+  @Schema(
+      description =
+          "Nombre total de membres attendus = nombre de cycles à générer (min 2, max 100)."
+              + " Ex : 12 membres → 12 cycles.",
+      example = "12",
+      minimum = "2",
+      maximum = "100")
   @Min(2)
   @Max(100)
   private int nombreMembres;

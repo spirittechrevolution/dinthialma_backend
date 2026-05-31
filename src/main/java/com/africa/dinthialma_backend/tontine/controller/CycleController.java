@@ -8,6 +8,11 @@ import com.africa.dinthialma_backend.tontine.dto.CycleResponse;
 import com.africa.dinthialma_backend.tontine.dto.OpenCycleRequest;
 import com.africa.dinthialma_backend.tontine.service.interfaces.CycleService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -60,9 +65,26 @@ public class CycleController {
   @Operation(
       summary = "Lister les cycles d'une tontine",
       description =
-          "Retourne tous les cycles triés par numéro croissant. Accès : membres + créateur + SUPER_ADMIN.")
+          "🔒 Rôles : membres de la tontine, créateur, SUPER_ADMIN.\n\n"
+              + "Retourne tous les cycles triés par numéro croissant (1, 2, 3, ...).\n\n"
+              + "Statuts possibles : EN_ATTENTE (généré mais pas encore démarré),"
+              + " EN_COURS (actif), TERMINE (clôturé).\n\n"
+              + "Pagination : `?page=0&size=20&sort=numeroCycle,asc`")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Page de cycles",
+        content = @Content(schema = @Schema(implementation = CycleResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine introuvable"),
+  })
   public ResponseEntity<CustomResponse> listCycles(
-      @PathVariable UUID tontineId,
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
       @PageableDefault(size = 20, sort = "numeroCycle", direction = Sort.Direction.ASC)
           Pageable pageable,
       HttpServletRequest httpRequest)
@@ -80,9 +102,29 @@ public class CycleController {
   @GetMapping("/{cycleId}")
   @Operation(
       summary = "Récupérer un cycle",
-      description = "Accès : membres + créateur + SUPER_ADMIN.")
+      description =
+          "🔒 Rôles : membres de la tontine, créateur, SUPER_ADMIN.\n\n"
+              + "Retourne le détail complet d'un cycle : dates, statut, bénéficiaire,"
+              + " montant jackpot brut, commissions et montant net (renseignés à la clôture).")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Détail du cycle",
+        content = @Content(schema = @Schema(implementation = CycleResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine ou cycle introuvable"),
+  })
   public ResponseEntity<CustomResponse> getCycle(
-      @PathVariable UUID tontineId, @PathVariable UUID cycleId, HttpServletRequest httpRequest)
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
+      @Parameter(description = "UUID du cycle", example = "660e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID cycleId,
+      HttpServletRequest httpRequest)
       throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
@@ -98,10 +140,29 @@ public class CycleController {
   @Operation(
       summary = "Ouvrir un cycle manuellement",
       description =
-          "Mode MANUEL uniquement. Ouvre un nouveau cycle avec les dates et bénéficiaire spécifiés. "
-              + "Réservé au créateur et au SUPER_ADMIN.")
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "**Mode MANUEL uniquement.** Crée et ouvre un nouveau cycle avec les dates et le"
+              + " bénéficiaire spécifiés.\n\n"
+              + "Conditions : tontine ACTIVE, aucun autre cycle EN_COURS, dateDebut ≤ dateFin.\n\n"
+              + "Si `beneficiaireId` est fourni, un SMS d'annonce est envoyé au bénéficiaire.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "201",
+        description = "Cycle ouvert",
+        content = @Content(schema = @Schema(implementation = CycleResponse.class))),
+    @ApiResponse(
+        responseCode = "400",
+        description = "Mode pas MANUEL, tontine pas ACTIVE, ou cycle déjà EN_COURS"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine ou bénéficiaire introuvable"),
+  })
   public ResponseEntity<CustomResponse> openCycle(
-      @PathVariable UUID tontineId,
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
       @RequestBody @Valid OpenCycleRequest request,
       HttpServletRequest httpRequest)
       throws CustomException {
@@ -120,11 +181,36 @@ public class CycleController {
   @Operation(
       summary = "Clôturer un cycle",
       description =
-          "Passe le cycle EN_COURS à TERMINE. Calcule le jackpot (cotisations VALIDEES), "
-              + "marque les cotisations EN_ATTENTE comme EN_RETARD, et active le cycle suivant "
-              + "en mode AUTOMATIQUE. Réservé au créateur et au SUPER_ADMIN.")
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "Passe le cycle **EN_COURS → TERMINÉ** avec le traitement automatique suivant :\n\n"
+              + "1. Calcul du jackpot brut = somme des cotisations **VALIDÉES** du cycle\n"
+              + "2. Calcul des commissions actives (POURCENTAGE_JACKPOT, FRAIS_FIXES_PAR_CYCLE)\n"
+              + "3. Stockage de montantJackpot, montantCommission, montantNet\n"
+              + "4. Cotisations **EN_ATTENTE** restantes → marquées **EN_RETARD**\n"
+              + "5. En mode AUTOMATIQUE : le cycle suivant (EN_ATTENTE) passe **EN_COURS** et un"
+              + " SMS est envoyé au bénéficiaire suivant")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Cycle clôturé avec jackpot calculé",
+        content = @Content(schema = @Schema(implementation = CycleResponse.class))),
+    @ApiResponse(responseCode = "400", description = "Cycle pas EN_COURS"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine ou cycle introuvable"),
+  })
   public ResponseEntity<CustomResponse> closeCycle(
-      @PathVariable UUID tontineId, @PathVariable UUID cycleId, HttpServletRequest httpRequest)
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
+      @Parameter(
+              description = "UUID du cycle à clôturer",
+              example = "660e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID cycleId,
+      HttpServletRequest httpRequest)
       throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);

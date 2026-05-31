@@ -8,6 +8,11 @@ import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.service.interfaces.CotisationService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -62,11 +67,31 @@ public class CotisationController {
   @Operation(
       summary = "Lister les cotisations",
       description =
-          "Liste les cotisations d'une tontine. Paramètre optionnel : cycleId pour filtrer par "
-              + "cycle. SUPER_ADMIN et créateur voient tout ; un MEMBER ne voit que les siennes.")
+          "🔒 Rôles : membres, créateur, SUPER_ADMIN.\n\n"
+              + "- **SUPER_ADMIN** et **créateur** : voient toutes les cotisations de la tontine.\n"
+              + "- **MEMBER** : voit uniquement ses propres cotisations.\n\n"
+              + "Paramètre optionnel `cycleId` pour filtrer par cycle.\n\n"
+              + "Pagination : `?page=0&size=20&sort=createdAt,desc&cycleId=<uuid>`")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Page de cotisations",
+        content = @Content(schema = @Schema(implementation = CotisationResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine introuvable"),
+  })
   public ResponseEntity<CustomResponse> listCotisations(
-      @PathVariable UUID tontineId,
-      @RequestParam(required = false) UUID cycleId,
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
+      @Parameter(
+              description = "Filtrer par cycle (optionnel)",
+              example = "660e8400-e29b-41d4-a716-446655440000")
+          @RequestParam(required = false)
+          UUID cycleId,
       @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
           Pageable pageable,
       HttpServletRequest httpRequest)
@@ -86,9 +111,31 @@ public class CotisationController {
   @GetMapping("/{cotisationId}")
   @Operation(
       summary = "Récupérer une cotisation",
-      description = "Accès : propriétaire de la cotisation, créateur de la tontine, SUPER_ADMIN.")
+      description =
+          "🔒 Rôles : propriétaire de la cotisation (MEMBER), créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "Retourne le détail complet : montant, méthode de paiement, référence,"
+              + " statut, valideur et date de validation.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Détail de la cotisation",
+        content = @Content(schema = @Schema(implementation = CotisationResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine ou cotisation introuvable"),
+  })
   public ResponseEntity<CustomResponse> getCotisation(
-      @PathVariable UUID tontineId, @PathVariable UUID cotisationId, HttpServletRequest httpRequest)
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
+      @Parameter(
+              description = "UUID de la cotisation",
+              example = "880e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID cotisationId,
+      HttpServletRequest httpRequest)
       throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
@@ -106,10 +153,28 @@ public class CotisationController {
   @Operation(
       summary = "Enregistrer une cotisation",
       description =
-          "Le cotisant signale son paiement. Statut initial : EN_ATTENTE. "
-              + "Une seule cotisation par membre par cycle. Réservé aux cotisants de la tontine.")
+          "🔒 Rôles : cotisant (MEMBER) de la tontine.\n\n"
+              + "Le membre signale son paiement. La cotisation est créée en statut **EN_ATTENTE**"
+              + " – l'admin devra la valider.\n\n"
+              + "Contrainte : **une seule cotisation par membre par cycle** – une 2ème tentative"
+              + " retourne une erreur 409.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "201",
+        description = "Cotisation enregistrée en statut EN_ATTENTE",
+        content = @Content(schema = @Schema(implementation = CotisationResponse.class))),
+    @ApiResponse(responseCode = "400", description = "Données invalides ou cycle pas EN_COURS"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit (pas cotisant de la tontine)"),
+    @ApiResponse(responseCode = "404", description = "Tontine ou cycle introuvable"),
+    @ApiResponse(responseCode = "409", description = "Cotisation déjà enregistrée pour ce cycle"),
+  })
   public ResponseEntity<CustomResponse> recordCotisation(
-      @PathVariable UUID tontineId,
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
       @RequestBody @Valid RecordCotisationRequest request,
       HttpServletRequest httpRequest)
       throws CustomException {
@@ -130,10 +195,34 @@ public class CotisationController {
   @Operation(
       summary = "Valider une cotisation",
       description =
-          "L'admin confirme le paiement (EN_ATTENTE → VALIDE). Remplit validePar + dateValidation. "
-              + "Réservé au créateur de la tontine et au SUPER_ADMIN.")
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "L'admin confirme la réception du paiement : statut **EN_ATTENTE → VALIDÉ**.\n\n"
+              + "Remplit automatiquement :\n"
+              + "- `validePar` : l'admin appelant\n"
+              + "- `dateValidation` : date/heure courante\n\n"
+              + "Une cotisation VALIDÉE est prise en compte dans le jackpot à la clôture du cycle.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Cotisation validée",
+        content = @Content(schema = @Schema(implementation = CotisationResponse.class))),
+    @ApiResponse(responseCode = "400", description = "Cotisation pas en statut EN_ATTENTE"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine ou cotisation introuvable"),
+  })
   public ResponseEntity<CustomResponse> validateCotisation(
-      @PathVariable UUID tontineId, @PathVariable UUID cotisationId, HttpServletRequest httpRequest)
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
+      @Parameter(
+              description = "UUID de la cotisation à valider",
+              example = "880e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID cotisationId,
+      HttpServletRequest httpRequest)
       throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);

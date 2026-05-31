@@ -9,6 +9,11 @@ import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.dto.UpdateTontineRequest;
 import com.africa.dinthialma_backend.tontine.service.interfaces.TontineService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -61,8 +66,18 @@ public class TontineController {
   @Operation(
       summary = "Créer une tontine",
       description =
-          "Tout utilisateur authentifié peut créer une tontine. Il en devient l'administrateur "
-              + "et se voit attribuer le rôle DINTHIALMA_ADMIN.")
+          "🔒 Rôles : tout utilisateur authentifié.\n\n"
+              + "L'appelant devient automatiquement l'administrateur de la tontine et reçoit le"
+              + " rôle DINTHIALMA_ADMIN. La tontine est créée en statut **BROUILLON** – elle doit"
+              + " être activée (`PUT /{id}/activer`) pour démarrer les cotisations.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "201",
+        description = "Tontine créée en statut BROUILLON",
+        content = @Content(schema = @Schema(implementation = TontineResponse.class))),
+    @ApiResponse(responseCode = "400", description = "Données invalides (validation)"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+  })
   public ResponseEntity<CustomResponse> createTontine(
       @RequestBody @Valid CreateTontineRequest request, HttpServletRequest httpRequest)
       throws CustomException {
@@ -82,8 +97,18 @@ public class TontineController {
   @Operation(
       summary = "Lister les tontines",
       description =
-          "SUPER_ADMIN : toutes les tontines. Autres : tontines créées + tontines où l'utilisateur "
-              + "est cotisant.")
+          "🔒 Rôles : tout utilisateur authentifié.\n\n"
+              + "- **SUPER_ADMIN** : voit toutes les tontines de la plateforme.\n"
+              + "- **Autres** : voit uniquement les tontines dont il est créateur + celles où il"
+              + " est cotisant.\n\n"
+              + "Pagination : `?page=0&size=20&sort=createdAt,desc`")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Page de tontines",
+        content = @Content(schema = @Schema(implementation = TontineResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+  })
   public ResponseEntity<CustomResponse> listTontines(
       @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
           Pageable pageable,
@@ -102,9 +127,28 @@ public class TontineController {
   @GetMapping("/{id}")
   @Operation(
       summary = "Récupérer une tontine",
-      description = "Accès : membres, créateur, SUPER_ADMIN.")
+      description =
+          "🔒 Rôles : créateur de la tontine, membres de la tontine, SUPER_ADMIN.\n\n"
+              + "Retourne le détail complet de la tontine avec les informations du créateur.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Détail de la tontine",
+        content = @Content(schema = @Schema(implementation = TontineResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(
+        responseCode = "403",
+        description = "Accès interdit – pas créateur ni membre ni SUPER_ADMIN"),
+    @ApiResponse(responseCode = "404", description = "Tontine introuvable"),
+  })
   public ResponseEntity<CustomResponse> getTontine(
-      @PathVariable UUID id, HttpServletRequest httpRequest) throws CustomException {
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID id,
+      HttpServletRequest httpRequest)
+      throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
     TontineResponse response = tontineService.getTontine(keycloakId, id);
@@ -119,10 +163,29 @@ public class TontineController {
   @Operation(
       summary = "Mettre à jour une tontine",
       description =
-          "Champs modifiables uniquement si la tontine est en BROUILLON. "
-              + "Réservé au créateur et au SUPER_ADMIN.")
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "Modification autorisée **uniquement si la tontine est en statut BROUILLON**."
+              + " Les champs null dans la requête ne sont pas modifiés.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Tontine mise à jour",
+        content = @Content(schema = @Schema(implementation = TontineResponse.class))),
+    @ApiResponse(
+        responseCode = "400",
+        description = "Données invalides ou tontine pas en BROUILLON"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(
+        responseCode = "403",
+        description = "Accès interdit – pas le créateur ni SUPER_ADMIN"),
+    @ApiResponse(responseCode = "404", description = "Tontine introuvable"),
+  })
   public ResponseEntity<CustomResponse> updateTontine(
-      @PathVariable UUID id,
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID id,
       @RequestBody @Valid UpdateTontineRequest request,
       HttpServletRequest httpRequest)
       throws CustomException {
@@ -140,10 +203,24 @@ public class TontineController {
   @Operation(
       summary = "Supprimer une tontine (soft delete)",
       description =
-          "Suppression logique. Autorisé uniquement en statut BROUILLON. "
-              + "Réservé au créateur et au SUPER_ADMIN.")
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "Suppression logique (deletedAt renseigné) – la tontine disparaît des listes mais"
+              + " les données restent en base. Autorisé **uniquement en statut BROUILLON**.")
+  @ApiResponses({
+    @ApiResponse(responseCode = "200", description = "Tontine supprimée"),
+    @ApiResponse(responseCode = "400", description = "Tontine pas en statut BROUILLON"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine introuvable"),
+  })
   public ResponseEntity<CustomResponse> deleteTontine(
-      @PathVariable UUID id, HttpServletRequest httpRequest) throws CustomException {
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID id,
+      HttpServletRequest httpRequest)
+      throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
     tontineService.deleteTontine(keycloakId, id);
@@ -158,10 +235,30 @@ public class TontineController {
   @Operation(
       summary = "Activer une tontine",
       description =
-          "Passe la tontine de BROUILLON (ou SUSPENDUE) à ACTIVE. En mode AUTOMATIQUE, génère "
-              + "tous les cycles. Réservé au créateur et au SUPER_ADMIN.")
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "Passe la tontine de **BROUILLON** (ou SUSPENDUE) à **ACTIVE**.\n\n"
+              + "En mode **AUTOMATIQUE** : génère immédiatement tous les cycles (N cycles = N"
+              + " membres attendus), le premier passe EN_COURS.\n\n"
+              + "En mode **MANUEL** : la tontine est active mais les cycles doivent être ouverts"
+              + " manuellement.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Tontine activée",
+        content = @Content(schema = @Schema(implementation = TontineResponse.class))),
+    @ApiResponse(responseCode = "400", description = "Tontine déjà ACTIVE ou TERMINEE"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine introuvable"),
+  })
   public ResponseEntity<CustomResponse> activateTontine(
-      @PathVariable UUID id, HttpServletRequest httpRequest) throws CustomException {
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID id,
+      HttpServletRequest httpRequest)
+      throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
     TontineResponse response = tontineService.activateTontine(keycloakId, id);
@@ -176,9 +273,27 @@ public class TontineController {
   @Operation(
       summary = "Suspendre une tontine",
       description =
-          "Passe la tontine de ACTIVE à SUSPENDUE. Réservé au créateur et au SUPER_ADMIN.")
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "Passe la tontine de **ACTIVE** à **SUSPENDUE**. Les cycles et cotisations existants"
+              + " sont conservés. La tontine peut être réactivée via `PUT /{id}/activer`.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Tontine suspendue",
+        content = @Content(schema = @Schema(implementation = TontineResponse.class))),
+    @ApiResponse(responseCode = "400", description = "Tontine pas en statut ACTIVE"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine introuvable"),
+  })
   public ResponseEntity<CustomResponse> suspendTontine(
-      @PathVariable UUID id, HttpServletRequest httpRequest) throws CustomException {
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID id,
+      HttpServletRequest httpRequest)
+      throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
     TontineResponse response = tontineService.suspendTontine(keycloakId, id);
