@@ -104,8 +104,14 @@ public class MembreController {
       summary = "Ajouter un cotisant",
       description =
           "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
-              + "Ajoute un utilisateur comme cotisant. L'utilisateur doit avoir un compte"
-              + " Dinthialma existant. Il reçoit automatiquement le rôle **DINTHIALMA_MEMBER**.\n\n"
+              + "Ajoute un cotisant via son **numéro de téléphone**, son **prénom** et son **nom**.\n\n"
+              + "- Si le numéro est déjà inscrit (ACTIVE) → ajout direct, rôle MEMBER attribué."
+              + " Le nom fourni est ignoré (l'utilisateur a son propre profil).\n"
+              + "- Si le numéro est inconnu → un compte **pré-inscrit (PRE_ENROLLED)** est créé"
+              + " avec le prénom et nom fournis. Le membre apparaît immédiatement dans la tontine"
+              + " avec son nom. Un SMS d'invitation est envoyé.\n"
+              + "- Si le numéro existe déjà en PRE_ENROLLED (ajouté par un autre admin) et que"
+              + " le nom est encore vide → le nom est complété.\n\n"
               + "Si `ordreJackpot` est null, le membre est placé en fin de liste.")
   @ApiResponses({
     @ApiResponse(

@@ -1,5 +1,6 @@
 package com.africa.dinthialma_backend.member.dto;
 
+import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -53,6 +54,8 @@ public class MembreResponse {
               .lastName(u.getLastName())
               .phone(u.getPhone())
               .email(u.getEmail())
+              .accountStatus(
+                  u.getAccountStatus() != null ? u.getAccountStatus() : AccountStatus.ACTIVE)
               .build();
     }
 
@@ -87,5 +90,12 @@ public class MembreResponse {
 
     @Schema(description = "Adresse email (peut être null)")
     private String email;
+
+    @Schema(
+        description =
+            "Statut d'activation du compte. PRE_ENROLLED = ajouté par l'admin, pas encore"
+                + " inscrit sur l'application.",
+        allowableValues = {"ACTIVE", "PRE_ENROLLED"})
+    private AccountStatus accountStatus;
   }
 }

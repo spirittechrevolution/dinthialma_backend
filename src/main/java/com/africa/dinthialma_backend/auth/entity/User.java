@@ -1,9 +1,12 @@
 package com.africa.dinthialma_backend.auth.entity;
 
+import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
 import com.africa.dinthialma_backend.common.base.BaseEntity;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
@@ -36,8 +39,11 @@ import lombok.experimental.SuperBuilder;
 @Table(name = "users", schema = "dinthialma")
 public class User extends BaseEntity {
 
-  /** Identifiant Keycloak (sub du JWT) – lien entre l'app et l'IAM. */
-  @Column(name = "keycloak_id", nullable = false, unique = true)
+  /**
+   * Identifiant Keycloak (sub du JWT) – lien entre l'app et l'IAM. Null pour les comptes
+   * pré-inscrits ({@link AccountStatus#PRE_ENROLLED}) qui n'ont pas encore activé leur compte.
+   */
+  @Column(name = "keycloak_id", unique = true)
   private String keycloakId;
 
   @Column(name = "first_name", nullable = false)
@@ -94,6 +100,15 @@ public class User extends BaseEntity {
   private LocalDateTime pinCreatedAt;
 
   // ─── Relations ────────────────────────────────────────────────────
+
+  /**
+   * Statut d'activation du compte. {@code null} ou {@link AccountStatus#ACTIVE} = compte normal.
+   * {@link AccountStatus#PRE_ENROLLED} = créé par un admin tontine, pas encore activé par
+   * l'utilisateur.
+   */
+  @Enumerated(EnumType.STRING)
+  @Column(name = "account_status")
+  private AccountStatus accountStatus;
 
   /** Soft delete – null = actif, non-null = compte désactivé. */
   @Column(name = "deleted_at")

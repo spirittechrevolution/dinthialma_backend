@@ -21,6 +21,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
   Optional<User> findByPhone(String phone);
 
+  Optional<User> findByPhoneAndDeletedAtIsNull(String phone);
+
   Optional<User> findByEmail(String email);
 
   Optional<User> findByIdAndDeletedAtIsNull(UUID id);
