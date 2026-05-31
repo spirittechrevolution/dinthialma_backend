@@ -24,6 +24,15 @@
 > **Règle** : les rôles se cumulent (ex. ADMIN + USER, MEMBER + USER).  
 > La logique d'accès par tontine est applicative : être ADMIN ne suffit pas, il faut être le **créateur de la tontine** concernée.
 
+### Statut de compte (`AccountStatus`)
+
+| Statut | Keycloak | Peut se connecter | Déclenché par |
+|--------|----------|-------------------|---------------|
+| `ACTIVE` | ✅ compte existant | ✅ | Inscription normale ou activation PRE_ENROLLED |
+| `PRE_ENROLLED` | ❌ pas de compte | ❌ (403 avec message explicite) | Admin tontine via `POST /membres` avec numéro inconnu |
+
+> Un compte **PRE_ENROLLED** est créé automatiquement quand un gestionnaire ajoute un membre par numéro de téléphone et que ce numéro n'est pas encore inscrit sur la plateforme. Il est visible dans la tontine immédiatement. Quand la personne s'inscrit avec ce numéro, le compte est **activé** (rôles USER + MEMBER attribués, keycloakId renseigné) sans perte des memberships existants.
+
 ---
 
 ## Matrice d'accès par fonctionnalité
@@ -46,6 +55,12 @@
 | `/pin/reset/send-otp` | POST | ✅ | – | – | – | – | |
 | `/pin/reset/verify-otp` | POST | ✅ | – | – | – | – | |
 | `/pin/reset` | POST | ✅ | – | – | – | – | |
+
+### 🔍 Utilisateurs (`/v1/users`)
+
+| Endpoint | Méthode | Public | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
+|----------|---------|--------|------|--------|-------|-------------|-------|
+| `/search?phone=xxx` | GET | ❌ | ✅ | ✅ | ✅ | ✅ | 🔒 couvre ACTIVE + PRE_ENROLLED, exclut soft-deleted ; 404 si inconnu |
 
 ### 👤 Profil utilisateur (`/v1/profile`)
 
@@ -73,7 +88,7 @@
 | Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
 |----------|---------|------|--------|-------|-------------|-------|
 | `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
-| `/` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 ajouter un cotisant → rôle MEMBER attribué |
+| `/` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 ajout par **phone** (+ firstName/lastName si numéro inconnu) |
 | `/{membreId}` | DELETE | ❌ | ❌ | ✅² | ✅ | 🔒 soft delete, statut → SORTI |
 | `/{membreId}/statut` | PATCH | ❌ | ❌ | ✅² | ✅ | 🔒 ACTIF / SUSPENDU / SORTI |
 
@@ -144,7 +159,7 @@
 ```
 src/main/java/com/africa/dinthialma_backend/
 ├── auth/           ✅ Auth, inscription OTP, Keycloak, PIN, profil
-│   ├── codeList/       UserRole, ClientType
+│   ├── codeList/       UserRole, ClientType, AccountStatus
 │   ├── config/         KeycloakClientConfig, KeycloakProperties
 │   ├── controller/     AuthController, UserProfileController
 │   ├── dto/            LoginRequest/Response, RegisterCompleteRequest/Response,
@@ -355,8 +370,9 @@ public class ModuleController {
 | V018 | `add_pin_created_at.sql` | `users.pin_created_at` (expiration PIN 90j) |
 | V019 | `create_phone_change_requests.sql` | `phone_change_requests` |
 | V020 | `add_commission_to_cycles.sql` | `cycles_tontine.montant_commission`, `montant_net` |
+| V021 | `add_account_status_to_users.sql` | `users.account_status`, `keycloak_id` nullable |
 
-Prochaine version disponible : **V021**
+Prochaine version disponible : **V022**
 
 ---
 
@@ -369,6 +385,8 @@ Prochaine version disponible : **V021**
 | Login (phone/email + password) | ✅ |
 | Login PIN (WEB/MOBILE) | ✅ |
 | Inscription OTP 3 étapes | ✅ |
+| Activation compte PRE_ENROLLED à l'inscription | ✅ |
+| Blocage login si PRE_ENROLLED (message d'invite) | ✅ |
 | Reset mot de passe OTP | ✅ |
 | Reset PIN OTP | ✅ |
 | Refresh token | ✅ |
@@ -404,9 +422,14 @@ Prochaine version disponible : **V021**
 
 | Feature | Statut | Accès |
 |---------|--------|-------|
-| Ajouter cotisant | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Recherche utilisateur par téléphone (lookup) | ✅ | 🔒 tout auth — `GET /v1/users/search?phone=xxx` |
+| Ajout membre par téléphone (+ nom si inconnu) | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Validation conditionnelle : firstName/lastName requis seulement si numéro inconnu | ✅ | SERVICE |
+| Création automatique compte PRE_ENROLLED si numéro inconnu | ✅ | AUTO |
+| Complétion du nom si PRE_ENROLLED existant avec nom vide | ✅ | AUTO |
+| SMS invitation envoyé au membre pré-inscrit | ✅ | AUTO (non-bloquant) |
 | Retirer cotisant | ✅ | 🔒 créateur + SUPER_ADMIN |
-| Liste cotisants | ✅ | 🔒 membres + créateur + SUPER_ADMIN |
+| Liste cotisants (avec accountStatus exposé) | ✅ | 🔒 membres + créateur + SUPER_ADMIN |
 | Modifier statut (ACTIF/SUSPENDU/SORTI) | ✅ | 🔒 créateur + SUPER_ADMIN |
 
 ### Module Cotisation ✅ (complet)
@@ -454,11 +477,12 @@ Prochaine version disponible : **V021**
 | Dashboard mes tontines (résumé admin) | ✅ | 🔒 ADMIN+ |
 | Journal d'audit | 🔲 TODO | 🔒 SUPER_ADMIN |
 
-### Module Notification 🔲
+### Module Notification
 
 | Feature | Statut |
 |---------|--------|
 | SMS OTP | ✅ (mock dev) |
+| SMS invitation membre pré-inscrit | ✅ |
 | Rappel cotisation | 🔲 TODO |
 | Annonce bénéficiaire jackpot | 🔲 TODO |
 | Alerte retard | 🔲 TODO |
@@ -534,172 +558,54 @@ cd docker && docker compose up -d
   4.2 AuditService (TontineAuditLog sur 14 mutations)                    ✅ FAIT
   4.3 TontineCommission CRUD + calcul commission à la clôture            ✅ FAIT
   4.4 Pagination Page<T> sur tous les endpoints de liste                 ✅ FAIT
+
+✦ Sprint 5 – Gestion tontine hors-ligne (contexte africain)  ✅ TERMINÉ
+  5.1 Compte PRE_ENROLLED : ajout membre par téléphone sans compte app   ✅ FAIT
+      → AddMembreRequest : userId → phone (+ firstName/lastName optionnels)
+      → GET /v1/users/search?phone=xxx : lookup avant ajout (UserController)
+      → MembreServiceImpl : validation conditionnelle + createPreEnrolledUser()
+      → RegistrationServiceImpl : activation PRE_ENROLLED à l'inscription
+      → LoginServiceImpl : blocage PRE_ENROLLED avec message d'invite
+      → SmsService.sendTontineInvite()
+      → Migration V021 : keycloak_id nullable + account_status
 ```
 
 ---
 
-## Sprint 4 – Notifications & Audit
+## Compte PRE_ENROLLED — règles de fonctionnement
 
-### ✅ Réalisé dans ce sprint
+### Lookup avant ajout (`GET /v1/users/search?phone=xxx`)
 
-| Tâche | Fichiers modifiés / créés |
-|---|---|
-| **4.3 Commission CRUD** | `CreateCommissionRequest`, `UpdateCommissionRequest`, `CommissionResponse`, `CommissionService`, `CommissionServiceImpl`, `CommissionController` |
-| **4.3 Calcul commission** | `CycleServiceImpl.closeCycle` + injection `TontineCommissionRepository` |
-| **4.3 Migration V020** | `cycles_tontine.montant_commission`, `montant_net` |
-| **4.4 Pagination** | `Page<T>` + `Pageable` sur les 5 list endpoints (tontines, cycles, membres, cotisations, commissions) |
+Couvre **ACTIVE et PRE_ENROLLED**, exclut les soft-deleted.
 
-### 🔲 Restant dans ce sprint
+| Résultat | Signification | Action frontend |
+|----------|--------------|-----------------|
+| 200 — ACTIVE | Utilisateur inscrit normalement | Afficher sa fiche, proposer ajout direct |
+| 200 — PRE_ENROLLED | Déjà ajouté par un autre admin, profil connu | Afficher sa fiche, proposer ajout direct |
+| 404 | Numéro totalement inconnu | Afficher formulaire firstName + lastName |
 
-### Ce qui existe déjà (ne pas recréer)
+### Création
 
-| Fichier | État |
-|---|---|
-| `common/audit/TontineAuditLog.java` | ✅ entité immuable (pas d'updatedAt, étend rien) |
-| `common/audit/AuditAction.java` | ✅ enum `CREATE / UPDATE / DELETE` |
-| `V009__create_tontine_audit_log.sql` | ✅ table + index en base |
-| `tontine/entity/TontineCommission.java` | ✅ entité + soft delete + `CommissionType` |
-| `tontine/repository/TontineCommissionRepository.java` | ✅ queries de base |
-| `V015__create_tontine_commissions.sql` | ✅ table + `UNIQUE(tontine_id, type)` |
-| `notification/service/SmsService.java` | ✅ `sendContributionReminder` + `sendJackpotNotification` |
+Un compte PRE_ENROLLED est créé dans `MembreServiceImpl.createPreEnrolledUser()` quand :
+- `GET /v1/users/search?phone=xxx` retourne 404, et
+- `POST /v1/tontines/{id}/membres` est appelé avec un `phone` inconnu.
 
-### 4.1 — AuditService
+`AddMembreRequest` : `phone` obligatoire ; `firstName` + `lastName` obligatoires **seulement si le numéro est inconnu** (validation conditionnelle dans le service, pas dans le DTO) ; `ordreJackpot` optionnel.
 
-**Fichiers à créer :**
-- `common/audit/TontineAuditLogRepository.java`
-- `common/audit/AuditService.java` (interface)
-- `common/audit/AuditServiceImpl.java`
+Champs initiaux : `keycloakId = null`, `firstName`/`lastName` fournis par l'admin, `active = true`, `accountStatus = PRE_ENROLLED`.
 
-**Interface :**
-```java
-public interface AuditService {
-    void log(User caller, String tableName, UUID recordId,
-             AuditAction action, String champ,
-             String ancienneVal, String nouvelleVal);
+**Cas numéro PRE_ENROLLED déjà existant avec nom vide** : `enrichPreEnrolledIfNeeded()` complète le nom. Un compte ACTIVE n'est jamais modifié.
 
-    void logCreate(User caller, String tableName, UUID recordId);
-    void logDelete(User caller, String tableName, UUID recordId);
-}
-```
+### Activation
 
-**Où brancher l'audit (injecter `AuditService` dans les ServiceImpl existants) :**
+Déclenchée dans `RegistrationServiceImpl.completeRegistration()` quand :
+- L'étape 1 (`sendOtp`) accepte un numéro PRE_ENROLLED (ne lève pas de 409).
+- L'étape 3 (`completeRegistration`) détecte le compte PRE_ENROLLED et appelle `activatePreEnrolledUser()`.
 
-| ServiceImpl | Méthode | Action |
-|---|---|---|
-| `TontineServiceImpl` | `createTontine` | `logCreate("tontines", id)` |
-| `TontineServiceImpl` | `updateTontine` | `log(... "statut", ancien, nouveau)` pour chaque champ modifié |
-| `TontineServiceImpl` | `deleteTontine` | `logDelete("tontines", id)` |
-| `TontineServiceImpl` | `activateTontine` | `log(... "statut", "BROUILLON", "ACTIVE")` |
-| `TontineServiceImpl` | `suspendTontine` | `log(... "statut", "ACTIVE", "SUSPENDUE")` |
-| `MembreServiceImpl` | ajout membre | `logCreate("tontine_membres", id)` |
-| `MembreServiceImpl` | changement statut | `log(... "statut", ancien, nouveau)` |
-| `CotisationServiceImpl` | enregistrement | `logCreate("cotisations", id)` |
-| `CotisationServiceImpl` | validation | `log(... "statut", "EN_ATTENTE", "VALIDE")` |
-| `CycleServiceImpl` | `openCycle` | `logCreate("cycles_tontine", id)` |
-| `CycleServiceImpl` | `closeCycle` | `log(... "statut", "EN_COURS", "TERMINE")` |
+Résultat : `keycloakId` renseigné, `firstName/lastName` mis à jour, rôles `USER + MEMBER` attribués, `accountStatus → ACTIVE`. Les memberships tontine existants sont conservés.
 
-### 4.2 — SchedulerService
+### Restrictions
 
-Ajouter `@EnableScheduling` sur `DinthialmaBackendApplication`.
-
-**Fichier à créer :** `notification/service/SchedulerService.java`
-
-```java
-@Slf4j
-@Service
-@RequiredArgsConstructor
-public class SchedulerService {
-
-    private final SmsService smsService;
-    private final CycleTontineRepository cycleRepository;
-    private final CotisationRepository cotisationRepository;
-    private final TontineMembreRepository membreRepository;
-
-    // Rappel quotidien à 8h — cotisations EN_ATTENTE sur cycle EN_COURS
-    @Scheduled(cron = "0 0 8 * * *")
-    public void rappelCotisationsEnAttente() { ... }
-
-    // Appel direct depuis CycleServiceImpl.activateNextCycle + openCycle
-    // (pas @Scheduled — déclenché à la logique métier)
-    public void annoncerBeneficiaire(CycleTontine cycle) { ... }
-}
-```
-
-**Logique `rappelCotisationsEnAttente` :**
-1. Récupérer tous les `CycleTontine` avec `statut = EN_COURS`
-2. Pour chaque cycle, trouver les `Cotisation` avec `statut = EN_ATTENTE`
-3. Via `cotisation.getMembre().getUser().getPhone()` → appeler `smsService.sendContributionReminder`
-
-**Logique `annoncerBeneficiaire` :**
-- Récupérer `cycle.getBeneficiaire().getUser().getPhone()` + montant jackpot prévu
-- Appeler `smsService.sendJackpotNotification`
-- Brancher dans `CycleServiceImpl` : appeler après `next.setStatut(EN_COURS)` dans `activateNextCycle`, et après la création du cycle dans `openCycle`
-
-### 4.3 — TontineCommission CRUD
-
-#### Modèle métier
-
-L'admin (gestionnaire) de la tontine définit ses règles de commission sur sa tontine.
-À la clôture de chaque cycle, les commissions sont calculées automatiquement et déduites du jackpot brut.
-Le bénéficiaire reçoit le **montant net** (jackpot - commissions).
-
-**Exemple concret :**
-```
-Tontine : 100 membres × 5 000 FCFA/jour
-Jackpot brut (montantJackpot)  = 500 000 FCFA
-Commission POURCENTAGE_JACKPOT = 4 %  → 20 000 FCFA prélevés par le gestionnaire
-Montant net (montantNet)       = 480 000 FCFA remis au bénéficiaire
-```
-
-#### Types de commission (`CommissionType`)
-
-| Type | Calcul | Prélevé sur |
-|---|---|---|
-| `POURCENTAGE_JACKPOT` | `jackpot × valeur / 100` | Jackpot de chaque cycle |
-| `FRAIS_FIXES_PAR_CYCLE` | `valeur` FCFA fixe | Jackpot de chaque cycle |
-| `FRAIS_ADHESION` | `valeur` FCFA unique | Payé à l'entrée du membre — **pas déduit du jackpot** |
-
-Contrainte : `UNIQUE(tontine_id, type)` déjà en base — lever `ConflictException` si doublon.
-
-#### Impact sur `CycleTontine` — 2 champs à ajouter
-
-`CycleTontine` ne stocke actuellement que `montantJackpot` (brut).
-Il faut ajouter :
-
-| Champ Java | Colonne SQL | Description |
-|---|---|---|
-| `montantCommission` | `montant_commission DECIMAL(12,2)` | Total prélevé par le gestionnaire |
-| `montantNet` | `montant_net DECIMAL(12,2)` | Reçu par le bénéficiaire |
-
-**Migration V020 :** `ALTER TABLE dinthialma.cycles_tontine ADD COLUMN IF NOT EXISTS ...` (x2)
-
-#### Calcul à la clôture (`CycleServiceImpl.closeCycle`)
-
-Ajouter après le calcul du jackpot brut, avec injection de `TontineCommissionRepository` :
-
-```java
-List<TontineCommission> commissions =
-    commissionRepository.findByTontine_IdAndDeletedAtIsNull(tontineId);
-
-BigDecimal totalCommission = BigDecimal.ZERO;
-for (TontineCommission c : commissions) {
-    BigDecimal part = switch (c.getType()) {
-        case POURCENTAGE_JACKPOT ->
-            jackpot.multiply(c.getValeur())
-                   .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-        case FRAIS_FIXES_PAR_CYCLE -> c.getValeur();
-        case FRAIS_ADHESION        -> BigDecimal.ZERO; // pas sur jackpot
-    };
-    totalCommission = totalCommission.add(part);
-}
-
-cycle.setMontantJackpot(jackpot);
-cycle.setMontantCommission(totalCommission);
-cycle.setMontantNet(jackpot.subtract(totalCommission));
-```
-
-#### 4.3 ✅ FAIT — tous les fichiers sont créés et fonctionnels.
-
-### Prochaine migration disponible
-
-**V021** — réservée pour Sprint 4.1/4.2 (notifications / audit)
+- Login bloqué (HTTP 403) tant que `accountStatus = PRE_ENROLLED`.
+- Le rôle MEMBER n'est **pas** assigné à Keycloak lors de la création PRE_ENROLLED (pas de keycloakId). Il l'est lors de l'activation.
+- `keycloak_id` est nullable en base depuis V021 (contrainte UNIQUE conservée — PostgreSQL autorise plusieurs NULL distincts).

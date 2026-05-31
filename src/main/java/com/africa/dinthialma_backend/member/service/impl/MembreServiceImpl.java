@@ -1,5 +1,6 @@
 package com.africa.dinthialma_backend.member.service.impl;
 
+import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
 import com.africa.dinthialma_backend.auth.codeList.UserRole;
 import com.africa.dinthialma_backend.auth.entity.User;
 import com.africa.dinthialma_backend.auth.entity.UserRoleAssignment;
@@ -13,6 +14,7 @@ import com.africa.dinthialma_backend.common.exception.ConflictException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
+import com.africa.dinthialma_backend.common.util.PhoneUtils;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.dto.AddMembreRequest;
 import com.africa.dinthialma_backend.member.dto.MembreResponse;
@@ -20,6 +22,7 @@ import com.africa.dinthialma_backend.member.dto.UpdateMembreStatutRequest;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.member.service.interfaces.MembreService;
+import com.africa.dinthialma_backend.notification.service.SmsService;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import java.time.LocalDate;
@@ -32,7 +35,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Implémentation du service de gestion des cotisants d'une tontine. */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -45,6 +47,7 @@ public class MembreServiceImpl implements MembreService {
   private final UserRoleAssignmentRepository roleAssignmentRepository;
   private final KeycloakAuthService keycloakAuthService;
   private final AuditService auditService;
+  private final SmsService smsService;
 
   // ─── Ajout d'un membre ───────────────────────────────────────────────────
 
@@ -56,12 +59,27 @@ public class MembreServiceImpl implements MembreService {
     Tontine tontine = findTontineById(tontineId);
     assertIsCreatorOrSuperAdmin(caller, tontine);
 
-    User targetUser =
-        userRepository
-            .findById(request.getUserId())
-            .orElseThrow(() -> new NotFoundException(ResponseMessageConstants.AUTH_USER_NOT_FOUND));
+    String phone = PhoneUtils.normalize(request.getPhone());
 
-    // Vérifier unicité (un utilisateur ne peut cotiser qu'une fois par tontine)
+    // Résoudre ou créer l'utilisateur cible
+    User targetUser;
+    var existingUser = userRepository.findByPhoneAndDeletedAtIsNull(phone);
+    if (existingUser.isPresent()) {
+      targetUser = enrichPreEnrolledIfNeeded(existingUser.get(), request);
+    } else {
+      // Numéro inconnu : firstName et lastName obligatoires pour créer le compte PRE_ENROLLED
+      if (request.getFirstName() == null
+          || request.getFirstName().isBlank()
+          || request.getLastName() == null
+          || request.getLastName().isBlank()) {
+        throw new BadRequestException(ResponseMessageConstants.MEMBER_NAME_REQUIRED);
+      }
+      targetUser =
+          createPreEnrolledUser(
+              phone, request.getFirstName().trim(), request.getLastName().trim(), tontine);
+    }
+
+    // Unicité : un utilisateur ne peut cotiser qu'une fois par tontine
     if (membreRepository.existsByTontine_IdAndUser_IdAndDeletedAtIsNull(
         tontineId, targetUser.getId())) {
       throw new ConflictException(ResponseMessageConstants.MEMBER_ALREADY_EXISTS);
@@ -91,15 +109,20 @@ public class MembreServiceImpl implements MembreService {
 
     TontineMembre saved = membreRepository.save(membre);
 
-    // Attribuer le rôle MEMBER si pas encore assigné
-    assignRoleIfAbsent(targetUser, UserRole.MEMBER);
+    // Les comptes PRE_ENROLLED n'ont pas de Keycloak — on n'assigne pas de rôle maintenant.
+    // Le rôle MEMBER sera attribué lors de l'activation du compte (completeRegistration).
+    if (targetUser.getAccountStatus() != AccountStatus.PRE_ENROLLED) {
+      assignRoleIfAbsent(targetUser, UserRole.MEMBER);
+    }
 
     auditService.logCreate(caller, "tontine_membres", saved.getId());
     log.info(
-        "Membre ajouté – tontineId={} userId={} membreId={}",
+        "Membre ajouté – tontineId={} userId={} membreId={} preEnrolled={}",
         tontineId,
         targetUser.getId(),
-        saved.getId());
+        saved.getId(),
+        targetUser.getAccountStatus() == AccountStatus.PRE_ENROLLED);
+
     return MembreResponse.from(saved);
   }
 
@@ -172,6 +195,53 @@ public class MembreServiceImpl implements MembreService {
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
+
+  /**
+   * Si l'utilisateur trouvé est PRE_ENROLLED et que son nom est encore vide, on le complète avec
+   * les informations fournies par l'admin. Un compte ACTIVE n'est jamais modifié ici.
+   */
+  private User enrichPreEnrolledIfNeeded(User user, AddMembreRequest request) {
+    if (user.getAccountStatus() != AccountStatus.PRE_ENROLLED) return user;
+    boolean needsUpdate = false;
+    if (user.getFirstName().isBlank()) {
+      user.setFirstName(request.getFirstName().trim());
+      needsUpdate = true;
+    }
+    if (user.getLastName().isBlank()) {
+      user.setLastName(request.getLastName().trim());
+      needsUpdate = true;
+    }
+    return needsUpdate ? userRepository.save(user) : user;
+  }
+
+  /**
+   * Crée un compte pré-inscrit pour un numéro non encore enregistré. Le nom et prénom sont fournis
+   * par l'admin pour l'affichage immédiat dans la tontine. Envoie un SMS d'invitation (non
+   * bloquant).
+   */
+  private User createPreEnrolledUser(
+      String phone, String firstName, String lastName, Tontine tontine) {
+    User user =
+        User.builder()
+            .keycloakId(null)
+            .firstName(firstName)
+            .lastName(lastName)
+            .phone(phone)
+            .active(true)
+            .accountStatus(AccountStatus.PRE_ENROLLED)
+            .build();
+
+    User saved = userRepository.save(user);
+    log.info("Compte pré-inscrit créé – phone={} userId={}", phone, saved.getId());
+
+    try {
+      smsService.sendTontineInvite(phone, tontine.getNom());
+    } catch (Exception e) {
+      log.warn("SMS invitation non envoyé pour {} : {}", phone, e.getMessage());
+    }
+
+    return saved;
+  }
 
   private User findUserByKeycloakId(String keycloakId) throws CustomException {
     return userRepository

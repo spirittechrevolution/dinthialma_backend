@@ -21,6 +21,9 @@ public final class ResponseMessageConstants {
   public static final String AUTH_EMAIL_ALREADY_USED = "Cet email est déjà utilisé";
   public static final String AUTH_OTP_NOT_VERIFIED = "Veuillez d'abord vérifier votre OTP";
   public static final String AUTH_ACCOUNT_DISABLED = "Ce compte est désactivé";
+  public static final String AUTH_ACCOUNT_NOT_ACTIVATED =
+      "Votre compte a été créé par votre gestionnaire de tontine."
+          + " Inscrivez-vous sur Dinthialma pour vous connecter et accéder à vos tontines.";
 
   // PIN
   public static final String AUTH_PIN_SETUP_SUCCESS = "Code PIN configuré avec succès";
@@ -64,6 +67,12 @@ public final class ResponseMessageConstants {
   public static final String CYCLE_NOT_FOUND = "Cycle introuvable";
   public static final String CYCLE_OPENED = "Cycle ouvert avec succès";
   public static final String CYCLE_CLOSED = "Cycle clôturé avec succès";
+
+  // User search
+  public static final String USER_SEARCH_FOUND = "Utilisateur trouvé";
+  public static final String USER_SEARCH_NOT_FOUND = "Aucun compte avec ce numéro de téléphone";
+  public static final String MEMBER_NAME_REQUIRED =
+      "Le prénom et le nom sont obligatoires pour ajouter un membre sans compte Dinthialma";
 
   // Membre
   public static final String MEMBER_ADD_SUCCESS = "Membre ajouté avec succès";

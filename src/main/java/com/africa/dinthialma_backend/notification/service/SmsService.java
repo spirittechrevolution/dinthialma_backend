@@ -93,6 +93,15 @@ public class SmsService {
     send(phone, message);
   }
 
+  /** Informe un nouveau membre pré-inscrit qu'il a été ajouté à une tontine. */
+  public void sendTontineInvite(String phone, String tontineName) {
+    String message =
+        "Vous avez été ajouté à la tontine \""
+            + tontineName
+            + "\" sur Dinthialma. Inscrivez-vous sur l'application pour suivre vos cotisations.";
+    send(phone, message);
+  }
+
   /** Notifie le bénéficiaire du prochain jackpot. */
   public void sendJackpotNotification(String phone, String tontineName, String amount) {
     String message =

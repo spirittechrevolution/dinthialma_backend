@@ -54,11 +54,16 @@ public class AuthController {
   @Operation(
       summary = "Connexion par téléphone ou email + mot de passe",
       description =
-          "L'identifiant peut être le numéro de téléphone (avec ou sans +) ou l'adresse email.")
+          "L'identifiant peut être le numéro de téléphone (avec ou sans +) ou l'adresse email.\n\n"
+              + "**Compte PRE_ENROLLED** : si l'utilisateur a été ajouté à une tontine par un"
+              + " gestionnaire avant de s'inscrire, la connexion retourne HTTP 403 avec un message"
+              + " invitant à s'inscrire sur l'application.")
   @ApiResponses({
     @ApiResponse(responseCode = "200", description = "Connexion réussie – tokens JWT retournés"),
     @ApiResponse(responseCode = "401", description = "Identifiants incorrects"),
-    @ApiResponse(responseCode = "403", description = "Compte désactivé"),
+    @ApiResponse(
+        responseCode = "403",
+        description = "Compte désactivé ou compte PRE_ENROLLED non encore activé"),
   })
   public ResponseEntity<CustomResponse> login(@RequestBody @Valid LoginRequest request)
       throws CustomException {
@@ -111,10 +116,17 @@ public class AuthController {
   // ─── Inscription ──────────────────────────────────────────────────
 
   @PostMapping("/register/send-otp")
-  @Operation(summary = "Étape 1/3 – Envoyer un OTP par SMS")
+  @Operation(
+      summary = "Étape 1/3 – Envoyer un OTP par SMS",
+      description =
+          "Envoie un code OTP au numéro fourni.\n\n"
+              + "- Numéro inconnu → nouveau compte.\n"
+              + "- Numéro **PRE_ENROLLED** (ajouté à une tontine par un gestionnaire) → OTP envoyé"
+              + " pour activer le compte. HTTP 200 dans les deux cas.\n"
+              + "- Numéro déjà inscrit (ACTIVE) → HTTP 409.")
   @ApiResponses({
     @ApiResponse(responseCode = "200", description = "OTP envoyé"),
-    @ApiResponse(responseCode = "409", description = "Téléphone déjà utilisé"),
+    @ApiResponse(responseCode = "409", description = "Téléphone déjà utilisé par un compte ACTIVE"),
   })
   public ResponseEntity<CustomResponse> sendOtp(@RequestBody @Valid SendOtpRequest request)
       throws CustomException {
@@ -145,11 +157,20 @@ public class AuthController {
   }
 
   @PostMapping("/register/complete")
-  @Operation(summary = "Étape 3/3 – Finaliser l'inscription")
+  @Operation(
+      summary = "Étape 3/3 – Finaliser l'inscription",
+      description =
+          "Crée le compte Keycloak et finalise l'enregistrement local.\n\n"
+              + "**Cas PRE_ENROLLED** : si le numéro appartient à un compte pré-inscrit par un"
+              + " gestionnaire de tontine, cette étape **active** le compte existant (keycloakId,"
+              + " firstName, lastName mis à jour, statut → ACTIVE, rôles USER + MEMBER attribués)."
+              + " Les memberships tontine déjà créés sont conservés.")
   @ApiResponses({
-    @ApiResponse(responseCode = "201", description = "Compte créé avec succès"),
+    @ApiResponse(
+        responseCode = "201",
+        description = "Compte créé (nouveau) ou activé (PRE_ENROLLED)"),
     @ApiResponse(responseCode = "400", description = "OTP non vérifié ou données invalides"),
-    @ApiResponse(responseCode = "409", description = "Téléphone déjà utilisé"),
+    @ApiResponse(responseCode = "409", description = "Téléphone déjà utilisé par un compte ACTIVE"),
   })
   public ResponseEntity<CustomResponse> completeRegistration(
       @RequestBody @Valid RegisterCompleteRequest request) throws CustomException {
