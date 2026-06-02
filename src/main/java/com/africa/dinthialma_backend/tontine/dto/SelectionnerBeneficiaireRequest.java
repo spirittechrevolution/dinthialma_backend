@@ -1,24 +1,26 @@
 package com.africa.dinthialma_backend.tontine.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.util.List;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
 
 @Schema(
     description =
-        "Corps de la requête de sélection du bénéficiaire du jackpot après clôture d'un cycle."
-            + " Si `membreId` est absent, la sélection est aléatoire parmi les membres éligibles"
-            + " (ACTIF et n'ayant pas encore reçu de jackpot dans cette tontine).")
+        "Corps de la requête de désignation des gagnants du jackpot après clôture d'un cycle."
+            + " Disponible uniquement pour les tontines avec ordreBeneficiaire = MANUEL."
+            + " Le nombre de membreIds doit correspondre au nombreGagnants de la tontine"
+            + " (ou être inférieur si moins de membres éligibles restants).")
 @Getter
 @Setter
 public class SelectionnerBeneficiaireRequest {
 
   @Schema(
       description =
-          "UUID du membre à désigner comme bénéficiaire (tontine_membres.id)."
-              + " Laisser null pour une sélection aléatoire.",
-      example = "550e8400-e29b-41d4-a716-446655440099",
+          "UUIDs des membres à désigner comme gagnants (tontine_membres.id)."
+              + " Doit contenir entre 1 et nombreGagnants entrées."
+              + " Null ou liste vide = sélection aléatoire parmi les membres éligibles.",
       nullable = true)
-  private UUID membreId;
+  private List<UUID> membreIds;
 }

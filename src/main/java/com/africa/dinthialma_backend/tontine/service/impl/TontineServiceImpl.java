@@ -83,6 +83,7 @@ public class TontineServiceImpl implements TontineService {
             .modeCycle(request.getModeCycle())
             .dateDebut(request.getDateDebut())
             .nombreMembres(request.getNombreMembres())
+            .nombreGagnants(request.getNombreGagnants())
             .statut(TontineStatut.BROUILLON)
             .creePar(caller)
             .build();
@@ -204,6 +205,16 @@ public class TontineServiceImpl implements TontineService {
           String.valueOf(request.getNombreMembres()));
       tontine.setNombreMembres(request.getNombreMembres());
     }
+    if (request.getNombreGagnants() != null) {
+      auditService.log(
+          caller,
+          "tontines",
+          id,
+          "nombreGagnants",
+          String.valueOf(tontine.getNombreGagnants()),
+          String.valueOf(request.getNombreGagnants()));
+      tontine.setNombreGagnants(request.getNombreGagnants());
+    }
 
     Tontine saved = tontineRepository.save(tontine);
     int nombreMembres = (int) membreRepository.countByTontine_IdAndDeletedAtIsNull(id);
@@ -296,6 +307,15 @@ public class TontineServiceImpl implements TontineService {
    *   <li>{@code ALEATOIRE} : mélange aléatoire, puis attribution des {@code ordre_jackpot}
    * </ul>
    */
+  /**
+   * Génère les cycles d'une tontine en mode AUTOMATIQUE.
+   *
+   * <p>Nombre de cycles = ceil(membres / nombreGagnants). Les gagnants ne sont pas pré-assignés :
+   * ils sont désignés automatiquement à la clôture de chaque cycle selon {@code ordreBeneficiaire}.
+   *
+   * <p>Pour ALEATOIRE : l'ordre aléatoire est tiré une fois ici (ordreJackpot attribué), puis
+   * appliqué à la clôture.
+   */
   private void generateCycles(Tontine tontine) {
     List<TontineMembre> membres =
         new ArrayList<>(
@@ -314,27 +334,32 @@ public class TontineServiceImpl implements TontineService {
               m -> (m.getOrdreJackpot() != null ? m.getOrdreJackpot() : Integer.MAX_VALUE)));
     }
 
+    int n = tontine.getNombreGagnants();
+    int nombreCycles = (int) Math.ceil((double) membres.size() / n);
     LocalDate current = tontine.getDateDebut();
 
-    for (int i = 0; i < membres.size(); i++) {
+    for (int i = 0; i < nombreCycles; i++) {
       LocalDate fin = calculateEndDate(current, tontine.getFrequence());
-      boolean isFirst = (i == 0);
 
       CycleTontine cycle =
           CycleTontine.builder()
               .tontine(tontine)
               .numeroCycle(i + 1)
-              .beneficiaire(membres.get(i))
               .dateDebut(current)
               .dateFin(fin)
-              .statut(isFirst ? CycleStatut.EN_COURS : CycleStatut.EN_ATTENTE)
+              .statut(i == 0 ? CycleStatut.EN_COURS : CycleStatut.EN_ATTENTE)
               .build();
 
       cycleRepository.save(cycle);
       current = fin.plusDays(1);
     }
 
-    log.info("Cycles générés – tontineId={} nbCycles={}", tontine.getId(), membres.size());
+    log.info(
+        "Cycles générés – tontineId={} membres={} gagnants/cycle={} cycles={}",
+        tontine.getId(),
+        membres.size(),
+        n,
+        nombreCycles);
   }
 
   /**

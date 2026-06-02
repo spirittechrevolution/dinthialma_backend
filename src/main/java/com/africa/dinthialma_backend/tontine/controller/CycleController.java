@@ -263,16 +263,15 @@ public class CycleController {
 
   @PatchMapping("/{cycleId}/beneficiaire")
   @Operation(
-      summary = "Sélectionner le bénéficiaire du jackpot",
+      summary = "Désigner les gagnants du jackpot (mode MANUEL)",
       description =
           "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
-              + "Disponible uniquement en **mode MANUEL** sur un cycle **TERMINE**.\n\n"
-              + "- `membreId` fourni → désignation manuelle du bénéficiaire\n"
-              + "- `membreId` absent ou null → sélection **aléatoire** parmi les membres ACTIF"
-              + " n'ayant pas encore reçu de jackpot dans cette tontine\n\n"
-              + "Le membre sélectionné est marqué `aRecuJackpot=true` et ne sera plus éligible"
-              + " lors des prochains cycles. Une notification WhatsApp est envoyée au bénéficiaire"
-              + " et à l'admin.")
+              + "Disponible uniquement sur une tontine avec **ordreBeneficiaire = MANUEL**"
+              + " et un cycle **TERMINÉ** sans gagnants.\n\n"
+              + "- `membreIds` fourni → désignation manuelle (liste de 1 à N membres)\n"
+              + "- `membreIds` absent ou vide → sélection **aléatoire** du bon nombre de membres\n\n"
+              + "N = `nombreGagnants` de la tontine. Le jackpot est divisé équitablement."
+              + " Chaque gagnant est marqué `aRecuJackpot=true` et reçoit une notification WhatsApp.")
   @ApiResponses({
     @ApiResponse(
         responseCode = "200",

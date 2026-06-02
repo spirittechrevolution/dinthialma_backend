@@ -43,8 +43,11 @@ public class TontineResponse {
   @Schema(description = "Date de démarrage du premier cycle", example = "2024-07-01")
   private LocalDate dateDebut;
 
-  @Schema(description = "Nombre total de membres attendus (= nombre de cycles)", example = "12")
+  @Schema(description = "Nombre total de membres attendus", example = "10")
   private int nombreMembres;
+
+  @Schema(description = "Nombre de gagnants du jackpot par cycle", example = "2")
+  private int nombreGagnants;
 
   @Schema(description = "Nombre de cotisants actuellement actifs dans la tontine", example = "8")
   private int nombreMembresActuels;
@@ -74,6 +77,7 @@ public class TontineResponse {
         .modeCycle(tontine.getModeCycle())
         .dateDebut(tontine.getDateDebut())
         .nombreMembres(tontine.getNombreMembres())
+        .nombreGagnants(tontine.getNombreGagnants())
         .nombreMembresActuels(nombreMembresActuels)
         .statut(tontine.getStatut())
         .creePar(

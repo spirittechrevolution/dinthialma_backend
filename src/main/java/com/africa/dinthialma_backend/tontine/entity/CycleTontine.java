@@ -1,7 +1,6 @@
 package com.africa.dinthialma_backend.tontine.entity;
 
 import com.africa.dinthialma_backend.common.base.BaseEntity;
-import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -10,10 +9,13 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -49,13 +51,9 @@ public class CycleTontine extends BaseEntity {
   @Column(name = "numero_cycle", nullable = false)
   private int numeroCycle;
 
-  /**
-   * Membre bénéficiaire du jackpot pour ce cycle. Peut être null si le bénéficiaire n'est pas
-   * encore désigné (mode ALEATOIRE ou MANUEL en attente de décision).
-   */
-  @ManyToOne(fetch = FetchType.LAZY)
-  @JoinColumn(name = "beneficiaire_id")
-  private TontineMembre beneficiaire;
+  /** Gagnants du jackpot pour ce cycle (N membres selon nombreGagnants de la tontine). */
+  @OneToMany(mappedBy = "cycle", fetch = FetchType.LAZY)
+  private List<CycleGagnant> gagnants = new ArrayList<>();
 
   /** Date de début du cycle. */
   @Column(name = "date_debut", nullable = false)

@@ -57,4 +57,11 @@ public class UpdateTontineRequest {
   @Min(2)
   @Max(100)
   private Integer nombreMembres;
+
+  @Schema(
+      description = "Nouveau nombre de gagnants par cycle (min 1, null = inchangé)",
+      example = "2",
+      minimum = "1")
+  @Min(1)
+  private Integer nombreGagnants;
 }

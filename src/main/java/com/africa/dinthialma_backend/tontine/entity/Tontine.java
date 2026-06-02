@@ -88,6 +88,10 @@ public class Tontine extends BaseEntity {
   @JoinColumn(name = "cree_par", nullable = false)
   private User creePar;
 
+  /** Nombre de membres qui reçoivent le jackpot à chaque cycle (défaut 1). */
+  @Column(name = "nombre_gagnants", nullable = false)
+  private int nombreGagnants = 1;
+
   /** Soft delete – null = active, non-null = supprimée. */
   @Column(name = "deleted_at")
   private LocalDateTime deletedAt;

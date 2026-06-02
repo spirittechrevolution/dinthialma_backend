@@ -77,12 +77,22 @@ public class CreateTontineRequest {
 
   @Schema(
       description =
-          "Nombre total de membres attendus = nombre de cycles à générer (min 2, max 100)."
-              + " Ex : 12 membres → 12 cycles.",
-      example = "12",
+          "Nombre total de membres attendus (min 2, max 100)."
+              + " En mode AUTOMATIQUE, détermine le nombre de cycles = ceil(nombreMembres / nombreGagnants).",
+      example = "10",
       minimum = "2",
       maximum = "100")
   @Min(2)
   @Max(100)
   private int nombreMembres;
+
+  @Schema(
+      description =
+          "Nombre de membres qui reçoivent le jackpot à chaque cycle (défaut 1)."
+              + " Le jackpot est divisé équitablement entre les gagnants."
+              + " Ex : 10 membres, 2 gagnants → 5 cycles, chaque gagnant reçoit jackpot/2.",
+      example = "2",
+      minimum = "1")
+  @Min(1)
+  private int nombreGagnants = 1;
 }
