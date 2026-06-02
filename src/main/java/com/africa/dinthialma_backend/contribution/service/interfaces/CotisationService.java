@@ -1,6 +1,7 @@
 package com.africa.dinthialma_backend.contribution.service.interfaces;
 
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
 import java.util.UUID;
@@ -21,6 +22,21 @@ public interface CotisationService {
    */
   CotisationResponse recordCotisation(
       String keycloakId, UUID tontineId, RecordCotisationRequest request) throws CustomException;
+
+  /**
+   * Enregistre et valide une cotisation en une seule opération (réservé admin/SUPER_ADMIN).
+   *
+   * <p>Cas d'usage : paiement cash encaissé par l'admin, ou membre PRE_ENROLLED sans accès app. La
+   * cotisation est créée directement en statut {@code VALIDE} – pas de passage par EN_ATTENTE. Une
+   * notification WhatsApp est envoyée au membre si son compte est ACTIVE.
+   *
+   * @param keycloakId sub JWT de l'admin appelant
+   * @param tontineId identifiant de la tontine
+   * @param request données du paiement incluant le membreId
+   */
+  CotisationResponse adminRecordCotisation(
+      String keycloakId, UUID tontineId, AdminRecordCotisationRequest request)
+      throws CustomException;
 
   /**
    * Valide une cotisation ({@code EN_ATTENTE} → {@code VALIDE}).

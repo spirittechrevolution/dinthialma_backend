@@ -12,6 +12,7 @@ import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
+import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
@@ -19,6 +20,7 @@ import com.africa.dinthialma_backend.contribution.repository.CotisationRepositor
 import com.africa.dinthialma_backend.contribution.service.interfaces.CotisationService;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
+import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
@@ -47,6 +49,7 @@ public class CotisationServiceImpl implements CotisationService {
   private final UserRepository userRepository;
   private final UserRoleAssignmentRepository roleAssignmentRepository;
   private final AuditService auditService;
+  private final WhatsappService whatsappService;
 
   // ─── Enregistrement ──────────────────────────────────────────────────────
 
@@ -85,6 +88,7 @@ public class CotisationServiceImpl implements CotisationService {
             .methodePaiement(request.getMethodePaiement())
             .referenceTransaction(request.getReferenceTransaction())
             .note(request.getNote())
+            .enregistrePar(caller)
             .statut(CotisationStatut.EN_ATTENTE)
             .build();
 
@@ -96,6 +100,84 @@ public class CotisationServiceImpl implements CotisationService {
         cycle.getId(),
         membre.getId(),
         saved.getId());
+    return CotisationResponse.from(saved);
+  }
+
+  // ─── Enregistrement admin (cash / PRE_ENROLLED) ──────────────────────────
+
+  @Override
+  public CotisationResponse adminRecordCotisation(
+      String keycloakId, UUID tontineId, AdminRecordCotisationRequest request)
+      throws CustomException {
+
+    User admin = findUserByKeycloakId(keycloakId);
+    Tontine tontine = findTontineById(tontineId);
+    assertIsCreatorOrSuperAdmin(admin, tontine);
+
+    TontineMembre membre =
+        membreRepository
+            .findByIdAndTontine_IdAndDeletedAtIsNull(request.getMembreId(), tontineId)
+            .orElseThrow(() -> new NotFoundException("Membre introuvable dans cette tontine"));
+
+    CycleTontine cycle = findCycleById(tontineId, request.getCycleId());
+
+    if (cycle.getStatut() != CycleStatut.EN_COURS) {
+      throw new BadRequestException("Les cotisations ne sont acceptées que pour un cycle EN_COURS");
+    }
+
+    if (cotisationRepository.existsByCycle_IdAndMembre_IdAndDeletedAtIsNull(
+        cycle.getId(), membre.getId())) {
+      throw new ConflictException("Une cotisation existe déjà pour ce membre sur ce cycle");
+    }
+
+    Cotisation cotisation =
+        Cotisation.builder()
+            .tontine(tontine)
+            .membre(membre)
+            .cycle(cycle)
+            .montant(request.getMontant())
+            .methodePaiement(request.getMethodePaiement())
+            .referenceTransaction(request.getReferenceTransaction())
+            .note(request.getNote())
+            .enregistrePar(admin)
+            .statut(CotisationStatut.VALIDE)
+            .validePar(admin)
+            .dateValidation(LocalDateTime.now())
+            .build();
+
+    Cotisation saved = cotisationRepository.save(cotisation);
+    auditService.logCreate(admin, "cotisations", saved.getId());
+    log.info(
+        "Cotisation admin enregistrée+validée – tontineId={} cycleId={} membreId={} id={}",
+        tontineId,
+        cycle.getId(),
+        membre.getId(),
+        saved.getId());
+
+    // Notification WhatsApp au membre si son compte est ACTIVE
+    try {
+      String phone = membre.getUser().getPhone();
+      String montantStr = request.getMontant().toPlainString() + " FCFA";
+      String ref = request.getReferenceTransaction();
+      String msg =
+          ref != null && !ref.isBlank()
+              ? "✅ *Dinthialma* – Votre cotisation de "
+                  + montantStr
+                  + " pour la tontine *"
+                  + tontine.getNom()
+                  + "* a été enregistrée"
+                  + " et validée.\nRéférence : "
+                  + ref
+              : "✅ *Dinthialma* – Votre cotisation de "
+                  + montantStr
+                  + " pour la tontine *"
+                  + tontine.getNom()
+                  + "* a été enregistrée et validée.";
+      whatsappService.send(phone, msg);
+    } catch (Exception e) {
+      log.warn("Notification WhatsApp non envoyée (non bloquant) : {}", e.getMessage());
+    }
+
     return CotisationResponse.from(saved);
   }
 
@@ -139,6 +221,31 @@ public class CotisationServiceImpl implements CotisationService {
         CotisationStatut.EN_ATTENTE.name(),
         CotisationStatut.VALIDE.name());
     log.info("Cotisation validée – cotisationId={} par userId={}", cotisationId, caller.getId());
+
+    // Notification WhatsApp au membre
+    try {
+      String phone = saved.getMembre().getUser().getPhone();
+      String montantStr = saved.getMontant().toPlainString() + " FCFA";
+      String tontineName = saved.getTontine().getNom();
+      String ref = saved.getReferenceTransaction();
+      String msg =
+          ref != null && !ref.isBlank()
+              ? "✅ *Dinthialma* – Votre cotisation de "
+                  + montantStr
+                  + " pour la tontine *"
+                  + tontineName
+                  + "* a été validée.\nRéférence : "
+                  + ref
+              : "✅ *Dinthialma* – Votre cotisation de "
+                  + montantStr
+                  + " pour la tontine *"
+                  + tontineName
+                  + "* a été validée.";
+      whatsappService.send(phone, msg);
+    } catch (Exception e) {
+      log.warn("Notification WhatsApp non envoyée (non bloquant) : {}", e.getMessage());
+    }
+
     return CotisationResponse.from(saved);
   }
 

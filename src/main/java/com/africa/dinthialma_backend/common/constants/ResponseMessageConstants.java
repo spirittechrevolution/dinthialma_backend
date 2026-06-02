@@ -89,6 +89,8 @@ public final class ResponseMessageConstants {
   public static final String CONTRIBUTION_GET_SUCCESS = "Cotisation récupérée avec succès";
   public static final String CONTRIBUTION_NOT_FOUND = "Cotisation introuvable";
   public static final String CONTRIBUTION_VALIDATED = "Cotisation validée avec succès";
+  public static final String CONTRIBUTION_ADMIN_RECORD_SUCCESS =
+      "Cotisation enregistrée et validée avec succès";
 
   // Commission
   public static final String COMMISSION_CREATE_SUCCESS = "Commission créée avec succès";

@@ -78,6 +78,11 @@ public class Cotisation extends BaseEntity {
   @Column(name = "note", columnDefinition = "TEXT")
   private String note;
 
+  /** Utilisateur ayant saisi la cotisation (membre ou admin). */
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "enregistre_par")
+  private User enregistrePar;
+
   /** Admin ayant validé le paiement – null si pas encore validé. */
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "valide_par")
