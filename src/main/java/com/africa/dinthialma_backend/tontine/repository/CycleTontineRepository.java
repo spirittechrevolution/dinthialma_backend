@@ -39,4 +39,8 @@ public interface CycleTontineRepository extends JpaRepository<CycleTontine, UUID
 
   /** Tous les cycles d'un statut donné sur toute la plateforme (usage scheduler). */
   List<CycleTontine> findByStatutAndDeletedAtIsNull(CycleStatut statut);
+
+  /** Cycles TERMINÉ ayant un bénéficiaire désigné, pour l'historique jackpots d'une tontine. */
+  Page<CycleTontine> findByTontine_IdAndStatutAndBeneficiaireIsNotNullAndDeletedAtIsNull(
+      UUID tontineId, CycleStatut statut, Pageable pageable);
 }

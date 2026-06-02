@@ -67,6 +67,8 @@ public final class ResponseMessageConstants {
   public static final String CYCLE_NOT_FOUND = "Cycle introuvable";
   public static final String CYCLE_OPENED = "Cycle ouvert avec succès";
   public static final String CYCLE_CLOSED = "Cycle clôturé avec succès";
+  public static final String BENEFICIAIRE_LIST_SUCCESS =
+      "Historique des bénéficiaires récupéré avec succès";
 
   // User search
   public static final String USER_SEARCH_FOUND = "Utilisateur trouvé";

@@ -1,6 +1,7 @@
 package com.africa.dinthialma_backend.tontine.service.interfaces;
 
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.tontine.dto.BeneficiaireHistoriqueResponse;
 import com.africa.dinthialma_backend.tontine.dto.CycleResponse;
 import com.africa.dinthialma_backend.tontine.dto.OpenCycleRequest;
 import com.africa.dinthialma_backend.tontine.dto.SelectionnerBeneficiaireRequest;
@@ -41,6 +42,15 @@ public interface CycleService {
    * EN_COURS} si applicable. Réservé au créateur et au SUPER_ADMIN.
    */
   CycleResponse closeCycle(String keycloakId, UUID tontineId, UUID cycleId) throws CustomException;
+
+  /**
+   * Liste l'historique des bénéficiaires de jackpot d'une tontine (cycles TERMINÉ avec bénéficiaire
+   * désigné), triés par numéro de cycle croissant.
+   *
+   * <p>Accès : membres + admin + SUPER_ADMIN.
+   */
+  Page<BeneficiaireHistoriqueResponse> listBeneficiaires(
+      String keycloakId, UUID tontineId, Pageable pageable) throws CustomException;
 
   /**
    * Sélectionne le bénéficiaire du jackpot d'un cycle TERMINE (mode MANUEL).

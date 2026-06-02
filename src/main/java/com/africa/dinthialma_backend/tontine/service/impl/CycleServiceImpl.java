@@ -20,6 +20,7 @@ import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
+import com.africa.dinthialma_backend.tontine.dto.BeneficiaireHistoriqueResponse;
 import com.africa.dinthialma_backend.tontine.dto.CycleResponse;
 import com.africa.dinthialma_backend.tontine.dto.OpenCycleRequest;
 import com.africa.dinthialma_backend.tontine.dto.SelectionnerBeneficiaireRequest;
@@ -34,6 +35,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -74,6 +76,20 @@ public class CycleServiceImpl implements CycleService {
     return cycleRepository
         .findByTontine_IdAndDeletedAtIsNull(tontineId, pageable)
         .map(CycleResponse::from);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Page<BeneficiaireHistoriqueResponse> listBeneficiaires(
+      String keycloakId, UUID tontineId, Pageable pageable) throws CustomException {
+    User caller = findUserByKeycloakId(keycloakId);
+    Tontine tontine = findTontineById(tontineId);
+    assertCanAccess(caller, tontine);
+
+    return cycleRepository
+        .findByTontine_IdAndStatutAndBeneficiaireIsNotNullAndDeletedAtIsNull(
+            tontineId, CycleStatut.TERMINE, pageable)
+        .map(BeneficiaireHistoriqueResponse::from);
   }
 
   @Override
@@ -198,6 +214,15 @@ public class CycleServiceImpl implements CycleService {
     cycle.setMontantNet(jackpot.subtract(totalCommission));
     cycle.setDateRemise(LocalDate.now());
 
+    // 4. Auto-assigner le bénéficiaire selon l'ordre configuré
+    TontineMembre beneficiaire = resolveBeneficiaire(tontine, tontineId);
+    if (beneficiaire != null) {
+      cycle.setBeneficiaire(beneficiaire);
+      beneficiaire.setARecuJackpot(true);
+      beneficiaire.setDateJackpot(LocalDateTime.now());
+      membreRepository.save(beneficiaire);
+    }
+
     cycleRepository.save(cycle);
     auditService.log(
         caller,
@@ -206,6 +231,29 @@ public class CycleServiceImpl implements CycleService {
         "statut",
         CycleStatut.EN_COURS.name(),
         CycleStatut.TERMINE.name());
+
+    // Notifier le bénéficiaire auto-assigné
+    if (beneficiaire != null) {
+      try {
+        String montantNetStr =
+            cycle.getMontantNet() != null
+                ? cycle.getMontantNet().toPlainString() + " FCFA"
+                : "montant en cours de calcul";
+        whatsappService.send(
+            beneficiaire.getUser().getPhone(),
+            "🎉 *Félicitations !* Vous êtes le(la) bénéficiaire du jackpot du cycle "
+                + cycle.getNumeroCycle()
+                + " de la tontine *"
+                + tontine.getNom()
+                + "*."
+                + "\nMontant net : *"
+                + montantNetStr
+                + "*."
+                + "\nVotre gestionnaire vous contactera pour la remise.");
+      } catch (Exception e) {
+        log.warn("Notif WA bénéficiaire jackpot (clôture) non envoyée : {}", e.getMessage());
+      }
+    }
 
     // Passer les cotisations EN_ATTENTE restantes à EN_RETARD
     cotisationRepository
@@ -248,9 +296,10 @@ public class CycleServiceImpl implements CycleService {
       throw new BadRequestException(
           "La sélection du bénéficiaire n'est possible que sur un cycle TERMINE");
     }
-    if (tontine.getModeCycle() != ModeCycle.MANUEL) {
+    if (!"MANUEL".equals(tontine.getOrdreBeneficiaire())) {
       throw new BadRequestException(
-          "La sélection manuelle du bénéficiaire n'est disponible qu'en mode MANUEL");
+          "La désignation manuelle du bénéficiaire n'est disponible que pour les tontines"
+              + " avec ordre bénéficiaire MANUEL");
     }
     if (cycle.getBeneficiaire() != null) {
       throw new BadRequestException(
@@ -353,6 +402,44 @@ public class CycleServiceImpl implements CycleService {
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
+
+  /**
+   * Détermine automatiquement le bénéficiaire du jackpot selon l'ordre configuré sur la tontine.
+   *
+   * <ul>
+   *   <li>{@code ROTATION} → membre ACTIF sans jackpot avec le plus petit {@code ordreJackpot}
+   *       (non-null) ; si tous null, le plus ancien membre.
+   *   <li>{@code ALEATOIRE} → tirage au sort parmi les membres ACTIF sans jackpot.
+   *   <li>{@code MANUEL} → retourne {@code null} ; l'admin désigne via PATCH.
+   * </ul>
+   *
+   * <p>Si un seul membre éligible reste, il est retourné quelle que soit la règle.
+   */
+  private TontineMembre resolveBeneficiaire(Tontine tontine, UUID tontineId) {
+    List<TontineMembre> eligibles =
+        membreRepository
+            .findByTontine_IdAndStatutAndDeletedAtIsNull(tontineId, MembreStatut.ACTIF)
+            .stream()
+            .filter(m -> !m.isARecuJackpot())
+            .toList();
+
+    if (eligibles.isEmpty()) return null;
+    if (eligibles.size() == 1) return eligibles.get(0);
+
+    return switch (tontine.getOrdreBeneficiaire()) {
+      case "ROTATION" ->
+          eligibles.stream()
+              .filter(m -> m.getOrdreJackpot() != null)
+              .min(Comparator.comparingInt(TontineMembre::getOrdreJackpot))
+              .orElseGet(
+                  () ->
+                      eligibles.stream()
+                          .min(Comparator.comparing(TontineMembre::getCreatedAt))
+                          .orElse(eligibles.get(0)));
+      case "ALEATOIRE" -> eligibles.get((int) (Math.random() * eligibles.size()));
+      default -> null; // MANUEL
+    };
+  }
 
   private void activateNextCycle(UUID tontineId, int nextNum) {
     cycleRepository.findByTontine_IdAndDeletedAtIsNullOrderByNumeroCycleAsc(tontineId).stream()

@@ -4,6 +4,7 @@ import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
+import com.africa.dinthialma_backend.tontine.dto.BeneficiaireHistoriqueResponse;
 import com.africa.dinthialma_backend.tontine.dto.CycleResponse;
 import com.africa.dinthialma_backend.tontine.dto.OpenCycleRequest;
 import com.africa.dinthialma_backend.tontine.dto.SelectionnerBeneficiaireRequest;
@@ -60,6 +61,42 @@ public class CycleController {
 
   private final CycleService cycleService;
   private final RequestHeaderParser headerParser;
+
+  // ─── Historique bénéficiaires ────────────────────────────────────────────
+
+  @GetMapping("/beneficiaires")
+  @Operation(
+      summary = "Historique des bénéficiaires de jackpot",
+      description =
+          "🔒 Rôles : membres de la tontine, créateur, SUPER_ADMIN.\n\n"
+              + "Retourne la liste des cycles **TERMINÉ** ayant un bénéficiaire désigné, triés par"
+              + " numéro de cycle croissant. Chaque entrée contient le bénéficiaire et les montants"
+              + " (jackpot brut, commissions, net).\n\n"
+              + "Pagination : `?page=0&size=20&sort=numeroCycle,asc`")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Historique des bénéficiaires",
+        content =
+            @Content(schema = @Schema(implementation = BeneficiaireHistoriqueResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine introuvable"),
+  })
+  public ResponseEntity<CustomResponse> listBeneficiaires(
+      @Parameter(description = "UUID de la tontine") @PathVariable UUID tontineId,
+      @PageableDefault(size = 20, sort = "numeroCycle", direction = Sort.Direction.ASC)
+          Pageable pageable,
+      HttpServletRequest httpRequest)
+      throws CustomException {
+
+    String keycloakId = headerParser.extractKeycloakId(httpRequest);
+    Page<BeneficiaireHistoriqueResponse> page =
+        cycleService.listBeneficiaires(keycloakId, tontineId, pageable);
+
+    return ResponseEntity.ok(
+        new CustomResponse(SUCCESS, OK, ResponseMessageConstants.BENEFICIAIRE_LIST_SUCCESS, page));
+  }
 
   // ─── Liste ───────────────────────────────────────────────────────────────
 
