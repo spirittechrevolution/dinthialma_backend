@@ -68,6 +68,14 @@ public class TontineMembre extends BaseEntity {
   @Column(name = "date_adhesion", nullable = false)
   private LocalDate dateAdhesion;
 
+  /** Indique si ce membre a déjà reçu un jackpot dans cette tontine. */
+  @Column(name = "a_recu_jackpot", nullable = false)
+  private boolean aRecuJackpot = false;
+
+  /** Date à laquelle le jackpot a été remis à ce membre. */
+  @Column(name = "date_jackpot")
+  private LocalDateTime dateJackpot;
+
   /** Soft delete. */
   @Column(name = "deleted_at")
   private LocalDateTime deletedAt;

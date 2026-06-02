@@ -12,14 +12,17 @@ import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
+import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.notification.service.SchedulerService;
+import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.dto.CycleResponse;
 import com.africa.dinthialma_backend.tontine.dto.OpenCycleRequest;
+import com.africa.dinthialma_backend.tontine.dto.SelectionnerBeneficiaireRequest;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.entity.TontineCommission;
@@ -30,6 +33,7 @@ import com.africa.dinthialma_backend.tontine.service.interfaces.CycleService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -55,6 +59,7 @@ public class CycleServiceImpl implements CycleService {
   private final UserRoleAssignmentRepository roleAssignmentRepository;
   private final AuditService auditService;
   private final SchedulerService schedulerService;
+  private final WhatsappService whatsappService;
 
   // ─── Lecture ─────────────────────────────────────────────────────────────
 
@@ -223,6 +228,127 @@ public class CycleServiceImpl implements CycleService {
         jackpot,
         totalCommission,
         jackpot.subtract(totalCommission));
+    return CycleResponse.from(cycle);
+  }
+
+  // ─── Sélection bénéficiaire jackpot ──────────────────────────────────────
+
+  @Override
+  public CycleResponse selectionnerBeneficiaire(
+      String keycloakId, UUID tontineId, UUID cycleId, SelectionnerBeneficiaireRequest request)
+      throws CustomException {
+
+    User caller = findUserByKeycloakId(keycloakId);
+    Tontine tontine = findTontineById(tontineId);
+    assertIsCreatorOrSuperAdmin(caller, tontine);
+
+    CycleTontine cycle = findCycleById(tontineId, cycleId);
+
+    if (cycle.getStatut() != CycleStatut.TERMINE) {
+      throw new BadRequestException(
+          "La sélection du bénéficiaire n'est possible que sur un cycle TERMINE");
+    }
+    if (tontine.getModeCycle() != ModeCycle.MANUEL) {
+      throw new BadRequestException(
+          "La sélection manuelle du bénéficiaire n'est disponible qu'en mode MANUEL");
+    }
+    if (cycle.getBeneficiaire() != null) {
+      throw new BadRequestException(
+          "Un bénéficiaire a déjà été désigné pour ce cycle : "
+              + cycle.getBeneficiaire().getUser().getFirstName());
+    }
+
+    TontineMembre beneficiaire;
+
+    if (request.getMembreId() != null) {
+      // Sélection manuelle
+      beneficiaire =
+          membreRepository
+              .findByIdAndTontine_IdAndDeletedAtIsNull(request.getMembreId(), tontineId)
+              .orElseThrow(() -> new NotFoundException(ResponseMessageConstants.MEMBER_NOT_FOUND));
+
+      if (beneficiaire.isARecuJackpot()) {
+        throw new BadRequestException(
+            beneficiaire.getUser().getFirstName()
+                + " a déjà reçu un jackpot dans cette tontine et n'est pas éligible");
+      }
+    } else {
+      // Sélection aléatoire parmi les membres ACTIF sans jackpot
+      List<TontineMembre> eligibles =
+          membreRepository
+              .findByTontine_IdAndStatutAndDeletedAtIsNull(tontineId, MembreStatut.ACTIF)
+              .stream()
+              .filter(m -> !m.isARecuJackpot())
+              .toList();
+
+      if (eligibles.isEmpty()) {
+        throw new BadRequestException(
+            "Aucun membre éligible : tous les membres actifs ont déjà reçu un jackpot");
+      }
+      beneficiaire = eligibles.get((int) (Math.random() * eligibles.size()));
+    }
+
+    // Marquer le cycle
+    cycle.setBeneficiaire(beneficiaire);
+    cycleRepository.save(cycle);
+
+    // Marquer le membre comme ayant reçu le jackpot
+    beneficiaire.setARecuJackpot(true);
+    beneficiaire.setDateJackpot(LocalDateTime.now());
+    membreRepository.save(beneficiaire);
+
+    auditService.log(
+        caller,
+        "cycles_tontine",
+        cycleId,
+        "beneficiaire_id",
+        null,
+        beneficiaire.getId().toString());
+
+    log.info(
+        "Bénéficiaire jackpot sélectionné – cycleId={} membreId={} tontineId={}",
+        cycleId,
+        beneficiaire.getId(),
+        tontineId);
+
+    // Notification WhatsApp au bénéficiaire
+    try {
+      String montantNet =
+          cycle.getMontantNet() != null
+              ? cycle.getMontantNet().toPlainString() + " FCFA"
+              : "montant en cours de calcul";
+      whatsappService.send(
+          beneficiaire.getUser().getPhone(),
+          "🎉 *Félicitations !* Vous êtes le(la) bénéficiaire du jackpot du cycle "
+              + cycle.getNumeroCycle()
+              + " de la tontine *"
+              + tontine.getNom()
+              + "*."
+              + "\nMontant net : *"
+              + montantNet
+              + "*."
+              + "\nVotre gestionnaire vous contactera pour la remise.");
+    } catch (Exception e) {
+      log.warn("Notif WA bénéficiaire jackpot non envoyée : {}", e.getMessage());
+    }
+
+    // Notification WhatsApp à l'admin — confirmation
+    try {
+      whatsappService.send(
+          tontine.getCreePar().getPhone(),
+          "✅ *Dinthialma* – Vous avez désigné *"
+              + beneficiaire.getUser().getFirstName()
+              + " "
+              + beneficiaire.getUser().getLastName()
+              + "* comme bénéficiaire du jackpot (cycle "
+              + cycle.getNumeroCycle()
+              + ", tontine *"
+              + tontine.getNom()
+              + "*).");
+    } catch (Exception e) {
+      log.warn("Notif WA admin (jackpot) non envoyée : {}", e.getMessage());
+    }
+
     return CycleResponse.from(cycle);
   }
 

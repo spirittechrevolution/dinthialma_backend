@@ -1,5 +1,6 @@
 package com.africa.dinthialma_backend.contribution.service.impl;
 
+import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
 import com.africa.dinthialma_backend.auth.codeList.UserRole;
 import com.africa.dinthialma_backend.auth.entity.User;
 import com.africa.dinthialma_backend.auth.repository.UserRepository;
@@ -100,6 +101,50 @@ public class CotisationServiceImpl implements CotisationService {
         cycle.getId(),
         membre.getId(),
         saved.getId());
+
+    String montantStr = request.getMontant().toPlainString() + " FCFA";
+    String tontineName = tontine.getNom();
+    int numCycle = cycle.getNumeroCycle();
+
+    // Notif membre — confirmation de soumission
+    try {
+      whatsappService.send(
+          caller.getPhone(),
+          "📝 *Dinthialma* – Votre cotisation de "
+              + montantStr
+              + " pour la tontine *"
+              + tontineName
+              + "* (cycle "
+              + numCycle
+              + ")"
+              + " a bien été soumise. En attente de validation par votre gestionnaire.");
+    } catch (Exception e) {
+      log.warn("Notif WA membre (soumission) non envoyée : {}", e.getMessage());
+    }
+
+    // Notif admin — nouvelle cotisation à valider
+    try {
+      String adminPhone = tontine.getCreePar().getPhone();
+      String membreNom = caller.getFirstName() + " " + caller.getLastName();
+      whatsappService.send(
+          adminPhone,
+          "💰 *Dinthialma* – "
+              + membreNom
+              + " ("
+              + caller.getPhone()
+              + ")"
+              + " vient de déclarer une cotisation de "
+              + montantStr
+              + " pour la tontine *"
+              + tontineName
+              + "* (cycle "
+              + numCycle
+              + ")."
+              + " Veuillez valider.");
+    } catch (Exception e) {
+      log.warn("Notif WA admin (nouvelle cotisation) non envoyée : {}", e.getMessage());
+    }
+
     return CotisationResponse.from(saved);
   }
 
@@ -154,28 +199,64 @@ public class CotisationServiceImpl implements CotisationService {
         membre.getId(),
         saved.getId());
 
-    // Notification WhatsApp au membre si son compte est ACTIVE
+    String membrePhone = membre.getUser().getPhone();
+    String membreNom = membre.getUser().getFirstName() + " " + membre.getUser().getLastName();
+    String montantStr = request.getMontant().toPlainString() + " FCFA";
+    String tontineName = tontine.getNom();
+    String ref = request.getReferenceTransaction();
+    boolean isPreEnrolled = AccountStatus.PRE_ENROLLED == membre.getUser().getAccountStatus();
+    int numCycle = cycle.getNumeroCycle();
+
+    // Notif membre — message adapté selon le statut du compte
     try {
-      String phone = membre.getUser().getPhone();
-      String montantStr = request.getMontant().toPlainString() + " FCFA";
-      String ref = request.getReferenceTransaction();
-      String msg =
-          ref != null && !ref.isBlank()
-              ? "✅ *Dinthialma* – Votre cotisation de "
+      String membreMsg =
+          isPreEnrolled
+              ? "✅ *Dinthialma* – Votre gestionnaire a enregistré votre cotisation de "
                   + montantStr
                   + " pour la tontine *"
-                  + tontine.getNom()
-                  + "* a été enregistrée"
-                  + " et validée.\nRéférence : "
-                  + ref
-              : "✅ *Dinthialma* – Votre cotisation de "
-                  + montantStr
-                  + " pour la tontine *"
-                  + tontine.getNom()
-                  + "* a été enregistrée et validée.";
-      whatsappService.send(phone, msg);
+                  + tontineName
+                  + "* (cycle "
+                  + numCycle
+                  + ")."
+                  + "\nInscrivez-vous sur Dinthialma pour suivre vos cotisations en temps réel."
+              : ref != null && !ref.isBlank()
+                  ? "✅ *Dinthialma* – Votre cotisation de "
+                      + montantStr
+                      + " pour la tontine *"
+                      + tontineName
+                      + "* (cycle "
+                      + numCycle
+                      + ")"
+                      + " a été enregistrée et validée.\nRéférence : "
+                      + ref
+                  : "✅ *Dinthialma* – Votre cotisation de "
+                      + montantStr
+                      + " pour la tontine *"
+                      + tontineName
+                      + "* (cycle "
+                      + numCycle
+                      + ")"
+                      + " a été enregistrée et validée.";
+      whatsappService.send(membrePhone, membreMsg);
     } catch (Exception e) {
-      log.warn("Notification WhatsApp non envoyée (non bloquant) : {}", e.getMessage());
+      log.warn("Notif WA membre (admin-record) non envoyée : {}", e.getMessage());
+    }
+
+    // Notif admin — confirmation de l'enregistrement
+    try {
+      whatsappService.send(
+          tontine.getCreePar().getPhone(),
+          "✅ *Dinthialma* – Vous avez enregistré la cotisation de "
+              + montantStr
+              + " de "
+              + membreNom
+              + " pour la tontine *"
+              + tontineName
+              + "* (cycle "
+              + numCycle
+              + ").");
+    } catch (Exception e) {
+      log.warn("Notif WA admin (admin-record) non envoyée : {}", e.getMessage());
     }
 
     return CotisationResponse.from(saved);
@@ -222,28 +303,57 @@ public class CotisationServiceImpl implements CotisationService {
         CotisationStatut.VALIDE.name());
     log.info("Cotisation validée – cotisationId={} par userId={}", cotisationId, caller.getId());
 
-    // Notification WhatsApp au membre
+    String memberPhone = saved.getMembre().getUser().getPhone();
+    String memberNom =
+        saved.getMembre().getUser().getFirstName()
+            + " "
+            + saved.getMembre().getUser().getLastName();
+    String montantStr = saved.getMontant().toPlainString() + " FCFA";
+    String tontineName = saved.getTontine().getNom();
+    String ref = saved.getReferenceTransaction();
+    int numCycle = saved.getCycle().getNumeroCycle();
+
+    // Notif membre — cotisation validée
     try {
-      String phone = saved.getMembre().getUser().getPhone();
-      String montantStr = saved.getMontant().toPlainString() + " FCFA";
-      String tontineName = saved.getTontine().getNom();
-      String ref = saved.getReferenceTransaction();
       String msg =
           ref != null && !ref.isBlank()
               ? "✅ *Dinthialma* – Votre cotisation de "
                   + montantStr
                   + " pour la tontine *"
                   + tontineName
-                  + "* a été validée.\nRéférence : "
+                  + "* (cycle "
+                  + numCycle
+                  + ")"
+                  + " a été validée.\nRéférence : "
                   + ref
               : "✅ *Dinthialma* – Votre cotisation de "
                   + montantStr
                   + " pour la tontine *"
                   + tontineName
-                  + "* a été validée.";
-      whatsappService.send(phone, msg);
+                  + "* (cycle "
+                  + numCycle
+                  + ")"
+                  + " a été validée.";
+      whatsappService.send(memberPhone, msg);
     } catch (Exception e) {
-      log.warn("Notification WhatsApp non envoyée (non bloquant) : {}", e.getMessage());
+      log.warn("Notif WA membre (validation) non envoyée : {}", e.getMessage());
+    }
+
+    // Notif admin — confirmation de validation
+    try {
+      whatsappService.send(
+          saved.getTontine().getCreePar().getPhone(),
+          "✅ *Dinthialma* – Vous avez validé la cotisation de "
+              + montantStr
+              + " de "
+              + memberNom
+              + " pour la tontine *"
+              + tontineName
+              + "* (cycle "
+              + numCycle
+              + ").");
+    } catch (Exception e) {
+      log.warn("Notif WA admin (validation) non envoyée : {}", e.getMessage());
     }
 
     return CotisationResponse.from(saved);
