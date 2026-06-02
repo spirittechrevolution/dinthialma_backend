@@ -22,7 +22,7 @@ import com.africa.dinthialma_backend.member.dto.UpdateMembreStatutRequest;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.member.service.interfaces.MembreService;
-import com.africa.dinthialma_backend.notification.service.SmsService;
+import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import java.time.LocalDate;
@@ -47,7 +47,7 @@ public class MembreServiceImpl implements MembreService {
   private final UserRoleAssignmentRepository roleAssignmentRepository;
   private final KeycloakAuthService keycloakAuthService;
   private final AuditService auditService;
-  private final SmsService smsService;
+  private final WhatsappService whatsappService;
 
   // ─── Ajout d'un membre ───────────────────────────────────────────────────
 
@@ -235,7 +235,7 @@ public class MembreServiceImpl implements MembreService {
     log.info("Compte pré-inscrit créé – phone={} userId={}", phone, saved.getId());
 
     try {
-      smsService.sendTontineInvite(phone, tontine.getNom());
+      whatsappService.sendTontineInvite(phone, tontine.getNom());
     } catch (Exception e) {
       log.warn("SMS invitation non envoyé pour {} : {}", phone, e.getMessage());
     }

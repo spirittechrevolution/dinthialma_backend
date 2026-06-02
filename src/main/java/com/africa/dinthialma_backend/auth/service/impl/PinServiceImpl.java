@@ -20,7 +20,7 @@ import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.common.exception.TooManyRequestsException;
 import com.africa.dinthialma_backend.common.exception.UnAuthorizedException;
 import com.africa.dinthialma_backend.common.util.OtpUtils;
-import com.africa.dinthialma_backend.notification.service.SmsService;
+import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
@@ -51,7 +51,7 @@ public class PinServiceImpl implements PinService {
   private final OtpVerificationRepository otpVerificationRepository;
   private final UserSessionService userSessionService;
   private final KeycloakAuthService keycloakAuthService;
-  private final SmsService smsService;
+  private final WhatsappService whatsappService;
 
   /**
    * Encodeur Argon2id – paramètres renforcés pour les PINs courts (6 chiffres). saltLength=16,
@@ -207,7 +207,7 @@ public class PinServiceImpl implements PinService {
             .build();
 
     otpVerificationRepository.save(otp);
-    smsService.sendOtp(phone, code);
+    whatsappService.sendOtp(phone, code);
     log.info("OTP reset PIN envoyé au numéro : {}", phone);
   }
 

@@ -63,7 +63,7 @@ public class SecurityConfig {
   private final CustomAccessDenied customAccessDenied;
   private final CustomAuthenticationEntryPoint customAuthenticationEntryPoint;
 
-  @Value("${dinthialma.endpoints.frontend:http://localhost:3000}")
+  @Value("${dinthialma.endpoints.frontend:http://localhost:3001}")
   private String frontendUrls;
 
   @Value("${dinthialma.security.enabled:true}")

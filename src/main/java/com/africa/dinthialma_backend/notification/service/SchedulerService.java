@@ -27,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class SchedulerService {
 
-  private final SmsService smsService;
+  private final WhatsappService whatsappService;
   private final CycleTontineRepository cycleRepository;
   private final CotisationRepository cotisationRepository;
 
@@ -54,7 +54,7 @@ public class SchedulerService {
                 String phone = cotisation.getMembre().getUser().getPhone();
                 String tontineName = cycle.getTontine().getNom();
                 String amount = cotisation.getMontant().toPlainString() + " FCFA";
-                smsService.sendContributionReminder(phone, tontineName, amount);
+                whatsappService.sendContributionReminder(phone, tontineName, amount);
               });
     }
   }
@@ -86,7 +86,7 @@ public class SchedulerService {
             .setScale(0, RoundingMode.HALF_UP);
     String amount = montantPrevu.toPlainString() + " FCFA";
 
-    smsService.sendJackpotNotification(phone, tontineName, amount);
+    whatsappService.sendJackpotNotification(phone, tontineName, amount);
     log.info(
         "Bénéficiaire annoncé – cycleId={} tontine={} phone={}", cycle.getId(), tontineName, phone);
   }
