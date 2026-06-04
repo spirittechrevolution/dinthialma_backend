@@ -226,13 +226,19 @@ services:
     image: dinthialma-openwa:latest
     pull_policy: build
     container_name: dinthialma-openwa
-    restart: unless-stopped
+    restart: on-failure:5
     volumes:
       - openwa_sessions:/sessions
     ports:
       - "${OPENWA_PORT:-3000}:3000"
     networks:
       - dinthialma-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   # ─────────────────────────────────────────────────────────────────
   # Dozzle – Visualisation des logs de tous les conteneurs

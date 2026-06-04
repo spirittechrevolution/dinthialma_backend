@@ -2,6 +2,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const express = require('express');
 const qrcode = require('qrcode-terminal');
 const QRCode = require('qrcode');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 app.use(express.json());
@@ -9,6 +11,27 @@ app.use(express.json());
 const PORT = 3000;
 let qrCodeData = null;
 let isReady = false;
+
+// Supprime les verrous Chromium laissés par un container précédent.
+// Sans ça, le process crash au démarrage avec "profile is in use by another Chromium process".
+function cleanChromiumLocks(dir) {
+  if (!fs.existsSync(dir)) return;
+  const LOCK_FILES = ['SingletonLock', 'SingletonSocket', 'SingletonCookie'];
+  function scan(current) {
+    let entries;
+    try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const full = path.join(current, e.name);
+      if (e.isDirectory()) { scan(full); continue; }
+      if (LOCK_FILES.includes(e.name)) {
+        try { fs.unlinkSync(full); console.log(`🧹 Verrou supprimé : ${full}`); } catch { /* ignore */ }
+      }
+    }
+  }
+  scan(dir);
+}
+
+cleanChromiumLocks('/sessions');
 
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: '/sessions' }),

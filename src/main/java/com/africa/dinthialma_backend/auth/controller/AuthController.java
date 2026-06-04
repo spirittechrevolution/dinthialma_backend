@@ -100,11 +100,17 @@ public class AuthController {
   // ─── Déconnexion ──────────────────────────────────────────────────
 
   @PostMapping("/logout")
-  @Operation(summary = "Déconnexion – invalide la session Keycloak")
+  @Operation(
+      summary = "Déconnexion – invalide la session Keycloak et supprime la session PIN",
+      description =
+          "Révoque le refresh token côté Keycloak et supprime la session PIN en base."
+              + " `clientType` optionnel : si absent, toutes les sessions de l'utilisateur sont"
+              + " supprimées (déconnexion totale de tous les appareils).")
   @ApiResponse(responseCode = "200", description = "Déconnexion réussie")
   public ResponseEntity<CustomResponse> logout(@RequestBody @Valid LogoutRequest request)
       throws CustomException {
     keycloakAuthService.logout(request.getRefreshToken());
+    loginService.logout(request.getRefreshToken(), request.getClientType());
     return ResponseEntity.ok(
         new CustomResponse(
             Constants.Message.SUCCESS_BODY,
