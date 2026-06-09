@@ -22,7 +22,9 @@ import com.africa.dinthialma_backend.member.dto.UpdateMembreStatutRequest;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.member.service.interfaces.MembreService;
-import com.africa.dinthialma_backend.notification.service.SmsService;
+import com.africa.dinthialma_backend.notification.codeList.NotificationType;
+import com.africa.dinthialma_backend.notification.service.WhatsappService;
+import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import java.time.LocalDate;
@@ -47,7 +49,8 @@ public class MembreServiceImpl implements MembreService {
   private final UserRoleAssignmentRepository roleAssignmentRepository;
   private final KeycloakAuthService keycloakAuthService;
   private final AuditService auditService;
-  private final SmsService smsService;
+  private final WhatsappService whatsappService;
+  private final NotificationService notificationService;
 
   // ─── Ajout d'un membre ───────────────────────────────────────────────────
 
@@ -123,6 +126,21 @@ public class MembreServiceImpl implements MembreService {
         saved.getId(),
         targetUser.getAccountStatus() == AccountStatus.PRE_ENROLLED);
 
+    // Notification in-app au membre ajouté
+    boolean isPreEnrolled = targetUser.getAccountStatus() == AccountStatus.PRE_ENROLLED;
+    String inviteBody =
+        isPreEnrolled
+            ? "Vous avez été ajouté(e) à la tontine "
+                + tontine.getNom()
+                + ". Inscrivez-vous pour suivre vos cotisations."
+            : "Vous avez été ajouté(e) à la tontine " + tontine.getNom() + ".";
+    notificationService.notify(
+        targetUser.getId(),
+        NotificationType.INVITATION_TONTINE,
+        "Invitation tontine",
+        inviteBody,
+        tontineId);
+
     return MembreResponse.from(saved);
   }
 
@@ -144,6 +162,13 @@ public class MembreServiceImpl implements MembreService {
     membre.setDeletedAt(LocalDateTime.now());
     membre.setStatut(MembreStatut.SORTI);
     membreRepository.save(membre);
+
+    notificationService.notify(
+        membre.getUser().getId(),
+        NotificationType.STATUT_MEMBRE,
+        "Retiré de la tontine",
+        "Vous avez été retiré(e) de la tontine " + tontine.getNom() + ".",
+        tontineId);
 
     log.info("Membre retiré – tontineId={} membreId={}", tontineId, membreId);
   }
@@ -190,6 +215,24 @@ public class MembreServiceImpl implements MembreService {
 
     auditService.log(
         caller, "tontine_membres", membreId, "statut", oldStatut, request.getStatut().name());
+
+    String statutBody =
+        switch (request.getStatut()) {
+          case SUSPENDU ->
+              "Votre participation à la tontine " + tontine.getNom() + " a été suspendue.";
+          case ACTIF ->
+              "Votre participation à la tontine " + tontine.getNom() + " a été réactivée.";
+          default -> null;
+        };
+    if (statutBody != null) {
+      notificationService.notify(
+          saved.getUser().getId(),
+          NotificationType.STATUT_MEMBRE,
+          "Statut mis à jour",
+          statutBody,
+          tontineId);
+    }
+
     log.info("Statut membre modifié – membreId={} statut={}", membreId, request.getStatut());
     return MembreResponse.from(saved);
   }
@@ -235,7 +278,7 @@ public class MembreServiceImpl implements MembreService {
     log.info("Compte pré-inscrit créé – phone={} userId={}", phone, saved.getId());
 
     try {
-      smsService.sendTontineInvite(phone, tontine.getNom());
+      whatsappService.sendTontineInvite(phone, tontine.getNom());
     } catch (Exception e) {
       log.warn("SMS invitation non envoyé pour {} : {}", phone, e.getMessage());
     }

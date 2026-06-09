@@ -1,6 +1,7 @@
 package com.africa.dinthialma_backend.auth.service.impl;
 
 import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
+import com.africa.dinthialma_backend.auth.codeList.ClientType;
 import com.africa.dinthialma_backend.auth.dto.LoginRequest;
 import com.africa.dinthialma_backend.auth.dto.LoginResponse;
 import com.africa.dinthialma_backend.auth.entity.User;
@@ -12,6 +13,9 @@ import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.UnAuthorizedException;
 import com.africa.dinthialma_backend.common.util.PhoneUtils;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Base64;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -81,6 +85,7 @@ public class LoginServiceImpl implements LoginService {
       userSessionService.createOrUpdateSession(
           user, request.getClientType(), tokens.getRefreshToken(), request.getDeviceInfo());
 
+      tokens.setPinConfigured(user.getPinHash() != null);
       log.info(
           "[Login] Connexion réussie – userId={} clientType={}",
           user.getId(),
@@ -96,7 +101,67 @@ public class LoginServiceImpl implements LoginService {
     return keycloakAuthService.login(identifier, request.getPassword());
   }
 
+  // ─── Déconnexion ─────────────────────────────────────────────────────
+
+  @Override
+  @Transactional
+  public void logout(String refreshToken, ClientType clientType) {
+    String keycloakId = extractSubFromJwt(refreshToken);
+    if (keycloakId == null) {
+      log.warn(
+          "[Logout] Impossible d'extraire le keycloakId du refresh token – session PIN non supprimée");
+      return;
+    }
+
+    userRepository
+        .findByKeycloakId(keycloakId)
+        .ifPresentOrElse(
+            user -> {
+              if (clientType != null) {
+                userSessionService
+                    .findActiveSession(user.getId(), clientType)
+                    .ifPresent(
+                        s -> {
+                          try {
+                            userSessionService.revokeSession(s.getId());
+                          } catch (CustomException e) {
+                            log.warn("[Logout] Impossible de révoquer la session {}", s.getId());
+                          }
+                        });
+              } else {
+                userSessionService.revokeAllSessions(user.getId());
+              }
+              log.info(
+                  "[Logout] Session(s) PIN supprimée(s) – userId={} clientType={}",
+                  user.getId(),
+                  clientType);
+            },
+            () -> log.warn("[Logout] Utilisateur keycloakId={} introuvable en base", keycloakId));
+  }
+
   // ─── Helpers ─────────────────────────────────────────────────────────
+
+  /**
+   * Décode le payload JWT sans vérification de signature pour extraire le claim {@code sub}
+   * (keycloakId). Non utilisé à des fins d'autorisation — sert uniquement à identifier la session à
+   * supprimer lors du logout.
+   */
+  private String extractSubFromJwt(String token) {
+    try {
+      String[] parts = token.split("\\.");
+      if (parts.length < 2) return null;
+      // Padding base64url → base64
+      String padded = parts[1] + "=".repeat((4 - parts[1].length() % 4) % 4);
+      byte[] decoded = Base64.getUrlDecoder().decode(padded);
+      JsonNode payload = new ObjectMapper().readTree(decoded);
+      String sub = payload.path("sub").asText(null);
+      log.debug("[Logout] sub extrait du token : {}", sub);
+      return sub;
+    } catch (Exception e) {
+      log.warn("[Logout] Erreur parsing JWT : {}", e.getMessage());
+      return null;
+    }
+  }
 
   private Optional<User> findUser(String identifier) {
     Optional<User> byPhone = userRepository.findByPhone(identifier);

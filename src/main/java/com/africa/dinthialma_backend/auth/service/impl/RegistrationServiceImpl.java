@@ -21,7 +21,7 @@ import com.africa.dinthialma_backend.common.exception.ConflictException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.util.OtpUtils;
 import com.africa.dinthialma_backend.common.util.PhoneUtils;
-import com.africa.dinthialma_backend.notification.service.SmsService;
+import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -51,7 +51,7 @@ public class RegistrationServiceImpl implements RegistrationService {
   private final UserRepository userRepository;
   private final UserRoleAssignmentRepository userRoleAssignmentRepository;
   private final KeycloakAuthService keycloakAuthService;
-  private final SmsService smsService;
+  private final WhatsappService whatsappService;
 
   // ─── Étape 1 : Envoi OTP ──────────────────────────────────────────
 
@@ -85,7 +85,7 @@ public class RegistrationServiceImpl implements RegistrationService {
             .build();
 
     otpVerificationRepository.save(otp);
-    smsService.sendOtp(phone, code);
+    whatsappService.sendOtp(phone, code);
 
     log.info("OTP inscription envoyé au numéro : {}", phone);
   }

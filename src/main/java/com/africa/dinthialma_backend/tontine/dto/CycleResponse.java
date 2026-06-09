@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 import lombok.Builder;
 import lombok.Getter;
@@ -31,17 +32,16 @@ public class CycleResponse {
   private LocalDate dateFin;
 
   @Schema(
-      description = "Jackpot brut = somme des cotisations VALIDÉES du cycle (calculé à la clôture)",
-      example = "60000")
+      description = "Jackpot brut = somme des cotisations VALIDÉES (calculé à la clôture)",
+      example = "500000")
   private BigDecimal montantJackpot;
 
-  @Schema(description = "Total des commissions déduites (calculé à la clôture)", example = "2400")
+  @Schema(description = "Total des commissions déduites (calculé à la clôture)", example = "10000")
   private BigDecimal montantCommission;
 
   @Schema(
-      description =
-          "Montant net remis au bénéficiaire = jackpot brut - commissions (calculé à la clôture)",
-      example = "57600")
+      description = "Montant net total = jackpot brut - commissions (calculé à la clôture)",
+      example = "490000")
   private BigDecimal montantNet;
 
   @Schema(
@@ -49,13 +49,17 @@ public class CycleResponse {
       allowableValues = {"EN_ATTENTE", "EN_COURS", "TERMINE"})
   private CycleStatut statut;
 
-  @Schema(
-      description = "Date de remise effective du jackpot (date de clôture du cycle)",
-      example = "2024-07-31")
+  @Schema(description = "Date de clôture effective du cycle", example = "2024-07-31")
   private LocalDate dateRemise;
 
-  @Schema(description = "Bénéficiaire du jackpot – null si pas encore désigné")
-  private BeneficiaireInfo beneficiaire;
+  @Schema(description = "Gagnants du jackpot (ROTATIVE) – vide si pas encore désignés")
+  private List<GagnantInfo> gagnants;
+
+  @Schema(
+      description =
+          "Distribution individuelle (EVENEMENTIELLE – clôture finale uniquement)."
+              + " Null pour les cycles ROTATIVE et les sous-cycles intermédiaires EVENEMENTIELLE.")
+  private List<MembreDistributionInfo> distributionParMembre;
 
   @Schema(description = "Date de création du cycle")
   private LocalDateTime createdAt;
@@ -64,19 +68,28 @@ public class CycleResponse {
   private LocalDateTime updatedAt;
 
   public static CycleResponse from(CycleTontine cycle) {
-    BeneficiaireInfo beneficiaireInfo = null;
-    if (cycle.getBeneficiaire() != null && cycle.getBeneficiaire().getUser() != null) {
-      var user = cycle.getBeneficiaire().getUser();
-      beneficiaireInfo =
-          BeneficiaireInfo.builder()
-              .membreId(cycle.getBeneficiaire().getId())
-              .userId(user.getId())
-              .firstName(user.getFirstName())
-              .lastName(user.getLastName())
-              .phone(user.getPhone())
-              .ordreJackpot(cycle.getBeneficiaire().getOrdreJackpot())
-              .build();
-    }
+    return from(cycle, null);
+  }
+
+  public static CycleResponse from(CycleTontine cycle, List<MembreDistributionInfo> distribution) {
+    List<GagnantInfo> gagnantInfos =
+        cycle.getGagnants().stream()
+            .filter(g -> g.getDeletedAt() == null)
+            .map(
+                g -> {
+                  var user = g.getMembre().getUser();
+                  return GagnantInfo.builder()
+                      .membreId(g.getMembre().getId())
+                      .userId(user.getId())
+                      .firstName(user.getFirstName())
+                      .lastName(user.getLastName())
+                      .phone(user.getPhone())
+                      .ordreJackpot(g.getMembre().getOrdreJackpot())
+                      .montantRecu(g.getMontantRecu())
+                      .dateJackpot(g.getMembre().getDateJackpot())
+                      .build();
+                })
+            .toList();
 
     return CycleResponse.builder()
         .id(cycle.getId())
@@ -89,16 +102,17 @@ public class CycleResponse {
         .montantNet(cycle.getMontantNet())
         .statut(cycle.getStatut())
         .dateRemise(cycle.getDateRemise())
-        .beneficiaire(beneficiaireInfo)
+        .gagnants(gagnantInfos)
+        .distributionParMembre(distribution)
         .createdAt(cycle.getCreatedAt())
         .updatedAt(cycle.getUpdatedAt())
         .build();
   }
 
-  @Schema(description = "Informations résumées du bénéficiaire du jackpot")
+  @Schema(description = "Informations d'un gagnant du jackpot (ROTATIVE)")
   @Getter
   @Builder
-  public static class BeneficiaireInfo {
+  public static class GagnantInfo {
 
     @Schema(description = "UUID du membre (tontine_membres.id)")
     private UUID membreId;
@@ -115,9 +129,45 @@ public class CycleResponse {
     @Schema(description = "Numéro de téléphone normalisé", example = "221770000001")
     private String phone;
 
-    @Schema(
-        description = "Position dans la rotation des jackpots (1 = premier bénéficiaire)",
-        example = "3")
+    @Schema(description = "Position dans la rotation des jackpots", example = "3")
     private Integer ordreJackpot;
+
+    @Schema(
+        description = "Montant reçu par ce gagnant = montantNet / nombreGagnants",
+        example = "245000")
+    private BigDecimal montantRecu;
+
+    @Schema(description = "Date/heure de remise du jackpot")
+    private LocalDateTime dateJackpot;
+  }
+
+  @Schema(description = "Part individuelle de chaque membre à la clôture finale (EVENEMENTIELLE)")
+  @Getter
+  @Builder
+  public static class MembreDistributionInfo {
+
+    @Schema(description = "UUID du membre (tontine_membres.id)")
+    private UUID membreId;
+
+    @Schema(description = "UUID de l'utilisateur (users.id)")
+    private UUID userId;
+
+    @Schema(description = "Prénom", example = "Aïssatou")
+    private String firstName;
+
+    @Schema(description = "Nom de famille", example = "Ba")
+    private String lastName;
+
+    @Schema(description = "Numéro de téléphone normalisé", example = "221770000002")
+    private String phone;
+
+    @Schema(description = "Somme totale des cotisations VALIDÉES de ce membre", example = "50000")
+    private BigDecimal montantCotise;
+
+    @Schema(description = "Quote-part de commission déduite", example = "1000")
+    private BigDecimal montantCommission;
+
+    @Schema(description = "Montant net à restituer à ce membre", example = "49000")
+    private BigDecimal montantNet;
   }
 }

@@ -4,6 +4,7 @@ import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
+import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.service.interfaces.CotisationService;
@@ -187,6 +188,56 @@ public class CotisationController {
         .body(
             new CustomResponse(
                 SUCCESS, CREATED, ResponseMessageConstants.CONTRIBUTION_RECORD_SUCCESS, response));
+  }
+
+  // ─── Enregistrement admin (cash / PRE_ENROLLED) ──────────────────────────
+
+  @PostMapping("/admin")
+  @Operation(
+      summary = "Enregistrer et valider une cotisation (admin)",
+      description =
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "Permet à l'admin d'enregistrer un paiement reçu directement (cash ou mobile money)"
+              + " pour n'importe quel membre de la tontine, y compris les membres **PRE_ENROLLED**"
+              + " qui n'ont pas encore de compte.\n\n"
+              + "La cotisation est créée **directement en statut VALIDÉ** – pas de passage par"
+              + " EN_ATTENTE. Les champs `enregistrePar`, `validePar` et `dateValidation` sont"
+              + " remplis automatiquement avec les informations de l'admin appelant.\n\n"
+              + "Une notification WhatsApp est envoyée au membre à l'issue de l'enregistrement.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "201",
+        description = "Cotisation enregistrée et validée",
+        content = @Content(schema = @Schema(implementation = CotisationResponse.class))),
+    @ApiResponse(responseCode = "400", description = "Données invalides ou cycle pas EN_COURS"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(
+        responseCode = "403",
+        description = "Accès interdit (pas créateur ni SUPER_ADMIN)"),
+    @ApiResponse(responseCode = "404", description = "Tontine, cycle ou membre introuvable"),
+    @ApiResponse(responseCode = "409", description = "Cotisation déjà enregistrée pour ce membre"),
+  })
+  public ResponseEntity<CustomResponse> adminRecordCotisation(
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
+      @RequestBody @Valid AdminRecordCotisationRequest request,
+      HttpServletRequest httpRequest)
+      throws CustomException {
+
+    String keycloakId = headerParser.extractKeycloakId(httpRequest);
+    CotisationResponse response =
+        cotisationService.adminRecordCotisation(keycloakId, tontineId, request);
+
+    return ResponseEntity.status(HttpStatus.CREATED)
+        .body(
+            new CustomResponse(
+                SUCCESS,
+                CREATED,
+                ResponseMessageConstants.CONTRIBUTION_ADMIN_RECORD_SUCCESS,
+                response));
   }
 
   // ─── Validation ──────────────────────────────────────────────────────────

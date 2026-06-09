@@ -1,5 +1,6 @@
 package com.africa.dinthialma_backend.auth.service.interfaces;
 
+import com.africa.dinthialma_backend.auth.codeList.ClientType;
 import com.africa.dinthialma_backend.auth.dto.LoginRequest;
 import com.africa.dinthialma_backend.auth.dto.LoginResponse;
 import com.africa.dinthialma_backend.common.exception.CustomException;
@@ -26,4 +27,12 @@ public interface LoginService {
    * @throws CustomException 401 si identifiants incorrects, 403 si compte désactivé
    */
   LoginResponse login(LoginRequest request) throws CustomException;
+
+  /**
+   * Révoque la session Keycloak ET supprime la session PIN en base pour cet appareil.
+   *
+   * @param refreshToken token Keycloak à invalider (contient le keycloakId dans son payload JWT)
+   * @param clientType type d'appareil à déconnecter ; null = révoquer toutes les sessions
+   */
+  void logout(String refreshToken, ClientType clientType);
 }

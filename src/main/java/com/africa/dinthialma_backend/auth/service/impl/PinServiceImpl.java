@@ -20,7 +20,8 @@ import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.common.exception.TooManyRequestsException;
 import com.africa.dinthialma_backend.common.exception.UnAuthorizedException;
 import com.africa.dinthialma_backend.common.util.OtpUtils;
-import com.africa.dinthialma_backend.notification.service.SmsService;
+import com.africa.dinthialma_backend.common.util.PhoneUtils;
+import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
@@ -51,7 +52,7 @@ public class PinServiceImpl implements PinService {
   private final OtpVerificationRepository otpVerificationRepository;
   private final UserSessionService userSessionService;
   private final KeycloakAuthService keycloakAuthService;
-  private final SmsService smsService;
+  private final WhatsappService whatsappService;
 
   /**
    * Encodeur Argon2id – paramètres renforcés pour les PINs courts (6 chiffres). saltLength=16,
@@ -90,7 +91,7 @@ public class PinServiceImpl implements PinService {
   @Override
   @Transactional
   public LoginResponse loginWithPin(PinLoginRequest request) throws CustomException {
-    String phone = request.getPhone().trim();
+    String phone = PhoneUtils.normalize(request.getPhone());
     log.debug(
         "Tentative de connexion PIN pour phone={} clientType={}", phone, request.getClientType());
 
@@ -142,9 +143,21 @@ public class PinServiceImpl implements PinService {
     user.setPinAttempts(0);
     user.setPinLockedUntil(null);
 
-    // Récupérer la session active pour ce type de client
+    // Récupérer la session active pour ce type de client ; fallback sur n'importe quelle session
+    // active si le clientType demandé n'en a pas (ex. premier login WEB, PIN tenté en MOBILE)
     Optional<UserSession> sessionOpt =
         userSessionService.findActiveSession(user.getId(), request.getClientType());
+
+    if (sessionOpt.isEmpty()) {
+      sessionOpt = userSessionService.findAnyActiveSession(user.getId());
+      sessionOpt.ifPresent(
+          s ->
+              log.info(
+                  "Session fallback utilisée – userId={} sessionClientType={} requestedClientType={}",
+                  user.getId(),
+                  s.getClientType(),
+                  request.getClientType()));
+    }
 
     if (sessionOpt.isEmpty()) {
       log.warn(
@@ -155,12 +168,41 @@ public class PinServiceImpl implements PinService {
     }
 
     UserSession session = sessionOpt.get();
+    boolean isFallback = !session.getClientType().equals(request.getClientType());
 
     // Déchiffrer le refresh token et appeler Keycloak
     String refreshToken = userSessionService.decryptRefreshToken(session);
-    LoginResponse newTokens = keycloakAuthService.refreshToken(refreshToken);
 
-    // Mettre à jour la session avec le nouveau refresh token et renouveler le TTL
+    LoginResponse newTokens;
+    try {
+      newTokens = keycloakAuthService.refreshToken(refreshToken);
+    } catch (UnAuthorizedException e) {
+      // Le refresh token Keycloak est expiré ou révoqué : purger la session invalide
+      // pour que l'utilisateur soit orienté vers un login complet au prochain essai
+      userSessionService.revokeSession(session.getId());
+      log.warn(
+          "Session Keycloak expirée – session supprimée userId={} clientType={}",
+          user.getId(),
+          session.getClientType());
+      throw e;
+    }
+
+    // Si fallback : supprimer la session source dont le token a été consommé.
+    // Ne JAMAIS donner le même token à deux sessions — la première qui l'utilise
+    // invalide l'autre côté Keycloak (rotation ON).
+    if (isFallback) {
+      try {
+        userSessionService.revokeSession(session.getId());
+        log.info(
+            "[PIN] Session source révoquée après fallback – {} → {}",
+            session.getClientType(),
+            request.getClientType());
+      } catch (CustomException e) {
+        log.warn("[PIN] Impossible de révoquer la session source : {}", e.getMessage());
+      }
+    }
+
+    // Créer / renouveler uniquement la session pour le clientType demandé
     userSessionService.createOrUpdateSession(
         user, request.getClientType(), newTokens.getRefreshToken(), request.getDeviceInfo());
 
@@ -176,7 +218,7 @@ public class PinServiceImpl implements PinService {
   @Override
   @Transactional
   public void sendResetPinOtp(String phone) throws CustomException {
-    phone = phone.trim();
+    phone = PhoneUtils.normalize(phone);
     log.debug("Envoi OTP reset PIN pour : {}", phone);
 
     if (!userRepository.existsByPhone(phone)) {
@@ -207,14 +249,14 @@ public class PinServiceImpl implements PinService {
             .build();
 
     otpVerificationRepository.save(otp);
-    smsService.sendOtp(phone, code);
+    whatsappService.sendOtp(phone, code);
     log.info("OTP reset PIN envoyé au numéro : {}", phone);
   }
 
   @Override
   @Transactional
   public void verifyResetPinOtp(String phone, String code) throws CustomException {
-    phone = phone.trim();
+    phone = PhoneUtils.normalize(phone);
     log.debug("Vérification OTP reset PIN pour : {}", phone);
 
     OtpVerification otp =
@@ -236,7 +278,7 @@ public class PinServiceImpl implements PinService {
   @Override
   @Transactional
   public void resetPin(PinResetRequest request) throws CustomException {
-    String phone = request.getPhone().trim();
+    String phone = PhoneUtils.normalize(request.getPhone());
     log.debug("Reset PIN pour : {}", phone);
 
     // Vérifier l'OTP vérifié non consommé

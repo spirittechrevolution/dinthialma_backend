@@ -46,6 +46,9 @@ public class CotisationResponse {
   @Schema(description = "Date de validation par l'admin (null si pas encore validé)")
   private LocalDateTime dateValidation;
 
+  @Schema(description = "Utilisateur ayant saisi la cotisation (membre ou admin)")
+  private SaisiePar enregistrePar;
+
   @Schema(description = "Admin qui a validé la cotisation (null si pas encore validé)")
   private ValideurInfo validePar;
 
@@ -70,6 +73,18 @@ public class CotisationResponse {
               .build();
     }
 
+    SaisiePar saisieParInfo = null;
+    if (cotisation.getEnregistrePar() != null) {
+      var s = cotisation.getEnregistrePar();
+      saisieParInfo =
+          SaisiePar.builder()
+              .id(s.getId())
+              .firstName(s.getFirstName())
+              .lastName(s.getLastName())
+              .phone(s.getPhone())
+              .build();
+    }
+
     ValideurInfo valideurInfo = null;
     if (cotisation.getValidePar() != null) {
       var v = cotisation.getValidePar();
@@ -91,6 +106,7 @@ public class CotisationResponse {
         .referenceTransaction(cotisation.getReferenceTransaction())
         .statut(cotisation.getStatut())
         .note(cotisation.getNote())
+        .enregistrePar(saisieParInfo)
         .dateValidation(cotisation.getDateValidation())
         .validePar(valideurInfo)
         .createdAt(cotisation.getCreatedAt())
@@ -116,6 +132,24 @@ public class CotisationResponse {
     private String lastName;
 
     @Schema(description = "Numéro de téléphone normalisé", example = "221770000001")
+    private String phone;
+  }
+
+  @Schema(description = "Utilisateur ayant saisi la cotisation (membre ou admin)")
+  @Getter
+  @Builder
+  public static class SaisiePar {
+
+    @Schema(description = "UUID de l'utilisateur")
+    private UUID id;
+
+    @Schema(description = "Prénom", example = "Aminata")
+    private String firstName;
+
+    @Schema(description = "Nom de famille", example = "Diallo")
+    private String lastName;
+
+    @Schema(description = "Numéro de téléphone", example = "221770000001")
     private String phone;
   }
 

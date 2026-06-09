@@ -158,10 +158,18 @@ public class KeycloakAuthServiceImpl implements KeycloakAuthService {
     userRep.setLastName(request.getLastName());
     userRep.setEnabled(true);
     userRep.setEmailVerified(true);
+    // Keycloak 26 ajoute VERIFY_PROFILE automatiquement si User Profile est actif dans le realm.
+    // On vide explicitement les required actions pour éviter le blocage "Account is not fully set
+    // up".
+    userRep.setRequiredActions(List.of());
 
-    if (request.getEmail() != null && !request.getEmail().isBlank()) {
-      userRep.setEmail(request.getEmail());
-    }
+    // Keycloak 26 requiert un email dans le User Profile même pour les comptes sans email.
+    // On génère un placeholder unique basé sur le numéro pour éviter le blocage au login.
+    String email =
+        (request.getEmail() != null && !request.getEmail().isBlank())
+            ? request.getEmail()
+            : request.getPhone() + "@dinthialma.placeholder";
+    userRep.setEmail(email);
 
     // Attribut custom "phone" – déclaré dans Realm settings → User profile
     userRep.setAttributes(Map.of("phone", List.of(request.getPhone())));

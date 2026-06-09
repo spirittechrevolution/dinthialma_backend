@@ -40,6 +40,14 @@ public interface UserSessionService {
   Optional<UserSession> findActiveSession(UUID userId, ClientType clientType);
 
   /**
+   * Recherche n'importe quelle session active de l'utilisateur, tous types confondus. Utilisé en
+   * fallback PIN quand le clientType demandé n'a pas de session mais un autre en a une.
+   *
+   * @return la session active la plus récente, sinon {@link Optional#empty()}
+   */
+  Optional<UserSession> findAnyActiveSession(UUID userId);
+
+  /**
    * Révoque une session spécifique (déconnexion d'un appareil).
    *
    * @param sessionId identifiant de la session à révoquer

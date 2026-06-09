@@ -18,7 +18,7 @@ import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.common.util.OtpUtils;
 import com.africa.dinthialma_backend.common.util.PhoneUtils;
-import com.africa.dinthialma_backend.notification.service.SmsService;
+import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -50,7 +50,7 @@ public class UserProfileServiceImpl implements UserProfileService {
   private final UserRepository userRepository;
   private final PhoneChangeRequestRepository phoneChangeRequestRepository;
   private final UserSessionService userSessionService;
-  private final SmsService smsService;
+  private final WhatsappService whatsappService;
   private final Keycloak keycloakAdminClient;
   private final KeycloakProperties keycloakProperties;
 
@@ -125,7 +125,7 @@ public class UserProfileServiceImpl implements UserProfileService {
             .build();
 
     phoneChangeRequestRepository.save(changeReq);
-    smsService.sendOtp(newPhone, otp);
+    whatsappService.sendOtp(newPhone, otp);
 
     log.info("[Profile] OTP changement numéro envoyé – userId={} → {}", user.getId(), newPhone);
   }

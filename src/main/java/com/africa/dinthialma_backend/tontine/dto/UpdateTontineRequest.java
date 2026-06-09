@@ -1,6 +1,7 @@
 package com.africa.dinthialma_backend.tontine.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
@@ -57,4 +58,32 @@ public class UpdateTontineRequest {
   @Min(2)
   @Max(100)
   private Integer nombreMembres;
+
+  @Schema(
+      description = "Nouveau nombre de gagnants par cycle (min 1, null = inchangé)",
+      example = "2",
+      minimum = "1")
+  @Min(1)
+  private Integer nombreGagnants;
+
+  // ─── Champs EVENEMENTIELLE ──────────────────────────────────────────────
+
+  @Schema(
+      description = "Nouvelle date d'échéance de l'événement (EVENEMENTIELLE, doit être future)",
+      example = "2026-06-06")
+  @Future
+  private LocalDate dateEcheance;
+
+  @Schema(description = "Nouveau nom de l'événement (max 200 caractères)", example = "Korité 2026")
+  @Size(max = 200)
+  private String nomEvenement;
+
+  @Schema(
+      description = "Nouveau montant minimum de cotisation (EVENEMENTIELLE libre, null = inchangé)",
+      example = "1000")
+  @Positive
+  private BigDecimal montantMinimum;
+
+  @Schema(description = "Basculer entre cotisation libre et cotisation fixe (null = inchangé)")
+  private Boolean montantLibre;
 }

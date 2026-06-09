@@ -273,8 +273,10 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         CycleTontine cycle = cycleOpt.get();
         String benefNom = null;
         UUID benefUserId = null;
-        if (cycle.getBeneficiaire() != null && cycle.getBeneficiaire().getUser() != null) {
-          User benefUser = cycle.getBeneficiaire().getUser();
+        var premierGagnant =
+            cycle.getGagnants().stream().filter(g -> g.getDeletedAt() == null).findFirst();
+        if (premierGagnant.isPresent() && premierGagnant.get().getMembre().getUser() != null) {
+          User benefUser = premierGagnant.get().getMembre().getUser();
           benefNom = benefUser.getFirstName() + " " + benefUser.getLastName();
           benefUserId = benefUser.getId();
         }

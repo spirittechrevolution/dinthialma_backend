@@ -1,8 +1,10 @@
 package com.africa.dinthialma_backend.tontine.service.interfaces;
 
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.tontine.dto.BeneficiaireHistoriqueResponse;
 import com.africa.dinthialma_backend.tontine.dto.CycleResponse;
 import com.africa.dinthialma_backend.tontine.dto.OpenCycleRequest;
+import com.africa.dinthialma_backend.tontine.dto.SelectionnerBeneficiaireRequest;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -40,4 +42,25 @@ public interface CycleService {
    * EN_COURS} si applicable. Réservé au créateur et au SUPER_ADMIN.
    */
   CycleResponse closeCycle(String keycloakId, UUID tontineId, UUID cycleId) throws CustomException;
+
+  /**
+   * Liste l'historique des bénéficiaires de jackpot d'une tontine (cycles TERMINÉ avec bénéficiaire
+   * désigné), triés par numéro de cycle croissant.
+   *
+   * <p>Accès : membres + admin + SUPER_ADMIN.
+   */
+  Page<BeneficiaireHistoriqueResponse> listBeneficiaires(
+      String keycloakId, UUID tontineId, Pageable pageable) throws CustomException;
+
+  /**
+   * Sélectionne le bénéficiaire du jackpot d'un cycle TERMINE (mode MANUEL).
+   *
+   * <p>Si {@code request.membreId} est fourni : désignation manuelle. Si null : sélection aléatoire
+   * parmi les membres ACTIF n'ayant pas encore reçu de jackpot. Le membre sélectionné est marqué
+   * {@code aRecuJackpot=true} et reçoit une notification WhatsApp. Réservé au créateur et au
+   * SUPER_ADMIN.
+   */
+  CycleResponse selectionnerBeneficiaire(
+      String keycloakId, UUID tontineId, UUID cycleId, SelectionnerBeneficiaireRequest request)
+      throws CustomException;
 }

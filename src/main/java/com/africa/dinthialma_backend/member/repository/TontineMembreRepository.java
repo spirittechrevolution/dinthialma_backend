@@ -44,6 +44,10 @@ public interface TontineMembreRepository extends JpaRepository<TontineMembre, UU
   /** Vérifie si un ordre jackpot est déjà pris dans une tontine. */
   boolean existsByTontine_IdAndOrdreJackpotAndDeletedAtIsNull(UUID tontineId, int ordreJackpot);
 
+  /** Membre actif dont l'ordre jackpot est exact (futur bénéficiaire ROTATION). */
+  Optional<TontineMembre> findByTontine_IdAndOrdreJackpotAndStatutAndDeletedAtIsNull(
+      UUID tontineId, int ordreJackpot, MembreStatut statut);
+
   /** Ordre jackpot maximum attribué dans une tontine (0 si aucun). */
   @Query(
       "SELECT COALESCE(MAX(m.ordreJackpot), 0) FROM TontineMembre m"

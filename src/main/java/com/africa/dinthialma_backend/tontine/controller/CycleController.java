@@ -4,8 +4,10 @@ import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
+import com.africa.dinthialma_backend.tontine.dto.BeneficiaireHistoriqueResponse;
 import com.africa.dinthialma_backend.tontine.dto.CycleResponse;
 import com.africa.dinthialma_backend.tontine.dto.OpenCycleRequest;
+import com.africa.dinthialma_backend.tontine.dto.SelectionnerBeneficiaireRequest;
 import com.africa.dinthialma_backend.tontine.service.interfaces.CycleService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -26,6 +28,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -58,6 +61,42 @@ public class CycleController {
 
   private final CycleService cycleService;
   private final RequestHeaderParser headerParser;
+
+  // ─── Historique bénéficiaires ────────────────────────────────────────────
+
+  @GetMapping("/beneficiaires")
+  @Operation(
+      summary = "Historique des bénéficiaires de jackpot",
+      description =
+          "🔒 Rôles : membres de la tontine, créateur, SUPER_ADMIN.\n\n"
+              + "Retourne la liste des cycles **TERMINÉ** ayant un bénéficiaire désigné, triés par"
+              + " numéro de cycle croissant. Chaque entrée contient le bénéficiaire et les montants"
+              + " (jackpot brut, commissions, net).\n\n"
+              + "Pagination : `?page=0&size=20&sort=numeroCycle,asc`")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Historique des bénéficiaires",
+        content =
+            @Content(schema = @Schema(implementation = BeneficiaireHistoriqueResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine introuvable"),
+  })
+  public ResponseEntity<CustomResponse> listBeneficiaires(
+      @Parameter(description = "UUID de la tontine") @PathVariable UUID tontineId,
+      @PageableDefault(size = 20, sort = "numeroCycle", direction = Sort.Direction.ASC)
+          Pageable pageable,
+      HttpServletRequest httpRequest)
+      throws CustomException {
+
+    String keycloakId = headerParser.extractKeycloakId(httpRequest);
+    Page<BeneficiaireHistoriqueResponse> page =
+        cycleService.listBeneficiaires(keycloakId, tontineId, pageable);
+
+    return ResponseEntity.ok(
+        new CustomResponse(SUCCESS, OK, ResponseMessageConstants.BENEFICIAIRE_LIST_SUCCESS, page));
+  }
 
   // ─── Liste ───────────────────────────────────────────────────────────────
 
@@ -218,5 +257,46 @@ public class CycleController {
 
     return ResponseEntity.ok(
         new CustomResponse(SUCCESS, OK, ResponseMessageConstants.CYCLE_CLOSED, response));
+  }
+
+  // ─── Sélection bénéficiaire jackpot ──────────────────────────────────────
+
+  @PatchMapping("/{cycleId}/beneficiaire")
+  @Operation(
+      summary = "Désigner les gagnants du jackpot (mode MANUEL)",
+      description =
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "Disponible uniquement sur une tontine avec **ordreBeneficiaire = MANUEL**"
+              + " et un cycle **TERMINÉ** sans gagnants.\n\n"
+              + "- `membreIds` fourni → désignation manuelle (liste de 1 à N membres)\n"
+              + "- `membreIds` absent ou vide → sélection **aléatoire** du bon nombre de membres\n\n"
+              + "N = `nombreGagnants` de la tontine. Le jackpot est divisé équitablement."
+              + " Chaque gagnant est marqué `aRecuJackpot=true` et reçoit une notification WhatsApp.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Bénéficiaire désigné, cycle mis à jour",
+        content = @Content(schema = @Schema(implementation = CycleResponse.class))),
+    @ApiResponse(
+        responseCode = "400",
+        description =
+            "Cycle pas TERMINE, mode pas MANUEL, bénéficiaire déjà désigné, ou aucun membre éligible"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine, cycle ou membre introuvable"),
+  })
+  public ResponseEntity<CustomResponse> selectionnerBeneficiaire(
+      @Parameter(description = "UUID de la tontine") @PathVariable UUID tontineId,
+      @Parameter(description = "UUID du cycle TERMINE") @PathVariable UUID cycleId,
+      @RequestBody SelectionnerBeneficiaireRequest request,
+      HttpServletRequest httpRequest)
+      throws CustomException {
+
+    String keycloakId = headerParser.extractKeycloakId(httpRequest);
+    CycleResponse response =
+        cycleService.selectionnerBeneficiaire(keycloakId, tontineId, cycleId, request);
+
+    return ResponseEntity.ok(
+        new CustomResponse(SUCCESS, OK, "Bénéficiaire du jackpot désigné avec succès", response));
   }
 }
