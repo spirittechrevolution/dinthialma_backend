@@ -2,6 +2,7 @@ package com.africa.dinthialma_backend.tontine.repository;
 
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -41,6 +42,13 @@ public interface CycleTontineRepository extends JpaRepository<CycleTontine, UUID
 
   /** Tous les cycles d'un statut donné sur toute la plateforme (usage scheduler). */
   List<CycleTontine> findByStatutAndDeletedAtIsNull(CycleStatut statut);
+
+  /** Cycles EN_COURS dont la date de fin est exactement à une date donnée (rappels scheduler). */
+  @Query(
+      "SELECT c FROM CycleTontine c WHERE c.statut = :statut"
+          + " AND c.dateFin = :dateFin AND c.deletedAt IS NULL")
+  List<CycleTontine> findByStatutAndDateFinAndDeletedAtIsNull(
+      @Param("statut") CycleStatut statut, @Param("dateFin") LocalDate dateFin);
 
   /** Cycles TERMINÉ ayant au moins un gagnant désigné, pour l'historique jackpots d'une tontine. */
   @Query(

@@ -68,8 +68,13 @@ public class TontineController {
       description =
           "🔒 Rôles : tout utilisateur authentifié.\n\n"
               + "L'appelant devient automatiquement l'administrateur de la tontine et reçoit le"
-              + " rôle DINTHIALMA_ADMIN. La tontine est créée en statut **BROUILLON** – elle doit"
-              + " être activée (`PUT /{id}/activer`) pour démarrer les cotisations.")
+              + " rôle DINTHIALMA_ADMIN. La tontine est créée en statut **BROUILLON**.\n\n"
+              + "**Types disponibles :**\n\n"
+              + "- `ROTATIVE` *(défaut)* – jackpot tournant. Champs obligatoires supplémentaires :"
+              + " `ordreBeneficiaire`, `nombreMembres` (≥2), `modeCycle`, `montant`.\n"
+              + "- `EVENEMENTIELLE` – épargne vers un événement (Tabaski, Korité…). Champs"
+              + " obligatoires supplémentaires : `dateEcheance` (> `dateDebut`), `montant` si"
+              + " `montantLibre=false`. Champ optionnel : `nomEvenement`, `montantMinimum`.")
   @ApiResponses({
     @ApiResponse(
         responseCode = "201",
@@ -237,10 +242,14 @@ public class TontineController {
       description =
           "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
               + "Passe la tontine de **BROUILLON** (ou SUSPENDUE) à **ACTIVE**.\n\n"
-              + "En mode **AUTOMATIQUE** : génère immédiatement tous les cycles (N cycles = N"
-              + " membres attendus), le premier passe EN_COURS.\n\n"
-              + "En mode **MANUEL** : la tontine est active mais les cycles doivent être ouverts"
-              + " manuellement.")
+              + "**ROTATIVE – Mode AUTOMATIQUE** : génère immédiatement tous les cycles"
+              + " (N membres → N cycles), le premier passe EN_COURS.\n\n"
+              + "**ROTATIVE – Mode MANUEL** : active la tontine sans générer de cycles."
+              + " Ouvrir les cycles via `POST .../cycles`.\n\n"
+              + "**EVENEMENTIELLE** : génère automatiquement tous les sous-cycles de"
+              + " `dateDebut` à `dateEcheance` selon la `frequence` (JOURNALIERE, HEBDOMADAIRE,"
+              + " BIMENSUEL, MENSUEL, TRIMESTRIEL). Le dernier sous-cycle se termine exactement"
+              + " sur `dateEcheance`.")
   @ApiResponses({
     @ApiResponse(
         responseCode = "200",

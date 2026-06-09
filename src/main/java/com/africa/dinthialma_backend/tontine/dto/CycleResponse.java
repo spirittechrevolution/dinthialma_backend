@@ -52,8 +52,14 @@ public class CycleResponse {
   @Schema(description = "Date de clôture effective du cycle", example = "2024-07-31")
   private LocalDate dateRemise;
 
-  @Schema(description = "Gagnants du jackpot – vide si pas encore désignés")
+  @Schema(description = "Gagnants du jackpot (ROTATIVE) – vide si pas encore désignés")
   private List<GagnantInfo> gagnants;
+
+  @Schema(
+      description =
+          "Distribution individuelle (EVENEMENTIELLE – clôture finale uniquement)."
+              + " Null pour les cycles ROTATIVE et les sous-cycles intermédiaires EVENEMENTIELLE.")
+  private List<MembreDistributionInfo> distributionParMembre;
 
   @Schema(description = "Date de création du cycle")
   private LocalDateTime createdAt;
@@ -62,6 +68,10 @@ public class CycleResponse {
   private LocalDateTime updatedAt;
 
   public static CycleResponse from(CycleTontine cycle) {
+    return from(cycle, null);
+  }
+
+  public static CycleResponse from(CycleTontine cycle, List<MembreDistributionInfo> distribution) {
     List<GagnantInfo> gagnantInfos =
         cycle.getGagnants().stream()
             .filter(g -> g.getDeletedAt() == null)
@@ -93,12 +103,13 @@ public class CycleResponse {
         .statut(cycle.getStatut())
         .dateRemise(cycle.getDateRemise())
         .gagnants(gagnantInfos)
+        .distributionParMembre(distribution)
         .createdAt(cycle.getCreatedAt())
         .updatedAt(cycle.getUpdatedAt())
         .build();
   }
 
-  @Schema(description = "Informations d'un gagnant du jackpot")
+  @Schema(description = "Informations d'un gagnant du jackpot (ROTATIVE)")
   @Getter
   @Builder
   public static class GagnantInfo {
@@ -128,5 +139,35 @@ public class CycleResponse {
 
     @Schema(description = "Date/heure de remise du jackpot")
     private LocalDateTime dateJackpot;
+  }
+
+  @Schema(description = "Part individuelle de chaque membre à la clôture finale (EVENEMENTIELLE)")
+  @Getter
+  @Builder
+  public static class MembreDistributionInfo {
+
+    @Schema(description = "UUID du membre (tontine_membres.id)")
+    private UUID membreId;
+
+    @Schema(description = "UUID de l'utilisateur (users.id)")
+    private UUID userId;
+
+    @Schema(description = "Prénom", example = "Aïssatou")
+    private String firstName;
+
+    @Schema(description = "Nom de famille", example = "Ba")
+    private String lastName;
+
+    @Schema(description = "Numéro de téléphone normalisé", example = "221770000002")
+    private String phone;
+
+    @Schema(description = "Somme totale des cotisations VALIDÉES de ce membre", example = "50000")
+    private BigDecimal montantCotise;
+
+    @Schema(description = "Quote-part de commission déduite", example = "1000")
+    private BigDecimal montantCommission;
+
+    @Schema(description = "Montant net à restituer à ce membre", example = "49000")
+    private BigDecimal montantNet;
   }
 }

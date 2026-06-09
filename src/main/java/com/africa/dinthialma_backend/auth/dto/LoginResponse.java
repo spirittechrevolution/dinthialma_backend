@@ -41,4 +41,8 @@ public class LoginResponse {
 
   @Schema(description = "Scopes accordés", example = "openid profile")
   private String scope;
+
+  @Schema(description = "Indique si l'utilisateur a configuré un code PIN", example = "true")
+  @JsonProperty("pin_configured")
+  private boolean pinConfigured;
 }

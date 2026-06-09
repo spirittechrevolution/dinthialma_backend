@@ -135,6 +135,15 @@
 | `/dashboard/contributions` | GET | ❌ | ✅ | Toutes cotisations (filtrables) |
 | `/my-dashboard` | GET | ✅ | ✅ | Métriques de l'admin pour ses tontines |
 
+### 🔔 Notifications (`/v1/notifications`)
+
+| Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
+|----------|---------|------|--------|-------|-------------|-------|
+| `/` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 notifications paginées (lues + non lues, tri createdAt DESC) |
+| `/unread-count` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 compteur badge cloche |
+| `/{id}/read` | PATCH | ✅ | ✅ | ✅ | ✅ | 🔒 marquer une notification lue (idempotent) |
+| `/read-all` | PATCH | ✅ | ✅ | ✅ | ✅ | 🔒 tout marquer lu en une opération (bulk) |
+
 ### 📊 Dashboard Super Admin — métriques clés
 
 ```
@@ -176,11 +185,11 @@ src/main/java/com/africa/dinthialma_backend/
 │       │               UserProfileService
 │       └── impl/       (implémentations correspondantes)
 ├── tontine/        ✅ Complet (entités + repo + service + controller)
-│   ├── codeList/       TontineStatut, ModeCycle, CycleStatut, CommissionType
+│   ├── codeList/       TontineStatut, ModeCycle, CycleStatut, CommissionType, TontineType
 │   ├── controller/     TontineController, CycleController, CommissionController
 │   ├── dto/            CreateTontineRequest, UpdateTontineRequest, TontineResponse,
-│   │                   CycleResponse, OpenCycleRequest, CreateCommissionRequest,
-│   │                   UpdateCommissionRequest, CommissionResponse
+│   │                   CycleResponse (+ MembreDistributionInfo), OpenCycleRequest,
+│   │                   CreateCommissionRequest, UpdateCommissionRequest, CommissionResponse
 │   ├── entity/         Tontine, CycleTontine, TontineCommission
 │   ├── repository/     TontineRepository, CycleTontineRepository,
 │   │                   TontineCommissionRepository
@@ -205,8 +214,17 @@ src/main/java/com/africa/dinthialma_backend/
 │   └── service/
 │       ├── interfaces/ CotisationService
 │       └── impl/       CotisationServiceImpl
-├── notification/   ✅ SMS (LAfricaMobile) – mock mode dev
-    ├── admin/          ✅ Complet (GlobalDashboard + gestion users + MyDashboard)
+├── notification/   ✅ SMS (LAfricaMobile) + notifications in-app
+│   ├── codeList/       NotificationType (12 valeurs)
+│   ├── controller/     NotificationController
+│   ├── dto/            NotificationResponse
+│   ├── entity/         UserNotification
+│   ├── repository/     NotificationRepository
+│   └── service/
+│       ├── interfaces/ NotificationService
+│       ├── impl/       NotificationServiceImpl
+│       └── (directs)   SmsService, WhatsappService, SchedulerService
+├── admin/          ✅ Complet (GlobalDashboard + gestion users + MyDashboard)
 │   ├── controller/     AdminDashboardController
 │   ├── dto/            GlobalDashboardResponse, AdminUserResponse,
 │   │                   UpdateUserRolesRequest, MyDashboardResponse
@@ -281,6 +299,7 @@ Tous les endpoints de liste retournent `Page<T>` (Spring Data) :
 | Cotisations | `createdAt` | DESC |
 | Commissions | `createdAt` | ASC |
 | Users (admin) | `createdAt` | DESC |
+| Notifications | `createdAt` | DESC |
 
 Query params client : `?page=0&size=20&sort=createdAt,desc`
 
@@ -371,8 +390,13 @@ public class ModuleController {
 | V019 | `create_phone_change_requests.sql` | `phone_change_requests` |
 | V020 | `add_commission_to_cycles.sql` | `cycles_tontine.montant_commission`, `montant_net` |
 | V021 | `add_account_status_to_users.sql` | `users.account_status`, `keycloak_id` nullable |
+| V022 | `add_enregistre_par_to_cotisations.sql` | `cotisations.enregistre_par` |
+| V023 | `add_jackpot_tracking_to_membres.sql` | `tontine_membres.a_recu_jackpot`, `date_jackpot` |
+| V024 | `add_nombre_gagnants_and_cycle_gagnants.sql` | `tontines.nombre_gagnants`, table `cycle_gagnants` |
+| V025 | `add_evenementielle_fields_to_tontines.sql` | `tontines.tontine_type`, `date_echeance`, `nom_evenement`, `montant_libre`, `montant_minimum` ; `ordre_beneficiaire` nullable |
+| V026 | `create_user_notifications.sql` | `user_notifications` (id, user_id FK, type, title, body, is_read, tontine_id, timestamps, deleted_at) ; index sur (user_id, is_read) et createdAt DESC |
 
-Prochaine version disponible : **V022**
+Prochaine version disponible : **V027**
 
 ---
 
@@ -409,14 +433,15 @@ Prochaine version disponible : **V022**
 
 | Feature | Statut | Accès |
 |---------|--------|-------|
-| Créer une tontine | ✅ | 🔒 tout auth |
+| Créer une tontine (ROTATIVE ou EVENEMENTIELLE) | ✅ | 🔒 tout auth |
 | Lister tontines | ✅ | 🔒 SUPER_ADMIN : toutes ; autres : les leurs |
 | Détail tontine | ✅ | 🔒 membres + créateur + SUPER_ADMIN |
 | Modifier tontine (BROUILLON) | ✅ | 🔒 créateur + SUPER_ADMIN |
 | Supprimer tontine (BROUILLON) | ✅ | 🔒 créateur + SUPER_ADMIN |
 | Activer tontine | ✅ | 🔒 créateur + SUPER_ADMIN |
 | Suspendre tontine | ✅ | 🔒 créateur + SUPER_ADMIN |
-| Génération auto cycles (AUTOMATIQUE) | ✅ | AUTO à l'activation |
+| Génération auto cycles (ROTATIVE AUTOMATIQUE) | ✅ | AUTO à l'activation |
+| Génération auto sous-cycles (EVENEMENTIELLE) | ✅ | AUTO à l'activation – dateDebut → dateEcheance par fréquence |
 
 ### Module Membre ✅ (complet)
 
@@ -447,12 +472,15 @@ Prochaine version disponible : **V022**
 |---------|--------|-------|
 | Liste cycles | ✅ | 🔒 membres + créateur + SUPER_ADMIN |
 | Détail cycle | ✅ | 🔒 membres + créateur + SUPER_ADMIN |
-| Ouvrir cycle (MANUEL) | ✅ | 🔒 créateur + SUPER_ADMIN |
-| Clôturer cycle | ✅ | 🔒 créateur + SUPER_ADMIN |
-| Activation cycle suivant (AUTOMATIQUE) | ✅ | AUTO à la clôture |
+| Ouvrir cycle (ROTATIVE MANUEL uniquement) | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Clôturer cycle (ROTATIVE) | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Clôturer sous-cycle (EVENEMENTIELLE) | ✅ | 🔒 créateur + SUPER_ADMIN – activation sous-cycle suivant |
+| Clôture finale EVENEMENTIELLE | ✅ | AUTO détection dernier cycle – `distributionParMembre` calculée |
 | Calcul jackpot brut = somme cotisations VALIDEES | ✅ | AUTO à la clôture |
 | Déduction commissions → montantNet | ✅ | AUTO à la clôture |
+| Commission proportionnelle par membre (EVENEMENTIELLE) | ✅ | AUTO à la clôture finale |
 | EN_ATTENTE → EN_RETARD à la clôture | ✅ | AUTO à la clôture |
+| Notification WhatsApp distribution finale | ✅ | AUTO – un message par membre + résumé admin |
 
 ### Module Commission ✅ (complet)
 
@@ -477,15 +505,47 @@ Prochaine version disponible : **V022**
 | Dashboard mes tontines (résumé admin) | ✅ | 🔒 ADMIN+ |
 | Journal d'audit | 🔲 TODO | 🔒 SUPER_ADMIN |
 
-### Module Notification
+### Module Notification ✅ (complet)
+
+#### SMS / WhatsApp
 
 | Feature | Statut |
 |---------|--------|
 | SMS OTP | ✅ (mock dev) |
 | SMS invitation membre pré-inscrit | ✅ |
-| Rappel cotisation | 🔲 TODO |
-| Annonce bénéficiaire jackpot | 🔲 TODO |
-| Alerte retard | 🔲 TODO |
+| Rappel cotisation ROTATIVE (scheduler 8h) | ✅ |
+| Rappels EVENEMENTIELLE J-X avec compte à rebours | ✅ |
+| Rappels EVENEMENTIELLE jours clés J-30/7/3/1 (tous membres) | ✅ |
+| Annonce jackpot ROTATIVE (à la clôture du cycle) | ✅ |
+| Distribution finale EVENEMENTIELLE (WhatsApp individuel + résumé admin) | ✅ |
+
+#### Notifications in-app (`/v1/notifications`)
+
+| Feature | Statut | Accès |
+|---------|--------|-------|
+| Persistance `UserNotification` en base (table `user_notifications`) | ✅ | AUTO |
+| Lister mes notifications (paginées, lues + non lues) | ✅ | 🔒 tout auth |
+| Compteur notifications non lues (badge cloche) | ✅ | 🔒 tout auth |
+| Marquer une notification lue (idempotent) | ✅ | 🔒 tout auth |
+| Marquer tout lu (bulk `@Modifying`) | ✅ | 🔒 tout auth |
+| `notify()` non-bloquant (try/catch interne, jamais de rollback) | ✅ | INFRA |
+
+#### Mapping événements → `NotificationType` (12 valeurs)
+
+| Événement | Type | Destinataire |
+|-----------|------|--------------|
+| Membre soumet une cotisation | `PAIEMENT_RECU` | Admin de la tontine |
+| Membre soumet une cotisation | `COTISATION_SOUMISE` | Membre lui-même |
+| Cotisation validée par admin | `COTISATION_VALIDEE` | Membre cotisant |
+| Jackpot distribué (ROTATIVE) | `JACKPOT_DISTRIBUE` | Gagnant + admin |
+| Distribution finale (EVENEMENTIELLE) | `DISTRIBUTION_FINALE` | Chaque membre |
+| Cycle clôturé avec retards | `PAIEMENT_EN_RETARD` | Admin |
+| Scheduler 8h – cotisation non payée ou période non cotisée | `RAPPEL_COTISATION` | Membre concerné |
+| Jackpot du membre dans 3 jours (ROTATIVE ROTATION) | `TOUR_PROCHE` | Futur bénéficiaire |
+| Cycle se termine dans 2 jours | `CYCLE_BIENTOT_CLOTURE` | Admin |
+| Cycle MANUEL ouvert | `CYCLE_OUVERT` | Membres actifs |
+| Ajout à une tontine | `INVITATION_TONTINE` | Membre ajouté |
+| Statut changé (suspendu / retiré / réactivé) | `STATUT_MEMBRE` | Membre concerné |
 
 ---
 
@@ -568,7 +628,100 @@ cd docker && docker compose up -d
       → LoginServiceImpl : blocage PRE_ENROLLED avec message d'invite
       → SmsService.sendTontineInvite()
       → Migration V021 : keycloak_id nullable + account_status
+
+✦ Sprint 6 – Tontine Événementielle  ✅ TERMINÉ
+  6.1 Nouveau type TontineType : ROTATIVE | EVENEMENTIELLE              ✅ FAIT
+  6.2 Migration V025 : 5 champs + ordre_beneficiaire nullable            ✅ FAIT
+  6.3 Tontine.java : dateEcheance, nomEvenement, montantLibre,          ✅ FAIT
+      montantMinimum, tontineType
+  6.4 CreateTontineRequest : validation conditionnelle par type          ✅ FAIT
+  6.5 TontineServiceImpl : generateEvenementielleSubCycles()             ✅ FAIT
+      → JOURNALIERE supportée dans calculateEndDate
+      → Dernier sous-cycle tronqué à dateEcheance
+  6.6 CotisationServiceImpl : validateMontantCotisation()               ✅ FAIT
+      → montant fixe strict si montantLibre=false
+      → montantMinimum enforced si montantLibre=true
+  6.7 CycleServiceImpl : closeCycleEvenementielle()                     ✅ FAIT
+      → sous-cycles intermédiaires : ferme + active suivant
+      → dernier cycle : computeFinalDistribution() + WhatsApp individuel
+  6.8 CycleResponse : MembreDistributionInfo + distributionParMembre    ✅ FAIT
+
+✦ Sprint 7 – Notifications in-app  ✅ TERMINÉ
+  7.1 WhatsApp EVENEMENTIELLE personnalisés avec J-X (SchedulerService) ✅ FAIT
+      → sendEvenementielleRappelAttente / RappelPeriode / Urgent
+      → processEvenementielleReminders() : jours clés J-30/7/3/1
+  7.2 UserNotification entity + repository + service + controller       ✅ FAIT
+      → Migration V026 : table user_notifications
+      → NotificationType enum (12 valeurs)
+      → notify() non-bloquant (try/catch interne)
+      → 4 endpoints : GET / · GET /unread-count · PATCH /{id}/read · PATCH /read-all
+      → Bulk markAllAsRead via @Modifying @Query (non itératif)
+  7.3 Câblage in-app sur tous les événements métier                     ✅ FAIT
+      → CotisationServiceImpl : COTISATION_SOUMISE (membre) + PAIEMENT_RECU (admin)
+      → CotisationServiceImpl : COTISATION_VALIDEE (membre)
+      → CycleServiceImpl : CYCLE_OUVERT (membres) + JACKPOT_DISTRIBUE + PAIEMENT_EN_RETARD
+      → CycleServiceImpl : DISTRIBUTION_FINALE (chaque membre EVENEMENTIELLE)
+      → MembreServiceImpl : INVITATION_TONTINE + STATUT_MEMBRE
+      → SchedulerService : RAPPEL_COTISATION sur 4 chemins (ROTATIVE + 3 EVENEMENTIELLE)
+      → SchedulerService : CYCLE_BIENTOT_CLOTURE (J-2) + TOUR_PROCHE (J-3 ROTATION)
 ```
+
+---
+
+## Tontine Événementielle — règles de fonctionnement
+
+### Création (`POST /v1/tontines` avec `tontineType: EVENEMENTIELLE`)
+
+Champs obligatoires spécifiques :
+
+| Champ | Règle |
+|---|---|
+| `dateEcheance` | Obligatoire, doit être > `dateDebut` |
+| `frequence` | Obligatoire (comme ROTATIVE) – structure les sous-cycles + rappels |
+| `montant` | Obligatoire si `montantLibre=false` |
+| `nomEvenement` | Optionnel (ex : "Tabaski 2026") |
+| `montantLibre` | `false` = montant fixe imposé, `true` = libre |
+| `montantMinimum` | Optionnel, plancher si `montantLibre=true` |
+
+Champs non applicables (ignorés) : `ordreBeneficiaire`, `nombreMembres`, `modeCycle`.
+
+### Activation → génération des sous-cycles
+
+À l'activation, `generateEvenementielleSubCycles()` découpe la période en sous-cycles :
+- `JOURNALIERE` → 1 sous-cycle/jour
+- `HEBDOMADAIRE` → 1 sous-cycle/semaine (7 jours)
+- `BIMENSUEL` → 1 sous-cycle/15 jours
+- `MENSUEL` → 1 sous-cycle/mois
+- `TRIMESTRIEL` → 1 sous-cycle/3 mois
+
+Le dernier sous-cycle se termine exactement sur `dateEcheance` (pas de dépassement).
+
+### Cotisations
+
+- `montantLibre=false` : montant de la cotisation doit être exactement égal à `tontine.montant`.
+- `montantLibre=true` : montant libre, mais ≥ `montantMinimum` si défini.
+- Contrainte `uq_cot_cycle_membre` respectée : 1 cotisation max par membre par sous-cycle.
+- Un sous-cycle manqué = aucune cotisation pour cette période (aucune pénalité).
+
+### Clôture sous-cycles intermédiaires
+
+Flux : EN_COURS → TERMINE, EN_ATTENTE → EN_RETARD, sous-cycle suivant → EN_COURS.
+Aucune distribution. `montantJackpot` = somme des VALIDE du sous-cycle. Commission = 0.
+
+### Clôture finale (dernier sous-cycle)
+
+Détection automatique : aucun cycle EN_ATTENTE restant.
+
+Calcul `computeFinalDistribution()` :
+1. Somme des cotisations VALIDEES par membre (tous sous-cycles confondus)
+2. Commission `POURCENTAGE_JACKPOT` : prélevée proportionnellement à la mise de chaque membre
+3. Commission `FRAIS_FIXES_PAR_CYCLE` : répartie proportionnellement au montant cotisé
+4. Commission `FRAIS_ADHESION` : ignorée (ne touche pas le jackpot)
+5. `montantNet` du dernier cycle = cagnotte totale - commission totale (mise à jour)
+
+Réponse : `CycleResponse.distributionParMembre` (liste `MembreDistributionInfo` : montantCotise, montantCommission, montantNet).
+
+Notifications WhatsApp : un message individuel par membre + résumé admin.
 
 ---
 

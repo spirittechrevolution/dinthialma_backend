@@ -21,12 +21,16 @@ import com.africa.dinthialma_backend.contribution.repository.CotisationRepositor
 import com.africa.dinthialma_backend.contribution.service.interfaces.CotisationService;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
+import com.africa.dinthialma_backend.notification.codeList.NotificationType;
 import com.africa.dinthialma_backend.notification.service.WhatsappService;
+import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
+import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -51,6 +55,7 @@ public class CotisationServiceImpl implements CotisationService {
   private final UserRoleAssignmentRepository roleAssignmentRepository;
   private final AuditService auditService;
   private final WhatsappService whatsappService;
+  private final NotificationService notificationService;
 
   // ─── Enregistrement ──────────────────────────────────────────────────────
 
@@ -79,6 +84,8 @@ public class CotisationServiceImpl implements CotisationService {
         cycle.getId(), membre.getId())) {
       throw new ConflictException("Vous avez déjà enregistré une cotisation pour ce cycle");
     }
+
+    validateMontantCotisation(tontine, request.getMontant());
 
     Cotisation cotisation =
         Cotisation.builder()
@@ -121,6 +128,28 @@ public class CotisationServiceImpl implements CotisationService {
     } catch (Exception e) {
       log.warn("Notif WA membre (soumission) non envoyée : {}", e.getMessage());
     }
+
+    // Notification in-app membre — confirmation de soumission
+    notificationService.notify(
+        caller.getId(),
+        NotificationType.COTISATION_SOUMISE,
+        "Cotisation soumise",
+        "Votre paiement de " + montantStr + " est en attente de validation · " + tontineName,
+        tontineId);
+
+    // Notification in-app admin — paiement reçu
+    notificationService.notify(
+        tontine.getCreePar().getId(),
+        NotificationType.PAIEMENT_RECU,
+        "Paiement reçu",
+        caller.getFirstName()
+            + " "
+            + caller.getLastName()
+            + " a payé "
+            + montantStr
+            + " · "
+            + tontineName,
+        tontineId);
 
     // Notif admin — nouvelle cotisation à valider
     try {
@@ -175,6 +204,8 @@ public class CotisationServiceImpl implements CotisationService {
       throw new ConflictException("Une cotisation existe déjà pour ce membre sur ce cycle");
     }
 
+    validateMontantCotisation(tontine, request.getMontant());
+
     Cotisation cotisation =
         Cotisation.builder()
             .tontine(tontine)
@@ -206,6 +237,16 @@ public class CotisationServiceImpl implements CotisationService {
     String ref = request.getReferenceTransaction();
     boolean isPreEnrolled = AccountStatus.PRE_ENROLLED == membre.getUser().getAccountStatus();
     int numCycle = cycle.getNumeroCycle();
+
+    // Notification in-app membre — cotisation enregistrée et validée (sauf PRE_ENROLLED)
+    if (!isPreEnrolled) {
+      notificationService.notify(
+          membre.getUser().getId(),
+          NotificationType.COTISATION_VALIDEE,
+          "Cotisation validée",
+          "Votre cotisation de " + montantStr + " a été enregistrée · " + tontineName,
+          tontineId);
+    }
 
     // Notif membre — message adapté selon le statut du compte
     try {
@@ -302,6 +343,17 @@ public class CotisationServiceImpl implements CotisationService {
         CotisationStatut.EN_ATTENTE.name(),
         CotisationStatut.VALIDE.name());
     log.info("Cotisation validée – cotisationId={} par userId={}", cotisationId, caller.getId());
+
+    // Notification in-app membre — cotisation validée
+    notificationService.notify(
+        saved.getMembre().getUser().getId(),
+        NotificationType.COTISATION_VALIDEE,
+        "Cotisation validée",
+        "Votre paiement de "
+            + saved.getMontant().toPlainString()
+            + " FCFA a été validé · "
+            + saved.getTontine().getNom(),
+        tontineId);
 
     String memberPhone = saved.getMembre().getUser().getPhone();
     String memberNom =
@@ -468,5 +520,32 @@ public class CotisationServiceImpl implements CotisationService {
 
   private boolean isSuperAdmin(User user) {
     return roleAssignmentRepository.existsByUserIdAndRole(user.getId(), UserRole.SUPER_ADMIN);
+  }
+
+  /**
+   * Valide le montant d'une cotisation selon le type de tontine.
+   *
+   * <ul>
+   *   <li>EVENEMENTIELLE + montantLibre=false → montant doit être exactement égal au montant fixe.
+   *   <li>EVENEMENTIELLE + montantLibre=true → montant >= montantMinimum si défini.
+   *   <li>ROTATIVE → aucune validation ici (montant libre en pratique).
+   * </ul>
+   */
+  private void validateMontantCotisation(Tontine tontine, BigDecimal montant)
+      throws CustomException {
+    if (tontine.getTontineType() != TontineType.EVENEMENTIELLE) return;
+
+    if (!tontine.isMontantLibre()) {
+      if (tontine.getMontant() != null && montant.compareTo(tontine.getMontant()) != 0) {
+        throw new BadRequestException(
+            "Le montant doit être exactement " + tontine.getMontant().toPlainString() + " FCFA");
+      }
+    } else if (tontine.getMontantMinimum() != null
+        && montant.compareTo(tontine.getMontantMinimum()) < 0) {
+      throw new BadRequestException(
+          "Le montant minimum de cotisation est "
+              + tontine.getMontantMinimum().toPlainString()
+              + " FCFA");
+    }
   }
 }

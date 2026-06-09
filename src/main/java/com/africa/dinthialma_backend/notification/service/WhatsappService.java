@@ -95,4 +95,100 @@ public class WhatsappService {
             + "*.";
     send(phone, message);
   }
+
+  /**
+   * Rappel cotisation EN_ATTENTE pour une tontine EVENEMENTIELLE.
+   *
+   * <p>Envoyé quotidiennement aux membres dont la cotisation est en attente de validation par
+   * l'admin.
+   */
+  public void sendEvenementielleRappelAttente(
+      String phone, String tontineName, String nomEvenement, long joursRestants, String amount) {
+    String message =
+        "💰 *Dinthialma* – Rappel cotisation\n"
+            + "Votre versement de *"
+            + amount
+            + "* pour la tontine *"
+            + tontineName
+            + "* est en attente de validation.\n"
+            + "📅 *"
+            + nomEvenement
+            + "* dans *J-"
+            + joursRestants
+            + "*\nContactez votre gestionnaire si besoin.";
+    send(phone, message);
+  }
+
+  /**
+   * Rappel de période non cotisée pour une tontine EVENEMENTIELLE.
+   *
+   * <p>Envoyé quotidiennement (hors jours clés) aux membres qui n'ont pas encore cotisé sur le
+   * sous-cycle courant.
+   */
+  public void sendEvenementielleRappelPeriode(
+      String phone,
+      String tontineName,
+      String nomEvenement,
+      long joursRestants,
+      String montantTotal) {
+    String message =
+        "⏰ *Dinthialma* – La tontine *"
+            + tontineName
+            + "* vous attend !\n"
+            + "Vous n'avez pas encore cotisé pour cette période.\n"
+            + "📅 *"
+            + nomEvenement
+            + "* dans *J-"
+            + joursRestants
+            + "*\n"
+            + "💵 Votre épargne totale à ce jour : *"
+            + montantTotal
+            + "*\nOuvrez l'application pour enregistrer votre cotisation.";
+    send(phone, message);
+  }
+
+  /**
+   * Rappel urgent J-30 / J-7 / J-3 / J-1 pour une tontine EVENEMENTIELLE.
+   *
+   * <p>Envoyé à tous les membres actifs aux jalons clés avant la date de l'événement.
+   */
+  public void sendEvenementielleUrgent(
+      String phone,
+      String tontineName,
+      String nomEvenement,
+      long joursRestants,
+      String montantTotal) {
+    String emoji;
+    String intro;
+    String suffix;
+    if (joursRestants == 1) {
+      emoji = "🔔";
+      intro = "*" + nomEvenement + "* c'est demain !";
+      suffix = "La clôture et la distribution ont lieu demain. Bonne célébration ! 🎉";
+    } else if (joursRestants == 3) {
+      emoji = "🚨";
+      intro = "*" + nomEvenement + "* dans *3 jours* !";
+      suffix = "Dernière chance de cotiser avant la clôture et la distribution. Bon courage ! 💪";
+    } else if (joursRestants == 7) {
+      emoji = "⚠️";
+      intro = "Plus que *7 jours* avant *" + nomEvenement + "* !";
+      suffix = "Pensez à enregistrer votre cotisation si ce n'est pas encore fait 🙏";
+    } else {
+      emoji = "📢";
+      intro = "Dans *" + joursRestants + " jours* : *" + nomEvenement + "* !";
+      suffix = "Continuez à cotiser régulièrement pour atteindre votre objectif 💪";
+    }
+    String message =
+        emoji
+            + " *Dinthialma* – "
+            + intro
+            + "\nTontine : *"
+            + tontineName
+            + "*\n"
+            + "💵 Votre épargne à ce jour : *"
+            + montantTotal
+            + "*\n"
+            + suffix;
+    send(phone, message);
+  }
 }

@@ -85,6 +85,7 @@ public class LoginServiceImpl implements LoginService {
       userSessionService.createOrUpdateSession(
           user, request.getClientType(), tokens.getRefreshToken(), request.getDeviceInfo());
 
+      tokens.setPinConfigured(user.getPinHash() != null);
       log.info(
           "[Login] Connexion réussie – userId={} clientType={}",
           user.getId(),

@@ -11,17 +11,22 @@ import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
+import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
+import com.africa.dinthialma_backend.notification.codeList.NotificationType;
 import com.africa.dinthialma_backend.notification.service.SchedulerService;
 import com.africa.dinthialma_backend.notification.service.WhatsappService;
+import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
+import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.dto.BeneficiaireHistoriqueResponse;
 import com.africa.dinthialma_backend.tontine.dto.CycleResponse;
+import com.africa.dinthialma_backend.tontine.dto.CycleResponse.MembreDistributionInfo;
 import com.africa.dinthialma_backend.tontine.dto.OpenCycleRequest;
 import com.africa.dinthialma_backend.tontine.dto.SelectionnerBeneficiaireRequest;
 import com.africa.dinthialma_backend.tontine.entity.CycleGagnant;
@@ -40,8 +45,11 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -49,7 +57,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Implémentation du service de gestion des cycles de tontine. */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -67,6 +74,7 @@ public class CycleServiceImpl implements CycleService {
   private final AuditService auditService;
   private final SchedulerService schedulerService;
   private final WhatsappService whatsappService;
+  private final NotificationService notificationService;
 
   // ─── Lecture ─────────────────────────────────────────────────────────────
 
@@ -118,6 +126,10 @@ public class CycleServiceImpl implements CycleService {
     Tontine tontine = findTontineById(tontineId);
     assertIsCreatorOrSuperAdmin(caller, tontine);
 
+    if (tontine.getTontineType() == TontineType.EVENEMENTIELLE) {
+      throw new BadRequestException(
+          "Une tontine événementielle gère ses cycles automatiquement – l'ouverture manuelle n'est pas disponible");
+    }
     if (tontine.getModeCycle() != ModeCycle.MANUEL) {
       throw new BadRequestException("L'ouverture manuelle n'est possible qu'en mode MANUEL");
     }
@@ -128,7 +140,6 @@ public class CycleServiceImpl implements CycleService {
       throw new BadRequestException("La date de fin doit être postérieure à la date de début");
     }
 
-    // Vérifier qu'il n'y a pas déjà un cycle EN_COURS
     if (cycleRepository
         .findByTontine_IdAndStatutAndDeletedAtIsNull(tontineId, CycleStatut.EN_COURS)
         .isPresent()) {
@@ -155,6 +166,23 @@ public class CycleServiceImpl implements CycleService {
     auditService.logCreate(caller, "cycles_tontine", saved.getId());
     log.info(
         "Cycle manuel ouvert – tontineId={} cycleId={} num={}", tontineId, saved.getId(), nextNum);
+
+    // Notification in-app à tous les membres actifs
+    membreRepository
+        .findByTontine_IdAndStatutAndDeletedAtIsNull(tontineId, MembreStatut.ACTIF)
+        .forEach(
+            m ->
+                notificationService.notify(
+                    m.getUser().getId(),
+                    NotificationType.CYCLE_OUVERT,
+                    "Cycle #" + nextNum + " ouvert",
+                    "Le cycle #"
+                        + nextNum
+                        + " de la tontine "
+                        + tontine.getNom()
+                        + " est ouvert. Vous pouvez enregistrer votre cotisation.",
+                    tontineId));
+
     return CycleResponse.from(saved);
   }
 
@@ -174,7 +202,20 @@ public class CycleServiceImpl implements CycleService {
       throw new BadRequestException("Seul un cycle EN_COURS peut être clôturé");
     }
 
-    // 1. Jackpot brut = somme des cotisations VALIDEES du cycle
+    if (tontine.getTontineType() == TontineType.EVENEMENTIELLE) {
+      return closeCycleEvenementielle(caller, tontine, tontineId, cycle);
+    }
+
+    return closeCycleRotative(caller, tontine, tontineId, cycle);
+  }
+
+  // ─── Clôture ROTATIVE ────────────────────────────────────────────────────
+
+  private CycleResponse closeCycleRotative(
+      User caller, Tontine tontine, UUID tontineId, CycleTontine cycle) throws CustomException {
+
+    UUID cycleId = cycle.getId();
+
     BigDecimal jackpot =
         cotisationRepository
             .findByCycle_IdAndStatutAndDeletedAtIsNull(cycleId, CotisationStatut.VALIDE)
@@ -182,7 +223,6 @@ public class CycleServiceImpl implements CycleService {
             .map(c -> c.getMontant() != null ? c.getMontant() : BigDecimal.ZERO)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-    // 2. Calculer les commissions actives de la tontine
     List<TontineCommission> commissions =
         commissionRepository.findByTontine_IdAndDeletedAtIsNull(tontineId);
 
@@ -195,12 +235,11 @@ public class CycleServiceImpl implements CycleService {
                     .multiply(commission.getValeur())
                     .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
             case FRAIS_FIXES_PAR_CYCLE -> commission.getValeur();
-            case FRAIS_ADHESION -> BigDecimal.ZERO; // prélevé à l'adhésion, pas sur le jackpot
+            case FRAIS_ADHESION -> BigDecimal.ZERO;
           };
       totalCommission = totalCommission.add(part);
     }
 
-    // 3. Stocker les 3 montants et clôturer
     cycle.setStatut(CycleStatut.TERMINE);
     cycle.setMontantJackpot(jackpot);
     cycle.setMontantCommission(totalCommission);
@@ -216,7 +255,6 @@ public class CycleServiceImpl implements CycleService {
         CycleStatut.EN_COURS.name(),
         CycleStatut.TERMINE.name());
 
-    // 4. Auto-assigner N gagnants selon l'ordre configuré
     List<TontineMembre> gagnantsMembres = resolveGagnants(tontine, tontineId);
     List<CycleGagnant> savedGagnants = new ArrayList<>();
 
@@ -242,9 +280,93 @@ public class CycleServiceImpl implements CycleService {
 
       cycle.setGagnants(savedGagnants);
       schedulerService.annoncerGagnants(cycle, savedGagnants);
+
+      // Notification in-app jackpot : gagnant(s) + admin
+      BigDecimal netParGagnant =
+          cycle
+              .getMontantNet()
+              .divide(BigDecimal.valueOf(savedGagnants.size()), 2, RoundingMode.HALF_UP);
+      for (CycleGagnant g : savedGagnants) {
+        String winnerName =
+            g.getMembre().getUser().getFirstName() + " " + g.getMembre().getUser().getLastName();
+        String montantStr = netParGagnant.toPlainString() + " FCFA";
+        notificationService.notify(
+            g.getMembre().getUser().getId(),
+            NotificationType.JACKPOT_DISTRIBUE,
+            "Jackpot distribué 🎉",
+            "Félicitations ! Vous recevez " + montantStr + " · " + tontine.getNom(),
+            tontineId);
+        notificationService.notify(
+            tontine.getCreePar().getId(),
+            NotificationType.JACKPOT_DISTRIBUE,
+            "Jackpot distribué",
+            winnerName + " a reçu " + montantStr + " · " + tontine.getNom(),
+            tontineId);
+      }
     }
 
-    // Passer les cotisations EN_ATTENTE restantes à EN_RETARD
+    cotisationRepository
+        .findByCycle_IdAndStatutAndDeletedAtIsNull(cycleId, CotisationStatut.EN_ATTENTE)
+        .forEach(
+            c -> {
+              c.setStatut(CotisationStatut.EN_RETARD);
+              cotisationRepository.save(c);
+              // Notification in-app admin — paiement en retard
+              notificationService.notify(
+                  tontine.getCreePar().getId(),
+                  NotificationType.PAIEMENT_EN_RETARD,
+                  "Paiement en retard",
+                  c.getMembre().getUser().getFirstName()
+                      + " "
+                      + c.getMembre().getUser().getLastName()
+                      + " n'a pas cotisé · "
+                      + tontine.getNom(),
+                  tontineId);
+            });
+
+    if (tontine.getModeCycle() == ModeCycle.AUTOMATIQUE) {
+      activateNextCycle(tontineId, cycle.getNumeroCycle() + 1);
+    }
+
+    log.info(
+        "Cycle ROTATIVE clôturé – tontineId={} cycleId={} jackpot={} commission={} net={}",
+        tontineId,
+        cycleId,
+        jackpot,
+        totalCommission,
+        jackpot.subtract(totalCommission));
+    return CycleResponse.from(cycle);
+  }
+
+  // ─── Clôture EVENEMENTIELLE ──────────────────────────────────────────────
+
+  private CycleResponse closeCycleEvenementielle(
+      User caller, Tontine tontine, UUID tontineId, CycleTontine cycle) {
+
+    UUID cycleId = cycle.getId();
+
+    BigDecimal jackpotCycle =
+        cotisationRepository
+            .findByCycle_IdAndStatutAndDeletedAtIsNull(cycleId, CotisationStatut.VALIDE)
+            .stream()
+            .map(c -> c.getMontant() != null ? c.getMontant() : BigDecimal.ZERO)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+    cycle.setStatut(CycleStatut.TERMINE);
+    cycle.setMontantJackpot(jackpotCycle);
+    cycle.setMontantCommission(BigDecimal.ZERO);
+    cycle.setMontantNet(jackpotCycle);
+    cycle.setDateRemise(LocalDate.now());
+
+    cycleRepository.save(cycle);
+    auditService.log(
+        caller,
+        "cycles_tontine",
+        cycleId,
+        "statut",
+        CycleStatut.EN_COURS.name(),
+        CycleStatut.TERMINE.name());
+
     cotisationRepository
         .findByCycle_IdAndStatutAndDeletedAtIsNull(cycleId, CotisationStatut.EN_ATTENTE)
         .forEach(
@@ -253,19 +375,210 @@ public class CycleServiceImpl implements CycleService {
               cotisationRepository.save(c);
             });
 
-    // En mode AUTOMATIQUE, passer le cycle suivant EN_ATTENTE → EN_COURS
-    if (tontine.getModeCycle() == ModeCycle.AUTOMATIQUE) {
+    // Vérifier s'il reste des cycles EN_ATTENTE
+    boolean isLastCycle =
+        cycleRepository.findByTontine_IdAndDeletedAtIsNullOrderByNumeroCycleAsc(tontineId).stream()
+            .noneMatch(c -> c.getStatut() == CycleStatut.EN_ATTENTE);
+
+    List<MembreDistributionInfo> distribution;
+
+    if (isLastCycle) {
+      // Clôture finale : calcul de la distribution totale par membre
+      List<TontineCommission> commissions =
+          commissionRepository.findByTontine_IdAndDeletedAtIsNull(tontineId);
+      List<TontineMembre> membres =
+          membreRepository.findByTontine_IdAndStatutAndDeletedAtIsNull(
+              tontineId, MembreStatut.ACTIF);
+      distribution = computeFinalDistribution(tontineId, commissions, membres);
+
+      if (!distribution.isEmpty()) {
+        BigDecimal totalCagnotte =
+            distribution.stream()
+                .map(MembreDistributionInfo::getMontantCotise)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalCommission =
+            distribution.stream()
+                .map(MembreDistributionInfo::getMontantCommission)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Mettre à jour le dernier cycle avec les totaux de toute la collecte
+        cycle.setMontantJackpot(totalCagnotte);
+        cycle.setMontantCommission(totalCommission);
+        cycle.setMontantNet(totalCagnotte.subtract(totalCommission));
+        cycleRepository.save(cycle);
+      }
+
+      notifyFinalDistribution(tontine, distribution);
+
+      // Notifications in-app distribution finale
+      for (MembreDistributionInfo dist : distribution) {
+        notificationService.notify(
+            dist.getUserId(),
+            NotificationType.DISTRIBUTION_FINALE,
+            "Distribution finale 🎉",
+            "Vous avez reçu "
+                + dist.getMontantNet().toPlainString()
+                + " FCFA · "
+                + tontine.getNom(),
+            tontineId);
+      }
+      BigDecimal cagnotteFinale =
+          distribution.stream()
+              .map(MembreDistributionInfo::getMontantCotise)
+              .reduce(BigDecimal.ZERO, BigDecimal::add);
+      notificationService.notify(
+          tontine.getCreePar().getId(),
+          NotificationType.DISTRIBUTION_FINALE,
+          "Distribution finale terminée",
+          "La tontine *"
+              + tontine.getNom()
+              + "* est clôturée. Cagnotte totale : "
+              + cagnotteFinale.toPlainString()
+              + " FCFA",
+          tontineId);
+
+      log.info(
+          "Clôture finale EVENEMENTIELLE – tontineId={} membres={} cagnotte={}",
+          tontineId,
+          distribution.size(),
+          distribution.stream()
+              .map(MembreDistributionInfo::getMontantCotise)
+              .reduce(BigDecimal.ZERO, BigDecimal::add));
+    } else {
       activateNextCycle(tontineId, cycle.getNumeroCycle() + 1);
+      distribution = null;
+      log.info(
+          "Sous-cycle EVENEMENTIELLE clôturé – tontineId={} cycleId={} num={}",
+          tontineId,
+          cycleId,
+          cycle.getNumeroCycle());
     }
 
-    log.info(
-        "Cycle clôturé – tontineId={} cycleId={} jackpot={} commission={} net={}",
-        tontineId,
-        cycleId,
-        jackpot,
-        totalCommission,
-        jackpot.subtract(totalCommission));
-    return CycleResponse.from(cycle);
+    return CycleResponse.from(cycle, distribution);
+  }
+
+  /**
+   * Calcule la distribution finale par membre sur l'ensemble des cycles d'une tontine
+   * événementielle.
+   *
+   * <p>Pour chaque membre : montantNet = somme cotisations VALIDEES - quote-part commission. La
+   * commission POURCENTAGE_JACKPOT est distribuée proportionnellement. La FRAIS_FIXES_PAR_CYCLE est
+   * répartie proportionnellement à la mise. FRAIS_ADHESION est exclue du calcul de jackpot.
+   */
+  private List<MembreDistributionInfo> computeFinalDistribution(
+      UUID tontineId, List<TontineCommission> commissions, List<TontineMembre> membres) {
+
+    List<Cotisation> allValid =
+        cotisationRepository.findByTontine_IdAndStatutAndDeletedAtIsNull(
+            tontineId, CotisationStatut.VALIDE);
+
+    Map<UUID, BigDecimal> totalParMembre = new HashMap<>();
+    for (Cotisation c : allValid) {
+      totalParMembre.merge(c.getMembre().getId(), c.getMontant(), BigDecimal::add);
+    }
+
+    if (totalParMembre.isEmpty()) return List.of();
+
+    BigDecimal totalCagnotte =
+        totalParMembre.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+
+    // Taux de commission global (POURCENTAGE) et frais fixes totaux
+    BigDecimal tauxPct = BigDecimal.ZERO;
+    BigDecimal fraisFixesTotal = BigDecimal.ZERO;
+    for (TontineCommission comm : commissions) {
+      switch (comm.getType()) {
+        case POURCENTAGE_JACKPOT -> tauxPct = tauxPct.add(comm.getValeur());
+        case FRAIS_FIXES_PAR_CYCLE -> fraisFixesTotal = fraisFixesTotal.add(comm.getValeur());
+        case FRAIS_ADHESION -> {
+          /* ignoré */
+        }
+      }
+    }
+
+    final BigDecimal finalTauxPct = tauxPct;
+    final BigDecimal finalFraisFixesTotal = fraisFixesTotal;
+    final BigDecimal finalTotalCagnotte =
+        totalCagnotte.compareTo(BigDecimal.ZERO) == 0 ? BigDecimal.ONE : totalCagnotte;
+
+    Map<UUID, TontineMembre> membreMap =
+        membres.stream().collect(Collectors.toMap(TontineMembre::getId, m -> m));
+
+    List<MembreDistributionInfo> result = new ArrayList<>();
+    for (Map.Entry<UUID, BigDecimal> entry : totalParMembre.entrySet()) {
+      UUID membreId = entry.getKey();
+      BigDecimal montantCotise = entry.getValue();
+      TontineMembre m = membreMap.get(membreId);
+      if (m == null) continue;
+
+      BigDecimal commissionPct =
+          montantCotise
+              .multiply(finalTauxPct)
+              .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+
+      BigDecimal commissionFixePart =
+          finalFraisFixesTotal.compareTo(BigDecimal.ZERO) == 0
+              ? BigDecimal.ZERO
+              : finalFraisFixesTotal
+                  .multiply(montantCotise)
+                  .divide(finalTotalCagnotte, 2, RoundingMode.HALF_UP);
+
+      BigDecimal commissionTotale = commissionPct.add(commissionFixePart);
+      BigDecimal montantNet = montantCotise.subtract(commissionTotale);
+
+      result.add(
+          MembreDistributionInfo.builder()
+              .membreId(membreId)
+              .userId(m.getUser().getId())
+              .firstName(m.getUser().getFirstName())
+              .lastName(m.getUser().getLastName())
+              .phone(m.getUser().getPhone())
+              .montantCotise(montantCotise)
+              .montantCommission(commissionTotale)
+              .montantNet(montantNet)
+              .build());
+    }
+
+    return result;
+  }
+
+  private void notifyFinalDistribution(Tontine tontine, List<MembreDistributionInfo> distribution) {
+    for (MembreDistributionInfo dist : distribution) {
+      try {
+        whatsappService.send(
+            dist.getPhone(),
+            "🎉 *Dinthialma* – La tontine événementielle *"
+                + tontine.getNom()
+                + "* est clôturée !\n"
+                + "Vous recevez *"
+                + dist.getMontantNet().toPlainString()
+                + " FCFA* (votre mise totale : "
+                + dist.getMontantCotise().toPlainString()
+                + " FCFA).");
+      } catch (Exception e) {
+        log.warn(
+            "Notif WA distribution finale non envoyée pour {} : {}",
+            dist.getPhone(),
+            e.getMessage());
+      }
+    }
+    // Notif admin : résumé de la clôture
+    try {
+      BigDecimal cagnotteTotal =
+          distribution.stream()
+              .map(MembreDistributionInfo::getMontantCotise)
+              .reduce(BigDecimal.ZERO, BigDecimal::add);
+      whatsappService.send(
+          tontine.getCreePar().getPhone(),
+          "✅ *Dinthialma* – Tontine *"
+              + tontine.getNom()
+              + "* clôturée avec succès.\n"
+              + "Cagnotte totale : *"
+              + cagnotteTotal.toPlainString()
+              + " FCFA* distribuée entre "
+              + distribution.size()
+              + " membre(s).");
+    } catch (Exception e) {
+      log.warn("Notif WA admin (clôture finale) non envoyée : {}", e.getMessage());
+    }
   }
 
   // ─── Sélection bénéficiaire jackpot ──────────────────────────────────────
@@ -278,6 +591,11 @@ public class CycleServiceImpl implements CycleService {
     User caller = findUserByKeycloakId(keycloakId);
     Tontine tontine = findTontineById(tontineId);
     assertIsCreatorOrSuperAdmin(caller, tontine);
+
+    if (tontine.getTontineType() == TontineType.EVENEMENTIELLE) {
+      throw new BadRequestException(
+          "Les tontines événementielles n'ont pas de bénéficiaire unique – chaque membre récupère sa mise");
+    }
 
     CycleTontine cycle = findCycleById(tontineId, cycleId);
 
@@ -310,7 +628,6 @@ public class CycleServiceImpl implements CycleService {
     List<TontineMembre> choisis;
 
     if (request.getMembreIds() != null && !request.getMembreIds().isEmpty()) {
-      // Désignation manuelle explicite
       choisis = new ArrayList<>();
       for (UUID membreId : request.getMembreIds()) {
         TontineMembre m =
@@ -325,7 +642,6 @@ public class CycleServiceImpl implements CycleService {
         choisis.add(m);
       }
     } else {
-      // Sélection aléatoire
       List<TontineMembre> shuffled = new ArrayList<>(eligibles);
       Collections.shuffle(shuffled);
       choisis = shuffled.stream().limit(nombreGagnants).toList();
@@ -358,7 +674,6 @@ public class CycleServiceImpl implements CycleService {
 
     schedulerService.annoncerGagnants(cycle, savedGagnants);
 
-    // Confirmation à l'admin
     try {
       String noms =
           choisis.stream()
@@ -383,18 +698,6 @@ public class CycleServiceImpl implements CycleService {
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
-  /**
-   * Sélectionne automatiquement les N prochains gagnants selon l'ordre configuré.
-   *
-   * <ul>
-   *   <li>{@code ROTATION} → N membres ACTIF sans jackpot avec les plus petits {@code ordreJackpot}
-   *       (null en dernier, tri secondaire par {@code createdAt}).
-   *   <li>{@code ALEATOIRE} → tirage aléatoire de N membres ACTIF sans jackpot.
-   *   <li>{@code MANUEL} → liste vide ; l'admin désigne via PATCH.
-   * </ul>
-   *
-   * <p>N = {@code tontine.nombreGagnants}. Si moins de N éligibles, tous sont retournés.
-   */
   private List<TontineMembre> resolveGagnants(Tontine tontine, UUID tontineId) {
     List<TontineMembre> eligibles =
         membreRepository

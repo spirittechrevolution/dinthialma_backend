@@ -18,6 +18,7 @@ import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
+import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.dto.CreateTontineRequest;
 import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.dto.UpdateTontineRequest;
@@ -26,6 +27,7 @@ import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import com.africa.dinthialma_backend.tontine.service.interfaces.TontineService;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -40,17 +42,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Implémentation du service tontine.
- *
- * <p>Règles d'accès :
- *
- * <ul>
- *   <li>Création → tout utilisateur authentifié
- *   <li>Modification / suppression / activation → créateur ou SUPER_ADMIN
- *   <li>Lecture → membre de la tontine, créateur, SUPER_ADMIN
- * </ul>
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -72,29 +63,39 @@ public class TontineServiceImpl implements TontineService {
       throws CustomException {
 
     User caller = findUserByKeycloakId(keycloakId);
+    TontineType type =
+        request.getTontineType() != null ? request.getTontineType() : TontineType.ROTATIVE;
+
+    validateCreateRequest(request, type);
+
+    BigDecimal montantEffectif = resolveMontant(request, type);
 
     Tontine tontine =
         Tontine.builder()
+            .tontineType(type)
             .nom(request.getNom().trim())
             .description(request.getDescription())
-            .montant(request.getMontant())
+            .montant(montantEffectif)
             .frequence(request.getFrequence())
-            .ordreBeneficiaire(request.getOrdreBeneficiaire())
-            .modeCycle(request.getModeCycle())
+            .ordreBeneficiaire(
+                type == TontineType.EVENEMENTIELLE ? null : request.getOrdreBeneficiaire())
+            .modeCycle(
+                type == TontineType.EVENEMENTIELLE ? ModeCycle.AUTOMATIQUE : request.getModeCycle())
             .dateDebut(request.getDateDebut())
-            .nombreMembres(request.getNombreMembres())
+            .nombreMembres(request.getNombreMembres() != null ? request.getNombreMembres() : 0)
             .nombreGagnants(request.getNombreGagnants())
             .statut(TontineStatut.BROUILLON)
             .creePar(caller)
+            .dateEcheance(type == TontineType.EVENEMENTIELLE ? request.getDateEcheance() : null)
+            .nomEvenement(type == TontineType.EVENEMENTIELLE ? request.getNomEvenement() : null)
+            .montantLibre(type == TontineType.EVENEMENTIELLE && request.isMontantLibre())
+            .montantMinimum(type == TontineType.EVENEMENTIELLE ? request.getMontantMinimum() : null)
             .build();
 
     Tontine saved = tontineRepository.save(tontine);
-
-    // Attribuer le rôle ADMIN si l'utilisateur ne l'a pas encore
     assignRoleIfAbsent(caller, UserRole.ADMIN);
-
     auditService.logCreate(caller, "tontines", saved.getId());
-    log.info("Tontine créée – id={} par userId={}", saved.getId(), caller.getId());
+    log.info("Tontine créée – id={} type={} par userId={}", saved.getId(), type, caller.getId());
     return TontineResponse.from(saved, 0);
   }
 
@@ -216,6 +217,33 @@ public class TontineServiceImpl implements TontineService {
       tontine.setNombreGagnants(request.getNombreGagnants());
     }
 
+    // Champs EVENEMENTIELLE
+    if (tontine.getTontineType() == TontineType.EVENEMENTIELLE) {
+      if (request.getDateEcheance() != null) {
+        if (!request.getDateEcheance().isAfter(tontine.getDateDebut())) {
+          throw new BadRequestException(
+              "La date d'échéance doit être postérieure à la date de début");
+        }
+        auditService.log(
+            caller,
+            "tontines",
+            id,
+            "dateEcheance",
+            tontine.getDateEcheance() != null ? tontine.getDateEcheance().toString() : null,
+            request.getDateEcheance().toString());
+        tontine.setDateEcheance(request.getDateEcheance());
+      }
+      if (request.getNomEvenement() != null) {
+        tontine.setNomEvenement(request.getNomEvenement());
+      }
+      if (request.getMontantMinimum() != null) {
+        tontine.setMontantMinimum(request.getMontantMinimum());
+      }
+      if (request.getMontantLibre() != null) {
+        tontine.setMontantLibre(request.getMontantLibre());
+      }
+    }
+
     Tontine saved = tontineRepository.save(tontine);
     int nombreMembres = (int) membreRepository.countByTontine_IdAndDeletedAtIsNull(id);
     return TontineResponse.from(saved, nombreMembres);
@@ -256,8 +284,11 @@ public class TontineServiceImpl implements TontineService {
     String oldStatut = tontine.getStatut().name();
     tontine.setStatut(TontineStatut.ACTIVE);
 
-    // En mode AUTOMATIQUE, générer les cycles si pas encore générés
-    if (tontine.getModeCycle() == ModeCycle.AUTOMATIQUE
+    if (tontine.getTontineType() == TontineType.EVENEMENTIELLE) {
+      if (!cycleRepository.existsByTontine_IdAndDeletedAtIsNull(id)) {
+        generateEvenementielleSubCycles(tontine);
+      }
+    } else if (tontine.getModeCycle() == ModeCycle.AUTOMATIQUE
         && !cycleRepository.existsByTontine_IdAndDeletedAtIsNull(id)) {
       generateCycles(tontine);
     }
@@ -265,7 +296,7 @@ public class TontineServiceImpl implements TontineService {
     Tontine saved = tontineRepository.save(tontine);
     int nombreMembres = (int) membreRepository.countByTontine_IdAndDeletedAtIsNull(id);
     auditService.log(caller, "tontines", id, "statut", oldStatut, TontineStatut.ACTIVE.name());
-    log.info("Tontine activée – id={}", id);
+    log.info("Tontine activée – id={} type={}", id, tontine.getTontineType());
     return TontineResponse.from(saved, nombreMembres);
   }
 
@@ -295,27 +326,8 @@ public class TontineServiceImpl implements TontineService {
     return TontineResponse.from(saved, nombreMembres);
   }
 
-  // ─── Génération automatique des cycles ──────────────────────────────────
+  // ─── Génération automatique des cycles (ROTATIVE) ────────────────────────
 
-  /**
-   * Génère tous les cycles d'une tontine (mode {@code AUTOMATIQUE}).
-   *
-   * <p>Ordre des bénéficiaires :
-   *
-   * <ul>
-   *   <li>{@code FIXE} : membres triés par {@code ordre_jackpot}
-   *   <li>{@code ALEATOIRE} : mélange aléatoire, puis attribution des {@code ordre_jackpot}
-   * </ul>
-   */
-  /**
-   * Génère les cycles d'une tontine en mode AUTOMATIQUE.
-   *
-   * <p>Nombre de cycles = ceil(membres / nombreGagnants). Les gagnants ne sont pas pré-assignés :
-   * ils sont désignés automatiquement à la clôture de chaque cycle selon {@code ordreBeneficiaire}.
-   *
-   * <p>Pour ALEATOIRE : l'ordre aléatoire est tiré une fois ici (ordreJackpot attribué), puis
-   * appliqué à la clôture.
-   */
   private void generateCycles(Tontine tontine) {
     List<TontineMembre> membres =
         new ArrayList<>(
@@ -355,27 +367,105 @@ public class TontineServiceImpl implements TontineService {
     }
 
     log.info(
-        "Cycles générés – tontineId={} membres={} gagnants/cycle={} cycles={}",
+        "Cycles ROTATIVE générés – tontineId={} membres={} gagnants/cycle={} cycles={}",
         tontine.getId(),
         membres.size(),
         n,
         nombreCycles);
   }
 
+  // ─── Génération des sous-cycles (EVENEMENTIELLE) ─────────────────────────
+
   /**
-   * Calcule la date de fin d'un cycle selon la fréquence.
+   * Génère les sous-cycles informatifs d'une tontine événementielle.
    *
-   * @param start date de début
-   * @param frequence code fréquence (HEBDOMADAIRE, BIMENSUEL, MENSUEL, TRIMESTRIEL…)
-   * @return date de fin (inclusive)
+   * <p>Chaque sous-cycle couvre une période selon la fréquence. Le dernier se termine exactement
+   * sur {@code dateEcheance}. La fréquence est utilisée pour planifier les rappels WhatsApp.
    */
+  private void generateEvenementielleSubCycles(Tontine tontine) {
+    LocalDate current = tontine.getDateDebut();
+    LocalDate echeance = tontine.getDateEcheance();
+    int cycleNum = 1;
+
+    while (!current.isAfter(echeance)) {
+      LocalDate normalEnd = calculateEndDate(current, tontine.getFrequence());
+      LocalDate actualEnd = normalEnd.isAfter(echeance) ? echeance : normalEnd;
+
+      CycleTontine cycle =
+          CycleTontine.builder()
+              .tontine(tontine)
+              .numeroCycle(cycleNum)
+              .dateDebut(current)
+              .dateFin(actualEnd)
+              .statut(cycleNum == 1 ? CycleStatut.EN_COURS : CycleStatut.EN_ATTENTE)
+              .build();
+
+      cycleRepository.save(cycle);
+      current = actualEnd.plusDays(1);
+      cycleNum++;
+    }
+
+    log.info(
+        "Sous-cycles EVENEMENTIELLE générés – tontineId={} nbCycles={} echéance={}",
+        tontine.getId(),
+        cycleNum - 1,
+        echeance);
+  }
+
   private LocalDate calculateEndDate(LocalDate start, String frequence) {
     return switch (frequence.toUpperCase()) {
+      case "JOURNALIERE" -> start;
       case "HEBDOMADAIRE" -> start.plusDays(6);
       case "BIMENSUEL" -> start.plusDays(13);
       case "TRIMESTRIEL" -> start.plusMonths(3).minusDays(1);
       default -> start.plusMonths(1).minusDays(1); // MENSUEL par défaut
     };
+  }
+
+  // ─── Validation création ─────────────────────────────────────────────────
+
+  private void validateCreateRequest(CreateTontineRequest request, TontineType type)
+      throws CustomException {
+    if (type == TontineType.EVENEMENTIELLE) {
+      if (request.getDateEcheance() == null) {
+        throw new BadRequestException(
+            "La date d'échéance est obligatoire pour une tontine événementielle");
+      }
+      if (!request.getDateEcheance().isAfter(request.getDateDebut())) {
+        throw new BadRequestException(
+            "La date d'échéance doit être postérieure à la date de début");
+      }
+      if (!request.isMontantLibre()
+          && (request.getMontant() == null
+              || request.getMontant().compareTo(BigDecimal.ZERO) <= 0)) {
+        throw new BadRequestException(
+            "Le montant fixe de cotisation est obligatoire quand montantLibre=false");
+      }
+    } else {
+      // ROTATIVE
+      if (request.getOrdreBeneficiaire() == null || request.getOrdreBeneficiaire().isBlank()) {
+        throw new BadRequestException(
+            "L'ordre des bénéficiaires est obligatoire pour une tontine rotative");
+      }
+      if (request.getMontant() == null || request.getMontant().compareTo(BigDecimal.ZERO) <= 0) {
+        throw new BadRequestException(
+            "Le montant de cotisation est obligatoire pour une tontine rotative");
+      }
+      if (request.getNombreMembres() == null || request.getNombreMembres() < 2) {
+        throw new BadRequestException(
+            "Le nombre de membres doit être au minimum 2 pour une tontine rotative");
+      }
+      if (request.getModeCycle() == null) {
+        throw new BadRequestException("Le mode de cycle est obligatoire pour une tontine rotative");
+      }
+    }
+  }
+
+  private BigDecimal resolveMontant(CreateTontineRequest request, TontineType type) {
+    if (type == TontineType.EVENEMENTIELLE && request.isMontantLibre()) {
+      return request.getMontantMinimum() != null ? request.getMontantMinimum() : BigDecimal.ZERO;
+    }
+    return request.getMontant();
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -392,7 +482,6 @@ public class TontineServiceImpl implements TontineService {
         .orElseThrow(() -> new NotFoundException(ResponseMessageConstants.TONTINE_NOT_FOUND));
   }
 
-  /** Vérifie que l'appelant est le créateur de la tontine ou SUPER_ADMIN. */
   private void assertIsCreatorOrSuperAdmin(User caller, Tontine tontine) throws CustomException {
     if (isSuperAdmin(caller)) return;
     if (!tontine.getCreePar().getId().equals(caller.getId())) {
@@ -400,7 +489,6 @@ public class TontineServiceImpl implements TontineService {
     }
   }
 
-  /** Vérifie que l'appelant peut accéder à la tontine (est membre, créateur ou SUPER_ADMIN). */
   private void assertCanAccess(User caller, Tontine tontine) throws CustomException {
     if (isSuperAdmin(caller)) return;
     if (tontine.getCreePar().getId().equals(caller.getId())) return;
@@ -413,12 +501,6 @@ public class TontineServiceImpl implements TontineService {
     return roleAssignmentRepository.existsByUserIdAndRole(user.getId(), UserRole.SUPER_ADMIN);
   }
 
-  /**
-   * Assigne un rôle Keycloak à un utilisateur s'il ne l'a pas déjà.
-   *
-   * <p>En cas d'échec Keycloak (indisponibilité), enregistre tout de même l'attribution en base
-   * avec {@code syncedToKeycloak = false} pour synchronisation ultérieure.
-   */
   private void assignRoleIfAbsent(User user, UserRole role) {
     if (roleAssignmentRepository.existsByUserIdAndRole(user.getId(), role)) return;
 

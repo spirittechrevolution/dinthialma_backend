@@ -88,4 +88,14 @@ public interface CotisationRepository extends JpaRepository<Cotisation, UUID> {
 
   /** Cotisations enregistrées depuis une date (pour activité récente). */
   long countByCreatedAtGreaterThanEqualAndDeletedAtIsNull(LocalDateTime since);
+
+  /** Montant total des cotisations VALIDÉES d'un membre dans une tontine (tous cycles). */
+  @Query(
+      "SELECT COALESCE(SUM(c.montant), 0) FROM Cotisation c"
+          + " WHERE c.tontine.id = :tontineId"
+          + "   AND c.membre.id = :membreId"
+          + "   AND c.statut = 'VALIDE'"
+          + "   AND c.deletedAt IS NULL")
+  BigDecimal sumMontantValideByTontineAndMembre(
+      @Param("tontineId") UUID tontineId, @Param("membreId") UUID membreId);
 }
