@@ -77,6 +77,8 @@ services:
       # KEYCLOAK_ISSUER_URI doit correspondre exactement au claim "iss" des tokens
       # Keycloak émet des tokens avec KC_HOSTNAME comme base → URL publique obligatoire
       KEYCLOAK_ISSUER_URI: https://${KEYCLOAK_DOMAIN}/realms/${KEYCLOAK_REALM}
+      KEYCLOAK_ADMIN_USER: ${KEYCLOAK_ADMIN_USER}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       # WhatsApp – OpenWA (interne)
       OPENWA_API_URL: http://openwa:3000
       OPENWA_MOCK: ${OPENWA_MOCK:-false}
