@@ -158,10 +158,18 @@ public class KeycloakAuthServiceImpl implements KeycloakAuthService {
     userRep.setLastName(request.getLastName());
     userRep.setEnabled(true);
     userRep.setEmailVerified(true);
+    // Keycloak 26 ajoute VERIFY_PROFILE automatiquement si User Profile est actif dans le realm.
+    // On vide explicitement les required actions pour éviter le blocage "Account is not fully set
+    // up".
+    userRep.setRequiredActions(List.of());
 
-    if (request.getEmail() != null && !request.getEmail().isBlank()) {
-      userRep.setEmail(request.getEmail());
-    }
+    // Keycloak 26 requiert un email dans le User Profile même pour les comptes sans email.
+    // On génère un placeholder unique basé sur le numéro pour éviter le blocage au login.
+    String email =
+        (request.getEmail() != null && !request.getEmail().isBlank())
+            ? request.getEmail()
+            : request.getPhone() + "@dinthialma.placeholder";
+    userRep.setEmail(email);
 
     // Attribut custom "phone" – déclaré dans Realm settings → User profile
     userRep.setAttributes(Map.of("phone", List.of(request.getPhone())));
@@ -262,6 +270,78 @@ public class KeycloakAuthServiceImpl implements KeycloakAuthService {
       log.error("Échec suppression utilisateur Keycloak {} : {}", keycloakId, e.getMessage());
       throw new CustomException(
           HttpStatus.BAD_GATEWAY, "Impossible de supprimer l'utilisateur dans l'IAM");
+    }
+  }
+
+  @Override
+  public void disableUser(String keycloakId) throws CustomException {
+    log.debug("Désactivation utilisateur Keycloak : keycloakId={}", keycloakId);
+    try {
+      UserRepresentation userRep =
+          keycloakAdminClient
+              .realm(keycloakProperties.getRealm())
+              .users()
+              .get(keycloakId)
+              .toRepresentation();
+      userRep.setEnabled(false);
+      keycloakAdminClient
+          .realm(keycloakProperties.getRealm())
+          .users()
+          .get(keycloakId)
+          .update(userRep);
+      log.info("Utilisateur Keycloak désactivé : keycloakId={}", keycloakId);
+    } catch (Exception e) {
+      log.error("Échec désactivation Keycloak {} : {}", keycloakId, e.getMessage());
+      throw new CustomException(
+          HttpStatus.BAD_GATEWAY, "Impossible de désactiver le compte dans l'IAM");
+    }
+  }
+
+  @Override
+  public void enableUser(String keycloakId) throws CustomException {
+    log.debug("Réactivation utilisateur Keycloak : keycloakId={}", keycloakId);
+    try {
+      UserRepresentation userRep =
+          keycloakAdminClient
+              .realm(keycloakProperties.getRealm())
+              .users()
+              .get(keycloakId)
+              .toRepresentation();
+      userRep.setEnabled(true);
+      keycloakAdminClient
+          .realm(keycloakProperties.getRealm())
+          .users()
+          .get(keycloakId)
+          .update(userRep);
+      log.info("Utilisateur Keycloak réactivé : keycloakId={}", keycloakId);
+    } catch (Exception e) {
+      log.error("Échec réactivation Keycloak {} : {}", keycloakId, e.getMessage());
+      throw new CustomException(
+          HttpStatus.BAD_GATEWAY, "Impossible de réactiver le compte dans l'IAM");
+    }
+  }
+
+  @Override
+  public void removeRole(String keycloakId, String roleName) throws CustomException {
+    log.debug("Retrait du rôle '{}' de keycloakId={}", roleName, keycloakId);
+    try {
+      RoleRepresentation roleRep =
+          keycloakAdminClient
+              .realm(keycloakProperties.getRealm())
+              .roles()
+              .get(roleName)
+              .toRepresentation();
+      keycloakAdminClient
+          .realm(keycloakProperties.getRealm())
+          .users()
+          .get(keycloakId)
+          .roles()
+          .realmLevel()
+          .remove(List.of(roleRep));
+      log.info("Rôle '{}' retiré de keycloakId={}", roleName, keycloakId);
+    } catch (Exception e) {
+      log.error("Échec retrait rôle '{}' de {} : {}", roleName, keycloakId, e.getMessage());
+      throw new CustomException(HttpStatus.BAD_GATEWAY, "Impossible de retirer le rôle dans l'IAM");
     }
   }
 

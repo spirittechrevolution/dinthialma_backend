@@ -1,0 +1,210 @@
+# ===================================================================
+# Dinthialma – Compose PRODUCTION (Contabo VPS)
+# ===================================================================
+#
+# Prérequis sur le serveur (fait une seule fois) :
+#   docker network create proxy
+#   cd /opt/infra && docker compose up -d   ← Traefik + Keycloak + PostgreSQL + pgAdmin
+#
+# Structure attendue sur le serveur :
+#   /opt/dinthialma/
+#   ├── backend/    ← ce repo (git clone)
+#   └── frontend/   ← dinthialma_frontend (git clone)
+#
+# Démarrage :
+#   cd /opt/dinthialma/backend
+#   docker compose -f docker/docker-compose.prod.yml --env-file docker/.env.prod up -d --build
+#
+# Monitoring (optionnel) :
+#   docker compose -f docker/docker-compose.prod.yml --env-file docker/.env.prod \
+#     --profile monitoring up -d
+#
+# Service            | URL publique
+# —————————————————  | —————————————————————————————
+# Frontend           | https://app.DOMAIN
+# API                | https://api.DOMAIN
+# WhatsApp (OpenWA)  | interne uniquement
+# Grafana            | https://grafana.DOMAIN (profil monitoring)
+# ===================================================================
+
+services:
+
+  # ─────────────────────────────────────────────────────────────────
+  # Frontend React/Vite – image buildée depuis ../frontend
+  # ─────────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: https://api.${DOMAIN}
+    image: ${DOCKER_HUB_USERNAME}/dinthialma-frontend:${FRONTEND_TAG:-latest}
+    container_name: dinthialma-frontend-prod
+    restart: unless-stopped
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dinthialma-front.rule=Host(`app.${DOMAIN}`)
+      - traefik.http.routers.dinthialma-front.entrypoints=websecure
+      - traefik.http.routers.dinthialma-front.tls.certresolver=letsencrypt
+      - traefik.http.services.dinthialma-front.loadbalancer.server.port=80
+
+  # ─────────────────────────────────────────────────────────────────
+  # Backend Spring Boot – Dinthialma API
+  #   • PostgreSQL + Keycloak atteints via réseau infra-internal
+  #   • OpenWA atteint via réseau dinthialma-internal
+  # ─────────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: ${DOCKER_HUB_USERNAME}/dinthialma-backend:${BACKEND_TAG:-latest}
+    container_name: dinthialma-backend-prod
+    restart: unless-stopped
+    environment:
+      # Base de données (postgres-shared via infra-internal)
+      DB_HOST: postgres-shared
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB}
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      # Keycloak – appels admin via réseau interne (plus rapide)
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      # KEYCLOAK_ISSUER_URI doit correspondre exactement au claim "iss" des tokens
+      # Keycloak émet des tokens avec KC_HOSTNAME comme base → URL publique obligatoire
+      KEYCLOAK_ISSUER_URI: https://${KEYCLOAK_DOMAIN}/realms/${KEYCLOAK_REALM}
+      # WhatsApp – OpenWA (interne)
+      OPENWA_API_URL: http://openwa:3000
+      OPENWA_MOCK: ${OPENWA_MOCK:-false}
+      # SMS – LAfricaMobile
+      LAM_SMS_URL: ${LAM_SMS_URL}
+      LAM_ACCOUNT_ID: ${LAM_ACCOUNT_ID}
+      LAM_PASSWORD: ${LAM_PASSWORD}
+      LAM_SENDER: ${LAM_SENDER}
+      # Sécurité
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
+      # Bootstrap Super Admin (désactiver après le 1er démarrage)
+      BOOTSTRAP_ENABLED: ${BOOTSTRAP_ENABLED:-false}
+      BOOTSTRAP_SUPER_ADMIN_PHONE: ${BOOTSTRAP_SUPER_ADMIN_PHONE}
+      # Runtime
+      SERVER_SERVLET_CONTEXT_PATH: /api
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: docker
+    networks:
+      - proxy
+      - infra-internal
+      - dinthialma-internal
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dinthialma-api.rule=Host(`api.${DOMAIN}`)
+      - traefik.http.routers.dinthialma-api.entrypoints=websecure
+      - traefik.http.routers.dinthialma-api.tls.certresolver=letsencrypt
+      - traefik.http.services.dinthialma-api.loadbalancer.server.port=8080
+    depends_on:
+      - openwa
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  # ─────────────────────────────────────────────────────────────────
+  # OpenWA (wa-automate) – API WhatsApp
+  #   1re utilisation : docker compose ... logs -f dinthialma-openwa-prod
+  #                     → scanner le QR code affiché dans les logs
+  #   Session persistée dans le volume openwa_sessions
+  # ─────────────────────────────────────────────────────────────────
+  openwa:
+    build:
+      context: ./openwa
+      dockerfile: Dockerfile
+    image: ${DOCKER_HUB_USERNAME}/dinthialma-openwa:${OPENWA_TAG:-latest}
+    container_name: dinthialma-openwa-prod
+    restart: on-failure:5
+    volumes:
+      - openwa_sessions:/sessions
+    networks:
+      - dinthialma-internal
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ─────────────────────────────────────────────────────────────────
+  # Prometheus – Métriques Spring Boot Actuator
+  #   Lancer : docker compose ... --profile monitoring up -d
+  # ─────────────────────────────────────────────────────────────────
+  prometheus:
+    profiles: [monitoring]
+    image: prom/prometheus:latest
+    container_name: dinthialma-prometheus-prod
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.vps.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    networks:
+      - dinthialma-internal
+
+  # ─────────────────────────────────────────────────────────────────
+  # Grafana – Dashboards de monitoring
+  # ─────────────────────────────────────────────────────────────────
+  grafana:
+    profiles: [monitoring]
+    image: grafana/grafana:latest
+    container_name: dinthialma-grafana-prod
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+      GF_SERVER_ROOT_URL: https://grafana.${DOMAIN}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - dinthialma-internal
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dinthialma-grafana.rule=Host(`grafana.${DOMAIN}`)
+      - traefik.http.routers.dinthialma-grafana.entrypoints=websecure
+      - traefik.http.routers.dinthialma-grafana.tls.certresolver=letsencrypt
+      - traefik.http.services.dinthialma-grafana.loadbalancer.server.port=3000
+    depends_on:
+      - prometheus
+
+# ─── Volumes ──────────────────────────────────────────────────────
+volumes:
+  openwa_sessions:
+    name: dinthialma-openwa-prod-sessions
+  prometheus_data:
+    name: dinthialma-prometheus-prod-data
+  grafana_data:
+    name: dinthialma-grafana-prod-data
+
+# ─── Réseaux ──────────────────────────────────────────────────────
+networks:
+  # Réseau Traefik – créé manuellement : docker network create proxy
+  proxy:
+    external: true
+
+  # Réseau infra partagé – créé par /opt/infra/docker-compose.yml
+  # Donne accès à : postgres-shared, keycloak
+  infra-internal:
+    external: true
+
+  # Réseau interne Dinthialma : backend ↔ openwa
+  dinthialma-internal:
+    name: dinthialma-internal
+    driver: bridge
+    internal: true

@@ -16,7 +16,7 @@ import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.common.util.OtpUtils;
-import com.africa.dinthialma_backend.notification.service.SmsService;
+import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,7 +38,7 @@ public class PasswordResetServiceImpl implements PasswordResetService {
   private final UserRepository userRepository;
   private final KeycloakAuthService keycloakAuthService;
   private final UserSessionService userSessionService;
-  private final SmsService smsService;
+  private final WhatsappService whatsappService;
 
   // ─── Étape 1 : Envoi OTP (anti-énumération) ────────────────────────
 
@@ -76,7 +76,7 @@ public class PasswordResetServiceImpl implements PasswordResetService {
             .build();
 
     otpVerificationRepository.save(otp);
-    smsService.sendOtp(phone, code);
+    whatsappService.sendOtp(phone, code);
     log.info("OTP reset mot de passe envoyé au numéro : {}", phone);
   }
 

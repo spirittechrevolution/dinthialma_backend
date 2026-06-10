@@ -6,7 +6,14 @@ import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.Getter;
@@ -70,6 +77,11 @@ public class Cotisation extends BaseEntity {
   /** Note libre de l'admin ou du membre. */
   @Column(name = "note", columnDefinition = "TEXT")
   private String note;
+
+  /** Utilisateur ayant saisi la cotisation (membre ou admin). */
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "enregistre_par")
+  private User enregistrePar;
 
   /** Admin ayant validé le paiement – null si pas encore validé. */
   @ManyToOne(fetch = FetchType.LAZY)

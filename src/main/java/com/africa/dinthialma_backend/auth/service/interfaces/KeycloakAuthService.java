@@ -62,4 +62,26 @@ public interface KeycloakAuthService {
    * @return nouveaux tokens JWT
    */
   LoginResponse refreshToken(String refreshToken) throws CustomException;
+
+  /**
+   * Désactive un utilisateur dans Keycloak ({@code enabled = false}).
+   *
+   * @param keycloakId UUID Keycloak de l'utilisateur
+   */
+  void disableUser(String keycloakId) throws CustomException;
+
+  /**
+   * Réactive un utilisateur dans Keycloak ({@code enabled = true}).
+   *
+   * @param keycloakId UUID Keycloak de l'utilisateur
+   */
+  void enableUser(String keycloakId) throws CustomException;
+
+  /**
+   * Retire un rôle realm d'un utilisateur Keycloak.
+   *
+   * @param keycloakId UUID Keycloak de l'utilisateur
+   * @param roleName nom du rôle realm (ex: DINTHIALMA_ADMIN)
+   */
+  void removeRole(String keycloakId, String roleName) throws CustomException;
 }

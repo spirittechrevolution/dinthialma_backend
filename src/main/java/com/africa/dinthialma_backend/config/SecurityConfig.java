@@ -43,6 +43,10 @@ public class SecurityConfig {
     "/actuator/health",
     // Auth – endpoints publics
     "/v1/auth/login",
+    "/v1/auth/login-pin",
+    "/pin/reset",
+    "/pin/reset/send-otp",
+    "/pin/reset/verify-otp",
     "/v1/auth/login/phone",
     "/v1/auth/register/send-otp",
     "/v1/auth/register/verify-otp",
@@ -59,7 +63,7 @@ public class SecurityConfig {
   private final CustomAccessDenied customAccessDenied;
   private final CustomAuthenticationEntryPoint customAuthenticationEntryPoint;
 
-  @Value("${dinthialma.endpoints.frontend:http://localhost:3000}")
+  @Value("${dinthialma.endpoints.frontend:http://localhost:3001}")
   private String frontendUrls;
 
   @Value("${dinthialma.security.enabled:true}")

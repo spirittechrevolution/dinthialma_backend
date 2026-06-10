@@ -2,8 +2,8 @@ package com.africa.dinthialma_backend.common.util;
 
 import com.africa.dinthialma_backend.auth.dto.RequestUser;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -31,7 +31,7 @@ public class RequestHeaderParser {
       if (realmAccess != null && realmAccess.containsKey("roles")) {
         @SuppressWarnings("unchecked")
         List<String> rawRoles = (List<String>) realmAccess.get("roles");
-        roles = rawRoles.stream().collect(Collectors.toList());
+        roles = new ArrayList<>(rawRoles);
       }
 
       return new RequestUser(sub, roles);

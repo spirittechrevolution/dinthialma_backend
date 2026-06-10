@@ -150,6 +150,8 @@ services:
       BOOTSTRAP_SUPER_ADMIN_FIRST_NAME: ${BOOTSTRAP_SUPER_ADMIN_FIRST_NAME:-Super}
       BOOTSTRAP_SUPER_ADMIN_LAST_NAME: ${BOOTSTRAP_SUPER_ADMIN_LAST_NAME:-Admin}
       BOOTSTRAP_SUPER_ADMIN_PHONE: ${BOOTSTRAP_SUPER_ADMIN_PHONE:-+221000000000}
+      OPENWA_API_URL: http://openwa:3000
+      OPENWA_MOCK: ${OPENWA_MOCK:-false}
     ports:
       - "${BACKEND_PORT:-8081}:8080"
     networks:
@@ -211,6 +213,34 @@ services:
       - prometheus
 
   # ─────────────────────────────────────────────────────────────────
+  # OpenWA (wa-automate) – API WhatsApp pour les notifications
+  #   Accès API : http://localhost:3000
+  #   1ère utilisation : docker compose up openwa -d
+  #                      docker logs -f dinthialma-openwa  ← scanner le QR code
+  #   Session sauvegardée dans le volume openwa_data (persistante)
+  # ─────────────────────────────────────────────────────────────────
+  openwa:
+    build:
+      context: ./openwa
+      dockerfile: Dockerfile
+    image: dinthialma-openwa:latest
+    pull_policy: build
+    container_name: dinthialma-openwa
+    restart: on-failure:5
+    volumes:
+      - openwa_sessions:/sessions
+    ports:
+      - "${OPENWA_PORT:-3000}:3000"
+    networks:
+      - dinthialma-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ─────────────────────────────────────────────────────────────────
   # Dozzle – Visualisation des logs de tous les conteneurs
   #   Accès : http://localhost:8889
   # ─────────────────────────────────────────────────────────────────
@@ -242,6 +272,9 @@ volumes:
   grafana_data:
     driver: local
     name: dinthialma_grafana_data
+  openwa_sessions:
+    driver: local
+    name: dinthialma_openwa_sessions
 
 # ─── Réseau interne ──────────────────────────────────────────────
 networks:

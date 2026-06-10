@@ -1,7 +1,9 @@
 package com.africa.dinthialma_backend.auth.entity;
 
 import com.africa.dinthialma_backend.common.base.BaseEntity;
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import lombok.Getter;
 import lombok.NoArgsConstructor;

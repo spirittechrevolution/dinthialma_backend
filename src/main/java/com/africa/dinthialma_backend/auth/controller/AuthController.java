@@ -1,6 +1,17 @@
 package com.africa.dinthialma_backend.auth.controller;
 
-import com.africa.dinthialma_backend.auth.dto.*;
+import com.africa.dinthialma_backend.auth.dto.LoginRequest;
+import com.africa.dinthialma_backend.auth.dto.LoginResponse;
+import com.africa.dinthialma_backend.auth.dto.LogoutRequest;
+import com.africa.dinthialma_backend.auth.dto.PinLoginRequest;
+import com.africa.dinthialma_backend.auth.dto.PinResetRequest;
+import com.africa.dinthialma_backend.auth.dto.PinSetupRequest;
+import com.africa.dinthialma_backend.auth.dto.RefreshTokenRequest;
+import com.africa.dinthialma_backend.auth.dto.RegisterCompleteRequest;
+import com.africa.dinthialma_backend.auth.dto.RegisterResponse;
+import com.africa.dinthialma_backend.auth.dto.ResetPasswordByPhoneRequest;
+import com.africa.dinthialma_backend.auth.dto.SendOtpRequest;
+import com.africa.dinthialma_backend.auth.dto.VerifyOtpRequest;
 import com.africa.dinthialma_backend.auth.service.interfaces.KeycloakAuthService;
 import com.africa.dinthialma_backend.auth.service.interfaces.LoginService;
 import com.africa.dinthialma_backend.auth.service.interfaces.PasswordResetService;
@@ -43,11 +54,16 @@ public class AuthController {
   @Operation(
       summary = "Connexion par téléphone ou email + mot de passe",
       description =
-          "L'identifiant peut être le numéro de téléphone (avec ou sans +) ou l'adresse email.")
+          "L'identifiant peut être le numéro de téléphone (avec ou sans +) ou l'adresse email.\n\n"
+              + "**Compte PRE_ENROLLED** : si l'utilisateur a été ajouté à une tontine par un"
+              + " gestionnaire avant de s'inscrire, la connexion retourne HTTP 403 avec un message"
+              + " invitant à s'inscrire sur l'application.")
   @ApiResponses({
     @ApiResponse(responseCode = "200", description = "Connexion réussie – tokens JWT retournés"),
     @ApiResponse(responseCode = "401", description = "Identifiants incorrects"),
-    @ApiResponse(responseCode = "403", description = "Compte désactivé"),
+    @ApiResponse(
+        responseCode = "403",
+        description = "Compte désactivé ou compte PRE_ENROLLED non encore activé"),
   })
   public ResponseEntity<CustomResponse> login(@RequestBody @Valid LoginRequest request)
       throws CustomException {
@@ -60,14 +76,41 @@ public class AuthController {
             tokens));
   }
 
+  // ─── Refresh token ────────────────────────────────────────────────
+
+  @PostMapping("/refresh")
+  @Operation(
+      summary = "Rafraîchir les tokens JWT",
+      description = "Échange un refresh_token Keycloak valide contre de nouveaux tokens JWT.")
+  @ApiResponses({
+    @ApiResponse(responseCode = "200", description = "Nouveaux tokens retournés"),
+    @ApiResponse(responseCode = "401", description = "Refresh token invalide ou expiré"),
+  })
+  public ResponseEntity<CustomResponse> refresh(@RequestBody @Valid RefreshTokenRequest request)
+      throws CustomException {
+    LoginResponse tokens = keycloakAuthService.refreshToken(request.getRefreshToken());
+    return ResponseEntity.ok(
+        new CustomResponse(
+            Constants.Message.SUCCESS_BODY,
+            Constants.Status.OK,
+            "Token rafraîchi avec succès",
+            tokens));
+  }
+
   // ─── Déconnexion ──────────────────────────────────────────────────
 
   @PostMapping("/logout")
-  @Operation(summary = "Déconnexion – invalide la session Keycloak")
+  @Operation(
+      summary = "Déconnexion – invalide la session Keycloak et supprime la session PIN",
+      description =
+          "Révoque le refresh token côté Keycloak et supprime la session PIN en base."
+              + " `clientType` optionnel : si absent, toutes les sessions de l'utilisateur sont"
+              + " supprimées (déconnexion totale de tous les appareils).")
   @ApiResponse(responseCode = "200", description = "Déconnexion réussie")
   public ResponseEntity<CustomResponse> logout(@RequestBody @Valid LogoutRequest request)
       throws CustomException {
     keycloakAuthService.logout(request.getRefreshToken());
+    loginService.logout(request.getRefreshToken(), request.getClientType());
     return ResponseEntity.ok(
         new CustomResponse(
             Constants.Message.SUCCESS_BODY,
@@ -79,10 +122,17 @@ public class AuthController {
   // ─── Inscription ──────────────────────────────────────────────────
 
   @PostMapping("/register/send-otp")
-  @Operation(summary = "Étape 1/3 – Envoyer un OTP par SMS")
+  @Operation(
+      summary = "Étape 1/3 – Envoyer un OTP par SMS",
+      description =
+          "Envoie un code OTP au numéro fourni.\n\n"
+              + "- Numéro inconnu → nouveau compte.\n"
+              + "- Numéro **PRE_ENROLLED** (ajouté à une tontine par un gestionnaire) → OTP envoyé"
+              + " pour activer le compte. HTTP 200 dans les deux cas.\n"
+              + "- Numéro déjà inscrit (ACTIVE) → HTTP 409.")
   @ApiResponses({
     @ApiResponse(responseCode = "200", description = "OTP envoyé"),
-    @ApiResponse(responseCode = "409", description = "Téléphone déjà utilisé"),
+    @ApiResponse(responseCode = "409", description = "Téléphone déjà utilisé par un compte ACTIVE"),
   })
   public ResponseEntity<CustomResponse> sendOtp(@RequestBody @Valid SendOtpRequest request)
       throws CustomException {
@@ -113,11 +163,20 @@ public class AuthController {
   }
 
   @PostMapping("/register/complete")
-  @Operation(summary = "Étape 3/3 – Finaliser l'inscription")
+  @Operation(
+      summary = "Étape 3/3 – Finaliser l'inscription",
+      description =
+          "Crée le compte Keycloak et finalise l'enregistrement local.\n\n"
+              + "**Cas PRE_ENROLLED** : si le numéro appartient à un compte pré-inscrit par un"
+              + " gestionnaire de tontine, cette étape **active** le compte existant (keycloakId,"
+              + " firstName, lastName mis à jour, statut → ACTIVE, rôles USER + MEMBER attribués)."
+              + " Les memberships tontine déjà créés sont conservés.")
   @ApiResponses({
-    @ApiResponse(responseCode = "201", description = "Compte créé avec succès"),
+    @ApiResponse(
+        responseCode = "201",
+        description = "Compte créé (nouveau) ou activé (PRE_ENROLLED)"),
     @ApiResponse(responseCode = "400", description = "OTP non vérifié ou données invalides"),
-    @ApiResponse(responseCode = "409", description = "Téléphone déjà utilisé"),
+    @ApiResponse(responseCode = "409", description = "Téléphone déjà utilisé par un compte ACTIVE"),
   })
   public ResponseEntity<CustomResponse> completeRegistration(
       @RequestBody @Valid RegisterCompleteRequest request) throws CustomException {

@@ -97,6 +97,12 @@ public class UserSessionServiceImpl implements UserSessionService {
         userId, clientType, LocalDateTime.now());
   }
 
+  @Override
+  public Optional<UserSession> findAnyActiveSession(UUID userId) {
+    return userSessionRepository.findTopByUserIdAndExpiresAtAfterOrderByExpiresAtDesc(
+        userId, LocalDateTime.now());
+  }
+
   // ─── Révocation ───────────────────────────────────────────────────
 
   @Override

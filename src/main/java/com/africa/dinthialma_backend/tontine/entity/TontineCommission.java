@@ -2,7 +2,14 @@ package com.africa.dinthialma_backend.tontine.entity;
 
 import com.africa.dinthialma_backend.common.base.BaseEntity;
 import com.africa.dinthialma_backend.tontine.codeList.CommissionType;
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.Getter;

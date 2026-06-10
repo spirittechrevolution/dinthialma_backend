@@ -5,7 +5,15 @@ import com.africa.dinthialma_backend.common.base.BaseEntity;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
-import jakarta.persistence.*;
+import com.africa.dinthialma_backend.tontine.codeList.TontineType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -46,9 +54,9 @@ public class Tontine extends BaseEntity {
 
   /**
    * Ordre de désignation des bénéficiaires – réf. {@code la_code_list} type {@code
-   * ORDRE_BENEFICIAIRE}.
+   * ORDRE_BENEFICIAIRE}. Null pour les tontines EVENEMENTIELLE.
    */
-  @Column(name = "ordre_beneficiaire", nullable = false, length = 50)
+  @Column(name = "ordre_beneficiaire", length = 50)
   private String ordreBeneficiaire;
 
   /**
@@ -80,6 +88,45 @@ public class Tontine extends BaseEntity {
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "cree_par", nullable = false)
   private User creePar;
+
+  /** Nombre de membres qui reçoivent le jackpot à chaque cycle (défaut 1). */
+  @Column(name = "nombre_gagnants", nullable = false)
+  private int nombreGagnants = 1;
+
+  /**
+   * Type de tontine.
+   *
+   * <ul>
+   *   <li>{@link TontineType#ROTATIVE} – jackpot tournant entre membres.
+   *   <li>{@link TontineType#EVENEMENTIELLE} – épargne collective vers un événement (Tabaski,
+   *       Korité…).
+   * </ul>
+   */
+  @Enumerated(EnumType.STRING)
+  @Column(name = "tontine_type", nullable = false, length = 30)
+  private TontineType tontineType = TontineType.ROTATIVE;
+
+  /** Date cible de l'événement (EVENEMENTIELLE uniquement). */
+  @Column(name = "date_echeance")
+  private LocalDate dateEcheance;
+
+  /** Nom de l'événement cible (ex : "Tabaski 2026"). Optionnel. */
+  @Column(name = "nom_evenement", length = 200)
+  private String nomEvenement;
+
+  /**
+   * Si {@code true}, chaque membre cotise librement le montant qu'il souhaite (EVENEMENTIELLE).
+   * {@code false} = montant fixe imposé par l'admin.
+   */
+  @Column(name = "montant_libre", nullable = false)
+  private boolean montantLibre = false;
+
+  /**
+   * Plancher de cotisation en mode libre (EVENEMENTIELLE + montantLibre). Null = aucun minimum
+   * imposé.
+   */
+  @Column(name = "montant_minimum", precision = 12, scale = 2)
+  private BigDecimal montantMinimum;
 
   /** Soft delete – null = active, non-null = supprimée. */
   @Column(name = "deleted_at")

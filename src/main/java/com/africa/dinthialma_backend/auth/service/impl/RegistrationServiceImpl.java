@@ -1,5 +1,6 @@
 package com.africa.dinthialma_backend.auth.service.impl;
 
+import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
 import com.africa.dinthialma_backend.auth.codeList.UserRole;
 import com.africa.dinthialma_backend.auth.dto.RegisterCompleteRequest;
 import com.africa.dinthialma_backend.auth.dto.RegisterResponse;
@@ -20,8 +21,9 @@ import com.africa.dinthialma_backend.common.exception.ConflictException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.util.OtpUtils;
 import com.africa.dinthialma_backend.common.util.PhoneUtils;
-import com.africa.dinthialma_backend.notification.service.SmsService;
+import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,6 +37,10 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>Vérification OTP
  *   <li>Complétion (création Keycloak + base locale)
  * </ol>
+ *
+ * <p>Cas particulier : si le numéro appartient à un compte {@link AccountStatus#PRE_ENROLLED} (créé
+ * par un gestionnaire de tontine), les étapes s'enchaînent normalement mais la complétion active le
+ * compte existant au lieu d'en créer un nouveau.
  */
 @Slf4j
 @Service
@@ -45,7 +51,7 @@ public class RegistrationServiceImpl implements RegistrationService {
   private final UserRepository userRepository;
   private final UserRoleAssignmentRepository userRoleAssignmentRepository;
   private final KeycloakAuthService keycloakAuthService;
-  private final SmsService smsService;
+  private final WhatsappService whatsappService;
 
   // ─── Étape 1 : Envoi OTP ──────────────────────────────────────────
 
@@ -55,12 +61,16 @@ public class RegistrationServiceImpl implements RegistrationService {
     String phone = PhoneUtils.normalize(request.getPhone());
     log.debug("Envoi OTP inscription pour : {}", phone);
 
-    if (userRepository.existsByPhone(phone)) {
-      log.warn("Tentative d'inscription avec un téléphone déjà utilisé : {}", phone);
-      throw new ConflictException(ResponseMessageConstants.AUTH_PHONE_ALREADY_USED);
+    Optional<User> existing = userRepository.findByPhone(phone);
+    if (existing.isPresent()) {
+      AccountStatus status = existing.get().getAccountStatus();
+      // Compte PRE_ENROLLED : autoriser l'inscription pour activer le compte
+      if (status == null || status == AccountStatus.ACTIVE) {
+        log.warn("Tentative d'inscription avec un téléphone déjà utilisé : {}", phone);
+        throw new ConflictException(ResponseMessageConstants.AUTH_PHONE_ALREADY_USED);
+      }
     }
 
-    // Invalider les anciens OTP REGISTRATION en attente pour ce numéro
     otpVerificationRepository.deleteAllByPhoneAndPurpose(phone, Constants.OtpPurpose.REGISTRATION);
 
     String code = OtpUtils.generateOtp();
@@ -75,7 +85,7 @@ public class RegistrationServiceImpl implements RegistrationService {
             .build();
 
     otpVerificationRepository.save(otp);
-    smsService.sendOtp(phone, code);
+    whatsappService.sendOtp(phone, code);
 
     log.info("OTP inscription envoyé au numéro : {}", phone);
   }
@@ -118,12 +128,6 @@ public class RegistrationServiceImpl implements RegistrationService {
     String phone = PhoneUtils.normalize(request.getPhone());
     log.debug("Complétion de l'inscription pour : {}", phone);
 
-    // Double vérification du téléphone
-    if (userRepository.existsByPhone(phone)) {
-      throw new ConflictException(ResponseMessageConstants.AUTH_PHONE_ALREADY_USED);
-    }
-
-    // Vérifier que l'OTP a bien été validé (vérifié + pas consommé)
     OtpVerification otp =
         otpVerificationRepository
             .findTopByPhoneAndPurposeAndVerifiedTrueAndUsedFalseOrderByCreatedAtDesc(
@@ -131,10 +135,21 @@ public class RegistrationServiceImpl implements RegistrationService {
             .orElseThrow(
                 () -> new BadRequestException(ResponseMessageConstants.AUTH_OTP_NOT_VERIFIED));
 
-    // Créer l'utilisateur dans Keycloak
+    Optional<User> existing = userRepository.findByPhone(phone);
+    if (existing.isPresent()) {
+      User user = existing.get();
+      AccountStatus status = user.getAccountStatus();
+      if (status == null || status == AccountStatus.ACTIVE) {
+        throw new ConflictException(ResponseMessageConstants.AUTH_PHONE_ALREADY_USED);
+      }
+      // Compte PRE_ENROLLED : activation
+      return activatePreEnrolledUser(user, request, phone, otp);
+    }
+
+    // ── Nouvel utilisateur ────────────────────────────────────────────
+    request.setPhone(phone);
     String keycloakId = keycloakAuthService.createUser(request);
 
-    // Attribuer le rôle USER dans Keycloak (rôle de base pour tous les inscrits)
     boolean keycloakSynced = true;
     try {
       keycloakAuthService.assignRole(keycloakId, UserRole.USER.getKeycloakRole());
@@ -146,7 +161,6 @@ public class RegistrationServiceImpl implements RegistrationService {
       keycloakSynced = false;
     }
 
-    // Créer l'entité User locale
     User user =
         User.builder()
             .keycloakId(keycloakId)
@@ -155,21 +169,19 @@ public class RegistrationServiceImpl implements RegistrationService {
             .phone(phone)
             .email(request.getEmail() != null ? request.getEmail().trim().toLowerCase() : null)
             .active(true)
+            .accountStatus(AccountStatus.ACTIVE)
             .build();
 
     User savedUser = userRepository.save(user);
 
-    // Créer l'attribution du rôle USER en base locale
     UserRoleAssignment roleAssignment =
         UserRoleAssignment.builder()
             .user(savedUser)
             .role(UserRole.USER)
             .syncedToKeycloak(keycloakSynced)
             .build();
-
     userRoleAssignmentRepository.save(roleAssignment);
 
-    // Consommer l'OTP
     otp.setUsed(true);
     otpVerificationRepository.save(otp);
 
@@ -179,13 +191,71 @@ public class RegistrationServiceImpl implements RegistrationService {
         keycloakId,
         phone);
 
-    return new RegisterResponse(
+    return buildResponse(savedUser, UserRole.USER.getKeycloakRole());
+  }
+
+  // ─── Helpers ─────────────────────────────────────────────────────────────
+
+  /**
+   * Active un compte PRE_ENROLLED : crée le compte Keycloak, assigne les rôles USER + MEMBER
+   * (conserve les tontines existantes), et marque le compte ACTIVE.
+   */
+  private RegisterResponse activatePreEnrolledUser(
+      User user, RegisterCompleteRequest request, String phone, OtpVerification otp)
+      throws CustomException {
+
+    request.setPhone(phone);
+    String keycloakId = keycloakAuthService.createUser(request);
+
+    boolean keycloakSynced = true;
+    try {
+      keycloakAuthService.assignRole(keycloakId, UserRole.USER.getKeycloakRole());
+      keycloakAuthService.assignRole(keycloakId, UserRole.MEMBER.getKeycloakRole());
+    } catch (Exception e) {
+      log.warn(
+          "Impossible de synchroniser les rôles dans Keycloak pour keycloakId={} : {}",
+          keycloakId,
+          e.getMessage());
+      keycloakSynced = false;
+    }
+
+    user.setKeycloakId(keycloakId);
+    user.setFirstName(request.getFirstName().trim());
+    user.setLastName(request.getLastName().trim());
+    user.setEmail(request.getEmail() != null ? request.getEmail().trim().toLowerCase() : null);
+    user.setAccountStatus(AccountStatus.ACTIVE);
+    User savedUser = userRepository.save(user);
+
+    assignRoleIfAbsent(savedUser, UserRole.USER, keycloakSynced);
+    assignRoleIfAbsent(savedUser, UserRole.MEMBER, keycloakSynced);
+
+    otp.setUsed(true);
+    otpVerificationRepository.save(otp);
+
+    log.info(
+        "Compte PRE_ENROLLED activé – userId={} keycloakId={} phone={}",
         savedUser.getId(),
         keycloakId,
-        savedUser.getPhone(),
-        savedUser.getFirstName(),
-        savedUser.getLastName(),
-        savedUser.getEmail(),
-        UserRole.USER.getKeycloakRole());
+        phone);
+
+    return buildResponse(savedUser, UserRole.MEMBER.getKeycloakRole());
+  }
+
+  private void assignRoleIfAbsent(User user, UserRole role, boolean keycloakSynced) {
+    if (userRoleAssignmentRepository.existsByUserIdAndRole(user.getId(), role)) return;
+    UserRoleAssignment assignment =
+        UserRoleAssignment.builder().user(user).role(role).syncedToKeycloak(keycloakSynced).build();
+    userRoleAssignmentRepository.save(assignment);
+  }
+
+  private RegisterResponse buildResponse(User user, String role) {
+    return new RegisterResponse(
+        user.getId(),
+        user.getKeycloakId(),
+        user.getPhone(),
+        user.getFirstName(),
+        user.getLastName(),
+        user.getEmail(),
+        role);
   }
 }

@@ -11,9 +11,11 @@ import com.africa.dinthialma_backend.common.response.CustomResponse;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
 import com.africa.dinthialma_backend.common.util.RoleGuard;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,7 +30,13 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Contrôleur REST des référentiels de valeurs (code lists).
@@ -72,15 +80,6 @@ public class LaCodeListController {
   /**
    * Retourne toutes les valeurs d'un type. Endpoint principal pour peupler les selects frontend.
    * Certains types internes sont restreints (utiliser {@code /admin/type/}).
-   *
-   * <p>Exemples de types disponibles :
-   *
-   * <ul>
-   *   <li>{@code FREQUENCE_TONTINE} → {@code HEBDOMADAIRE}, {@code MENSUEL}, {@code BIMENSUEL}
-   *   <li>{@code METHODE_PAIEMENT} → {@code WAVE}, {@code ORANGE_MONEY}, {@code FREE_MONEY}, {@code
-   *       CASH}
-   *   <li>{@code STATUT_COTISATION} → {@code EN_ATTENTE}, {@code VALIDE}, {@code EN_RETARD}
-   * </ul>
    */
   @GetMapping("/type/{type}")
   @Operation(
@@ -88,18 +87,38 @@ public class LaCodeListController {
       description =
           "🌐 **Public** — Retourne toutes les entrées d'un type donné. Aucun token requis.\n\n"
               + "---\n\n"
-              + "### Types disponibles\n\n"
-              + "| Type | Valeurs |\n"
-              + "|------|---------|\n"
-              + "| `FREQUENCE_TONTINE` | `HEBDOMADAIRE` · `BIMENSUEL` · `MENSUEL` · `TRIMESTRIEL` |\n"
-              + "| `METHODE_PAIEMENT` | `WAVE` · `ORANGE_MONEY` · `FREE_MONEY` · `CASH` |\n"
-              + "| `STATUT_COTISATION` | `EN_ATTENTE` · `VALIDE` · `EN_RETARD` |\n"
-              + "| `ORDRE_BENEFICIAIRE` | `ALEATOIRE` · `MANUEL` · `ROTATION` |\n\n"
-              + "> ⚠️ **`ROLE_INTERNE`** est restreint — utiliser `GET /v1/code-list/admin/type/ROLE_INTERNE`.",
+              + "### Référentiels disponibles\n\n"
+              + "| Type | Valeurs | Usage |\n"
+              + "|------|---------|-------|\n"
+              + "| `FREQUENCE_TONTINE` | `JOURNALIERE` · `HEBDOMADAIRE` · `BIMENSUEL` · `MENSUEL`"
+              + " · `TRIMESTRIEL` | Fréquence de cotisation lors de la création d'une tontine |\n"
+              + "| `METHODE_PAIEMENT` | `WAVE` · `ORANGE_MONEY` · `FREE_MONEY` · `CASH`"
+              + " | Moyen de paiement d'une cotisation |\n"
+              + "| `STATUT_COTISATION` | `EN_ATTENTE` · `VALIDE` · `EN_RETARD`"
+              + " | Cycle de vie d'une cotisation |\n"
+              + "| `ORDRE_BENEFICIAIRE` | `ALEATOIRE` · `MANUEL` · `ROTATION`"
+              + " | Règle de désignation du bénéficiaire du jackpot |\n\n"
+              + "> ⚠️ **`ROLE_INTERNE`** est restreint — utiliser"
+              + " `GET /v1/code-list/admin/type/ROLE_INTERNE`.",
       tags = {"CodeList"})
-  @ApiResponse(responseCode = "200", description = "Liste récupérée")
-  @ApiResponse(responseCode = "403", description = "Type restreint – utiliser /admin/type/")
-  public ResponseEntity<CustomResponse> findAllByType(@PathVariable String type)
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Liste des entrées du type demandé",
+        content =
+            @Content(
+                mediaType = MediaType.APPLICATION_JSON_VALUE,
+                schema = @Schema(implementation = LaCodeListDto.class))),
+    @ApiResponse(responseCode = "403", description = "Type restreint – utiliser /admin/type/"),
+  })
+  public ResponseEntity<CustomResponse> findAllByType(
+      @Parameter(
+              description =
+                  "Type du référentiel (ex : FREQUENCE_TONTINE, METHODE_PAIEMENT,"
+                      + " STATUT_COTISATION, ORDRE_BENEFICIAIRE)",
+              example = "FREQUENCE_TONTINE")
+          @PathVariable
+          String type)
       throws CustomException {
     if (RESTRICTED_TYPE.equals(type)) {
       throw new ForbiddenException(
@@ -127,14 +146,29 @@ public class LaCodeListController {
       summary = "Valeurs d'un type (admin)",
       description =
           "🛡 **Rôle requis :** `ADMIN` ou `SUPER_ADMIN`.\n\n"
-              + "Identique à l'endpoint public mais donne accès aux types restreints.",
+              + "Identique à l'endpoint public mais donne accès aux types restreints"
+              + " (ex : `ROLE_INTERNE`).",
       tags = {"CodeList"},
       security = @SecurityRequirement(name = "bearerAuth"))
-  @ApiResponse(responseCode = "200", description = "Liste récupérée")
-  @ApiResponse(responseCode = "401", description = "Token manquant ou invalide")
-  @ApiResponse(responseCode = "403", description = "Rôle insuffisant")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Liste récupérée",
+        content =
+            @Content(
+                mediaType = MediaType.APPLICATION_JSON_VALUE,
+                schema = @Schema(implementation = LaCodeListDto.class))),
+    @ApiResponse(responseCode = "401", description = "Token manquant ou invalide"),
+    @ApiResponse(responseCode = "403", description = "Rôle insuffisant"),
+  })
   public ResponseEntity<CustomResponse> findAllByTypeAdmin(
-      @PathVariable String type, HttpServletRequest httpRequest) throws CustomException {
+      @Parameter(
+              description = "Type du référentiel (y compris types restreints)",
+              example = "ROLE_INTERNE")
+          @PathVariable
+          String type,
+      HttpServletRequest httpRequest)
+      throws CustomException {
     RoleGuard.requireAdmin(requestHeaderParser, httpRequest);
     log.info("Code lists par type (admin) : {}", type);
     return ResponseEntity.ok(
@@ -150,11 +184,23 @@ public class LaCodeListController {
   @GetMapping
   @Operation(
       summary = "Liste paginée de tous les code lists",
-      description = "Accessible à tout utilisateur authentifié. Supporte pagination et tri.",
+      description =
+          "🔒 Accessible à tout utilisateur authentifié.\n\n"
+              + "Retourne l'ensemble des entrées de tous les référentiels."
+              + " Supporte pagination et tri.\n\n"
+              + "Pagination : `?page=0&size=25&sort=type,asc`",
       tags = {"CodeList"},
       security = @SecurityRequirement(name = "bearerAuth"))
-  @ApiResponse(responseCode = "200", description = "Liste récupérée")
-  @ApiResponse(responseCode = "401", description = "Token manquant ou invalide")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Page de code lists",
+        content =
+            @Content(
+                mediaType = MediaType.APPLICATION_JSON_VALUE,
+                schema = @Schema(implementation = LaCodeListDto.class))),
+    @ApiResponse(responseCode = "401", description = "Token manquant ou invalide"),
+  })
   public ResponseEntity<CustomResponse> findAll(
       @ParameterObject @PageableDefault(size = 25, sort = "type", direction = Sort.Direction.ASC)
           Pageable pageable) {
@@ -172,16 +218,24 @@ public class LaCodeListController {
       summary = "Détail d'un code list par id",
       tags = {"CodeList"},
       security = @SecurityRequirement(name = "bearerAuth"))
-  @ApiResponse(
-      responseCode = "200",
-      description = "Code list trouvé",
-      content =
-          @Content(
-              mediaType = MediaType.APPLICATION_JSON_VALUE,
-              schema = @Schema(implementation = LaCodeListDto.class)))
-  @ApiResponse(responseCode = "401", description = "Token manquant ou invalide")
-  @ApiResponse(responseCode = "404", description = "Code list introuvable")
-  public ResponseEntity<CustomResponse> findById(@PathVariable UUID id) throws CustomException {
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Code list trouvé",
+        content =
+            @Content(
+                mediaType = MediaType.APPLICATION_JSON_VALUE,
+                schema = @Schema(implementation = LaCodeListDto.class))),
+    @ApiResponse(responseCode = "401", description = "Token manquant ou invalide"),
+    @ApiResponse(responseCode = "404", description = "Code list introuvable"),
+  })
+  public ResponseEntity<CustomResponse> findById(
+      @Parameter(
+              description = "UUID de l'entrée du code list",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID id)
+      throws CustomException {
     log.info("Détail code list id : {}", id);
     return ResponseEntity.ok(
         new CustomResponse(
@@ -197,20 +251,23 @@ public class LaCodeListController {
   @Operation(
       summary = "Créer un code list (admin)",
       description =
-          "Crée une nouvelle valeur de référentiel. Le couple type/value doit être unique.",
+          "🛡 **Rôle requis :** `ADMIN` ou `SUPER_ADMIN`.\n\n"
+              + "Crée une nouvelle valeur de référentiel. Le couple type/value doit être unique.",
       tags = {"CodeList"},
       security = @SecurityRequirement(name = "bearerAuth"))
-  @ApiResponse(
-      responseCode = "201",
-      description = "Code list créé",
-      content =
-          @Content(
-              mediaType = MediaType.APPLICATION_JSON_VALUE,
-              schema = @Schema(implementation = LaCodeListDto.class)))
-  @ApiResponse(responseCode = "400", description = "Données invalides")
-  @ApiResponse(responseCode = "401", description = "Token manquant ou invalide")
-  @ApiResponse(responseCode = "403", description = "Rôle insuffisant")
-  @ApiResponse(responseCode = "409", description = "Ce couple type/value existe déjà")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "201",
+        description = "Code list créé",
+        content =
+            @Content(
+                mediaType = MediaType.APPLICATION_JSON_VALUE,
+                schema = @Schema(implementation = LaCodeListDto.class))),
+    @ApiResponse(responseCode = "400", description = "Données invalides"),
+    @ApiResponse(responseCode = "401", description = "Token manquant ou invalide"),
+    @ApiResponse(responseCode = "403", description = "Rôle insuffisant"),
+    @ApiResponse(responseCode = "409", description = "Ce couple type/value existe déjà"),
+  })
   public ResponseEntity<CustomResponse> create(
       @RequestBody @Valid LaCodeListDto dto, HttpServletRequest httpRequest)
       throws CustomException {
@@ -229,17 +286,27 @@ public class LaCodeListController {
   @PutMapping("/{id}")
   @Operation(
       summary = "Modifier un code list (admin)",
-      description = "Met à jour un code list existant.",
+      description =
+          "🛡 **Rôle requis :** `ADMIN` ou `SUPER_ADMIN`.\n\n"
+              + "Met à jour un code list existant. Le couple type/value doit rester unique.",
       tags = {"CodeList"},
       security = @SecurityRequirement(name = "bearerAuth"))
-  @ApiResponse(responseCode = "200", description = "Code list mis à jour")
-  @ApiResponse(responseCode = "400", description = "Données invalides")
-  @ApiResponse(responseCode = "401", description = "Token manquant ou invalide")
-  @ApiResponse(responseCode = "403", description = "Rôle insuffisant")
-  @ApiResponse(responseCode = "404", description = "Code list introuvable")
-  @ApiResponse(responseCode = "409", description = "Ce couple type/value existe déjà")
+  @ApiResponses({
+    @ApiResponse(responseCode = "200", description = "Code list mis à jour"),
+    @ApiResponse(responseCode = "400", description = "Données invalides"),
+    @ApiResponse(responseCode = "401", description = "Token manquant ou invalide"),
+    @ApiResponse(responseCode = "403", description = "Rôle insuffisant"),
+    @ApiResponse(responseCode = "404", description = "Code list introuvable"),
+    @ApiResponse(responseCode = "409", description = "Ce couple type/value existe déjà"),
+  })
   public ResponseEntity<CustomResponse> update(
-      @PathVariable UUID id, @RequestBody @Valid LaCodeListDto dto, HttpServletRequest httpRequest)
+      @Parameter(
+              description = "UUID de l'entrée à modifier",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID id,
+      @RequestBody @Valid LaCodeListDto dto,
+      HttpServletRequest httpRequest)
       throws CustomException {
     RoleGuard.requireAnyRole(
         requestHeaderParser, httpRequest, UserRole.ADMIN, UserRole.SUPER_ADMIN);

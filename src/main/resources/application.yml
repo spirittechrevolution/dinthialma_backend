@@ -139,7 +139,7 @@ dinthialma:
   security:
     enabled: ${SECURITY_ENABLED:true}
   endpoints:
-    frontend: ${FRONTEND_URL:http://localhost:3000,http://localhost:5173,http://localhost:4200}
+    frontend: ${FRONTEND_URL:http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:4200}
   mail:
     from: ${MAIL_FROM:no-reply@dinthialma.io}
     admin-email: ${ADMIN_EMAIL:admin@dinthialma.io}
@@ -181,3 +181,8 @@ lam:
     account-id: ${LAM_ACCOUNT_ID:}
     password: ${LAM_PASSWORD:}
     sender: ${LAM_SENDER:DINTHIALMA}
+
+# ─── WhatsApp – OpenWA (wa-automate) ──────────────────────────────
+openwa:
+  api-url: ${OPENWA_API_URL:http://localhost:3000}
+  mock: ${OPENWA_MOCK:true}

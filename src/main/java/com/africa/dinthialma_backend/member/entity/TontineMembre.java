@@ -4,7 +4,14 @@ import com.africa.dinthialma_backend.auth.entity.User;
 import com.africa.dinthialma_backend.common.base.BaseEntity;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import lombok.Getter;
@@ -60,6 +67,14 @@ public class TontineMembre extends BaseEntity {
   /** Date d'adhésion à la tontine. */
   @Column(name = "date_adhesion", nullable = false)
   private LocalDate dateAdhesion;
+
+  /** Indique si ce membre a déjà reçu un jackpot dans cette tontine. */
+  @Column(name = "a_recu_jackpot", nullable = false)
+  private boolean aRecuJackpot = false;
+
+  /** Date à laquelle le jackpot a été remis à ce membre. */
+  @Column(name = "date_jackpot")
+  private LocalDateTime dateJackpot;
 
   /** Soft delete. */
   @Column(name = "deleted_at")

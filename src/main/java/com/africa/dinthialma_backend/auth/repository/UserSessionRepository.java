@@ -27,6 +27,13 @@ public interface UserSessionRepository extends JpaRepository<UserSession, UUID> 
   Optional<UserSession> findByUserIdAndClientTypeAndExpiresAtAfter(
       UUID userId, ClientType clientType, LocalDateTime now);
 
+  /**
+   * Recherche n'importe quelle session active de l'utilisateur, tous types confondus. Retourne la
+   * session avec la date d'expiration la plus éloignée (la plus durable).
+   */
+  Optional<UserSession> findTopByUserIdAndExpiresAtAfterOrderByExpiresAtDesc(
+      UUID userId, LocalDateTime now);
+
   /** Toutes les sessions (actives et expirées) d'un utilisateur, paginées. */
   Page<UserSession> findByUserId(UUID userId, Pageable pageable);
 
