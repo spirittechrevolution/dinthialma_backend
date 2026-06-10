@@ -58,7 +58,7 @@ jobs:
           cache: maven
 
       - name: Compile & test
-        run: ./mvnw test -B --no-transfer-progress
+        run: chmod +x mvnw && ./mvnw test -B --no-transfer-progress
 
   # ═══════════════════════════════════════════════════════════════
   # STAGE 3 – Build & Push Docker Hub
