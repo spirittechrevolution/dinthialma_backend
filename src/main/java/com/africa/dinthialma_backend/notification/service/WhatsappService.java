@@ -23,6 +23,9 @@ public class WhatsappService {
   @Value("${openwa.mock}")
   private boolean mock;
 
+  @Value("${dinthialma.app.url:https://www.dinthialma.com}")
+  private String appUrl;
+
   private final RestClient restClient = RestClient.create();
 
   /**
@@ -68,11 +71,12 @@ public class WhatsappService {
   /** Envoie un rappel de cotisation par WhatsApp. */
   public void sendContributionReminder(String phone, String tontineName, String amount) {
     String message =
-        "💰 *Dinthialma* – Rappel : votre cotisation de "
+        "💰 *Dinthialma* – Rappel : votre cotisation de *"
             + amount
-            + " pour la tontine *"
+            + "* pour la tontine *"
             + tontineName
-            + "* est en attente. Connectez-vous sur l'application pour régulariser.";
+            + "* est en attente.\n👉 Connectez-vous pour régulariser : "
+            + appUrl;
     send(phone, message);
   }
 
@@ -81,7 +85,8 @@ public class WhatsappService {
     String message =
         "👋 Vous avez été ajouté(e) à la tontine *"
             + tontineName
-            + "* sur Dinthialma.\nInscrivez-vous sur l'application pour accéder à votre compte et suivre vos cotisations.";
+            + "* sur *Dinthialma*.\nInscrivez-vous pour accéder à votre compte et suivre vos cotisations :\n👉 "
+            + appUrl;
     send(phone, message);
   }
 
@@ -92,7 +97,8 @@ public class WhatsappService {
             + tontineName
             + "*.\nMontant prévu : *"
             + amount
-            + "*.";
+            + "*.\n👉 Consultez les détails sur : "
+            + appUrl;
     send(phone, message);
   }
 
@@ -115,7 +121,8 @@ public class WhatsappService {
             + nomEvenement
             + "* dans *J-"
             + joursRestants
-            + "*\nContactez votre gestionnaire si besoin.";
+            + "*\nContactez votre gestionnaire si besoin.\n👉 "
+            + appUrl;
     send(phone, message);
   }
 
@@ -143,7 +150,8 @@ public class WhatsappService {
             + "*\n"
             + "💵 Votre épargne totale à ce jour : *"
             + montantTotal
-            + "*\nOuvrez l'application pour enregistrer votre cotisation.";
+            + "*\n👉 Enregistrez votre cotisation : "
+            + appUrl;
     send(phone, message);
   }
 
@@ -188,7 +196,56 @@ public class WhatsappService {
             + "💵 Votre épargne à ce jour : *"
             + montantTotal
             + "*\n"
-            + suffix;
+            + suffix
+            + "\n👉 "
+            + appUrl;
+    send(phone, message);
+  }
+
+  /** Notifie chaque membre de la distribution finale d'une tontine événementielle. */
+  public void sendDistributionFinale(
+      String phone, String tontineName, String montantNet, String montantCotise) {
+    String message =
+        "🎉 *Dinthialma* – La tontine événementielle *"
+            + tontineName
+            + "* est clôturée !\n"
+            + "Vous recevez *"
+            + montantNet
+            + " FCFA* (votre mise totale : "
+            + montantCotise
+            + " FCFA).\n👉 Consultez les détails sur : "
+            + appUrl;
+    send(phone, message);
+  }
+
+  /** Notifie l'admin créateur du résumé de clôture d'une tontine événementielle. */
+  public void sendDistributionFinaleAdmin(
+      String phone, String tontineName, String cagnotteTotal, int nbMembres) {
+    String message =
+        "✅ *Dinthialma* – Tontine *"
+            + tontineName
+            + "* clôturée avec succès.\n"
+            + "Cagnotte totale : *"
+            + cagnotteTotal
+            + " FCFA* distribuée entre "
+            + nbMembres
+            + " membre(s).\n👉 Voir le rapport : "
+            + appUrl;
+    send(phone, message);
+  }
+
+  /** Notifie l'admin de la désignation manuelle d'un bénéficiaire de jackpot. */
+  public void sendJackpotManuelAdmin(
+      String phone, String noms, int numeroCycle, String tontineName) {
+    String message =
+        "✅ *Dinthialma* – Vous avez désigné *"
+            + noms
+            + "* comme gagnant(s) du jackpot (cycle "
+            + numeroCycle
+            + ", tontine *"
+            + tontineName
+            + "*).\n👉 Suivre la tontine : "
+            + appUrl;
     send(phone, message);
   }
 }

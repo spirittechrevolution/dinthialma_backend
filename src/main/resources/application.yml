@@ -140,6 +140,8 @@ dinthialma:
     enabled: ${SECURITY_ENABLED:true}
   endpoints:
     frontend: ${FRONTEND_URL:http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:4200}
+  app:
+    url: ${APP_URL:https://www.dinthialma.com}
   mail:
     from: ${MAIL_FROM:no-reply@dinthialma.io}
     admin-email: ${ADMIN_EMAIL:admin@dinthialma.io}

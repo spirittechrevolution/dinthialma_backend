@@ -543,16 +543,11 @@ public class CycleServiceImpl implements CycleService {
   private void notifyFinalDistribution(Tontine tontine, List<MembreDistributionInfo> distribution) {
     for (MembreDistributionInfo dist : distribution) {
       try {
-        whatsappService.send(
+        whatsappService.sendDistributionFinale(
             dist.getPhone(),
-            "🎉 *Dinthialma* – La tontine événementielle *"
-                + tontine.getNom()
-                + "* est clôturée !\n"
-                + "Vous recevez *"
-                + dist.getMontantNet().toPlainString()
-                + " FCFA* (votre mise totale : "
-                + dist.getMontantCotise().toPlainString()
-                + " FCFA).");
+            tontine.getNom(),
+            dist.getMontantNet().toPlainString(),
+            dist.getMontantCotise().toPlainString());
       } catch (Exception e) {
         log.warn(
             "Notif WA distribution finale non envoyée pour {} : {}",
@@ -566,16 +561,11 @@ public class CycleServiceImpl implements CycleService {
           distribution.stream()
               .map(MembreDistributionInfo::getMontantCotise)
               .reduce(BigDecimal.ZERO, BigDecimal::add);
-      whatsappService.send(
+      whatsappService.sendDistributionFinaleAdmin(
           tontine.getCreePar().getPhone(),
-          "✅ *Dinthialma* – Tontine *"
-              + tontine.getNom()
-              + "* clôturée avec succès.\n"
-              + "Cagnotte totale : *"
-              + cagnotteTotal.toPlainString()
-              + " FCFA* distribuée entre "
-              + distribution.size()
-              + " membre(s).");
+          tontine.getNom(),
+          cagnotteTotal.toPlainString(),
+          distribution.size());
     } catch (Exception e) {
       log.warn("Notif WA admin (clôture finale) non envoyée : {}", e.getMessage());
     }
@@ -680,15 +670,8 @@ public class CycleServiceImpl implements CycleService {
               .map(m -> m.getUser().getFirstName() + " " + m.getUser().getLastName())
               .reduce((a, b) -> a + ", " + b)
               .orElse("");
-      whatsappService.send(
-          tontine.getCreePar().getPhone(),
-          "✅ *Dinthialma* – Vous avez désigné *"
-              + noms
-              + "* comme gagnant(s) du jackpot (cycle "
-              + cycle.getNumeroCycle()
-              + ", tontine *"
-              + tontine.getNom()
-              + "*).");
+      whatsappService.sendJackpotManuelAdmin(
+          tontine.getCreePar().getPhone(), noms, cycle.getNumeroCycle(), tontine.getNom());
     } catch (Exception e) {
       log.warn("Notif WA admin (jackpot manuel) non envoyée : {}", e.getMessage());
     }
