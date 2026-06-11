@@ -41,6 +41,12 @@ services:
     image: ${DOCKER_HUB_USERNAME}/dinthialma-frontend:${FRONTEND_TAG:-latest}
     container_name: dinthialma-frontend-prod
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
     networks:
       - proxy
     labels:
