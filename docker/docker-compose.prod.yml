@@ -104,6 +104,8 @@ services:
       LAM_SENDER: ${LAM_SENDER}
       # Sécurité
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
+      # CORS – origines autorisées (frontend prod + dev)
+      FRONTEND_URL: https://www.dinthialma.com,https://dinthialma.com
       # Bootstrap Super Admin (désactiver après le 1er démarrage)
       BOOTSTRAP_ENABLED: ${BOOTSTRAP_ENABLED:-false}
       BOOTSTRAP_SUPER_ADMIN_PHONE: ${BOOTSTRAP_SUPER_ADMIN_PHONE}
