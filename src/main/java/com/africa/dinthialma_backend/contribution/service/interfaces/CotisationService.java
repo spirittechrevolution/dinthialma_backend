@@ -3,7 +3,10 @@ package com.africa.dinthialma_backend.contribution.service.interfaces;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
+import com.africa.dinthialma_backend.contribution.dto.CycleRecapCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
+import com.africa.dinthialma_backend.contribution.dto.UpdateCotisationRequest;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -69,5 +72,43 @@ public interface CotisationService {
    * <p>Accès : propriétaire de la cotisation, admin de la tontine, SUPER_ADMIN.
    */
   CotisationResponse getCotisation(String keycloakId, UUID tontineId, UUID cotisationId)
+      throws CustomException;
+
+  /**
+   * Modifie une cotisation existante (sémantique PATCH – seuls les champs non-null sont mis à
+   * jour).
+   *
+   * <p>Réservé au créateur de la tontine et au SUPER_ADMIN.
+   *
+   * <p>Conditions d'édition :
+   *
+   * <ul>
+   *   <li>Statut {@code EN_ATTENTE} → modifiable sans restriction.
+   *   <li>Statut {@code VALIDE} + cycle {@code EN_COURS} → modifiable, reste VALIDE.
+   *   <li>Statut {@code VALIDE} + cycle {@code TERMINE} ou {@code EN_RETARD} → refus 400.
+   * </ul>
+   *
+   * @param keycloakId sub JWT de l'admin appelant
+   * @param tontineId identifiant de la tontine
+   * @param cotisationId identifiant de la cotisation à modifier
+   * @param request champs à mettre à jour (null = inchangé)
+   */
+  CotisationResponse updateCotisation(
+      String keycloakId, UUID tontineId, UUID cotisationId, UpdateCotisationRequest request)
+      throws CustomException;
+
+  /**
+   * Retourne le récapitulatif des cotisations d'un cycle par membre.
+   *
+   * <p>Un enregistrement par membre actif/suspendu de la tontine. {@code statutCotisation} est
+   * {@code null} quand le membre n'a soumis aucune cotisation pour ce cycle.
+   *
+   * <p>Réservé au créateur de la tontine et au SUPER_ADMIN.
+   *
+   * @param keycloakId sub JWT de l'admin appelant
+   * @param tontineId identifiant de la tontine
+   * @param cycleId identifiant du cycle
+   */
+  List<CycleRecapCotisationResponse> getCycleRecap(String keycloakId, UUID tontineId, UUID cycleId)
       throws CustomException;
 }

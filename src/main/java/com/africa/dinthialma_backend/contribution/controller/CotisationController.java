@@ -6,7 +6,9 @@ import com.africa.dinthialma_backend.common.response.CustomResponse;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
 import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
+import com.africa.dinthialma_backend.contribution.dto.CycleRecapCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
+import com.africa.dinthialma_backend.contribution.dto.UpdateCotisationRequest;
 import com.africa.dinthialma_backend.contribution.service.interfaces.CotisationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -18,6 +20,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -27,6 +30,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -282,5 +286,102 @@ public class CotisationController {
 
     return ResponseEntity.ok(
         new CustomResponse(SUCCESS, OK, ResponseMessageConstants.CONTRIBUTION_VALIDATED, response));
+  }
+
+  // ─── Modification ─────────────────────────────────────────────────────────
+
+  @PatchMapping("/{cotisationId}")
+  @Operation(
+      summary = "Modifier une cotisation (admin)",
+      description =
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "Corrige les champs d'une cotisation en cas d'erreur de saisie."
+              + " Sémantique PATCH : seuls les champs non-null sont mis à jour.\n\n"
+              + "**Conditions d'édition :**\n"
+              + "- Statut `EN_ATTENTE` → toujours modifiable\n"
+              + "- Statut `VALIDE` + cycle `EN_COURS` → modifiable, reste VALIDE\n"
+              + "- Statut `VALIDE` + cycle `TERMINE` → refusé (jackpot calculé)\n"
+              + "- Statut `EN_RETARD` → refusé (cycle clôturé)\n\n"
+              + "Si le montant est modifié, les règles de la tontine sont re-validées"
+              + " (montant fixe / montant minimum).")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Cotisation mise à jour",
+        content = @Content(schema = @Schema(implementation = CotisationResponse.class))),
+    @ApiResponse(
+        responseCode = "400",
+        description =
+            "Modification interdite (cycle clôturé, statut EN_RETARD ou montant invalide)"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine ou cotisation introuvable"),
+  })
+  public ResponseEntity<CustomResponse> updateCotisation(
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
+      @Parameter(
+              description = "UUID de la cotisation à modifier",
+              example = "880e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID cotisationId,
+      @RequestBody @Valid UpdateCotisationRequest request,
+      HttpServletRequest httpRequest)
+      throws CustomException {
+
+    String keycloakId = headerParser.extractKeycloakId(httpRequest);
+    CotisationResponse response =
+        cotisationService.updateCotisation(keycloakId, tontineId, cotisationId, request);
+
+    return ResponseEntity.ok(
+        new CustomResponse(
+            SUCCESS, OK, ResponseMessageConstants.CONTRIBUTION_UPDATE_SUCCESS, response));
+  }
+
+  // ─── Récapitulatif par membre ─────────────────────────────────────────────
+
+  @GetMapping("/recap/{cycleId}")
+  @Operation(
+      summary = "Récapitulatif des cotisations d'un cycle par membre",
+      description =
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "Retourne un enregistrement par membre actif/suspendu de la tontine :\n"
+              + "- `statutCotisation` **null** → membre n'a soumis aucune cotisation pour ce cycle\n"
+              + "- `statutCotisation` **EN_ATTENTE** → cotisation soumise, en attente de validation\n"
+              + "- `statutCotisation` **VALIDE** → cotisation validée et prise en compte\n"
+              + "- `statutCotisation` **EN_RETARD** → cycle clôturé sans cotisation validée\n\n"
+              + "Les membres sont triés par `ordreJackpot` croissant puis par date d'adhésion."
+              + " Les membres SORTI sont exclus.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Récapitulatif par membre",
+        content = @Content(schema = @Schema(implementation = CycleRecapCotisationResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine ou cycle introuvable"),
+  })
+  public ResponseEntity<CustomResponse> getCycleRecap(
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
+      @Parameter(description = "UUID du cycle", example = "660e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID cycleId,
+      HttpServletRequest httpRequest)
+      throws CustomException {
+
+    String keycloakId = headerParser.extractKeycloakId(httpRequest);
+    List<CycleRecapCotisationResponse> recap =
+        cotisationService.getCycleRecap(keycloakId, tontineId, cycleId);
+
+    return ResponseEntity.ok(
+        new CustomResponse(
+            SUCCESS, OK, ResponseMessageConstants.CONTRIBUTION_RECAP_SUCCESS, recap));
   }
 }

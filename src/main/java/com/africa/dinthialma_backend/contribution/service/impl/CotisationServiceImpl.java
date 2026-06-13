@@ -15,10 +15,13 @@ import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
+import com.africa.dinthialma_backend.contribution.dto.CycleRecapCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
+import com.africa.dinthialma_backend.contribution.dto.UpdateCotisationRequest;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
 import com.africa.dinthialma_backend.contribution.service.interfaces.CotisationService;
+import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.notification.codeList.NotificationType;
@@ -32,7 +35,10 @@ import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -489,6 +495,115 @@ public class CotisationServiceImpl implements CotisationService {
     }
 
     return CotisationResponse.from(cotisation);
+  }
+
+  // ─── Modification ────────────────────────────────────────────────────────
+
+  @Override
+  public CotisationResponse updateCotisation(
+      String keycloakId, UUID tontineId, UUID cotisationId, UpdateCotisationRequest request)
+      throws CustomException {
+
+    User caller = findUserByKeycloakId(keycloakId);
+    Tontine tontine = findTontineById(tontineId);
+    assertIsCreatorOrSuperAdmin(caller, tontine);
+
+    Cotisation cotisation =
+        cotisationRepository
+            .findByIdAndDeletedAtIsNull(cotisationId)
+            .orElseThrow(
+                () -> new NotFoundException(ResponseMessageConstants.CONTRIBUTION_NOT_FOUND));
+
+    if (!cotisation.getTontine().getId().equals(tontineId)) {
+      throw new NotFoundException(ResponseMessageConstants.CONTRIBUTION_NOT_FOUND);
+    }
+
+    // EN_RETARD → cycle fermé, modification interdite
+    if (cotisation.getStatut() == CotisationStatut.EN_RETARD) {
+      throw new BadRequestException(ResponseMessageConstants.CONTRIBUTION_CANNOT_EDIT);
+    }
+
+    // VALIDE + cycle TERMINE → jackpot déjà calculé, modification interdite
+    if (cotisation.getStatut() == CotisationStatut.VALIDE
+        && cotisation.getCycle().getStatut() == CycleStatut.TERMINE) {
+      throw new BadRequestException(ResponseMessageConstants.CONTRIBUTION_CANNOT_EDIT);
+    }
+
+    if (request.getMontant() != null
+        && request.getMontant().compareTo(cotisation.getMontant()) != 0) {
+      validateMontantCotisation(tontine, request.getMontant());
+      auditService.log(
+          caller,
+          "cotisations",
+          cotisationId,
+          "montant",
+          cotisation.getMontant().toPlainString(),
+          request.getMontant().toPlainString());
+      cotisation.setMontant(request.getMontant());
+    }
+
+    if (request.getMethodePaiement() != null) {
+      auditService.log(
+          caller,
+          "cotisations",
+          cotisationId,
+          "methode_paiement",
+          cotisation.getMethodePaiement(),
+          request.getMethodePaiement());
+      cotisation.setMethodePaiement(request.getMethodePaiement());
+    }
+
+    if (request.getReferenceTransaction() != null) {
+      auditService.log(
+          caller,
+          "cotisations",
+          cotisationId,
+          "reference_transaction",
+          cotisation.getReferenceTransaction(),
+          request.getReferenceTransaction());
+      cotisation.setReferenceTransaction(request.getReferenceTransaction());
+    }
+
+    if (request.getNote() != null) {
+      cotisation.setNote(request.getNote());
+    }
+
+    Cotisation saved = cotisationRepository.save(cotisation);
+    log.info(
+        "Cotisation modifiée par admin – cotisationId={} par userId={}",
+        cotisationId,
+        caller.getId());
+
+    return CotisationResponse.from(saved);
+  }
+
+  // ─── Récapitulatif par membre ─────────────────────────────────────────────
+
+  @Override
+  @Transactional(readOnly = true)
+  public List<CycleRecapCotisationResponse> getCycleRecap(
+      String keycloakId, UUID tontineId, UUID cycleId) throws CustomException {
+
+    User caller = findUserByKeycloakId(keycloakId);
+    Tontine tontine = findTontineById(tontineId);
+    assertIsCreatorOrSuperAdmin(caller, tontine);
+
+    // Vérifie que le cycle appartient bien à la tontine
+    findCycleById(tontineId, cycleId);
+
+    List<TontineMembre> membres =
+        membreRepository.findByTontine_IdAndDeletedAtIsNullOrderByOrdreJackpotAscCreatedAtAsc(
+            tontineId);
+
+    List<Cotisation> cotisations = cotisationRepository.findByCycle_IdAndDeletedAtIsNull(cycleId);
+
+    Map<UUID, Cotisation> cotisationByMembre =
+        cotisations.stream().collect(Collectors.toMap(c -> c.getMembre().getId(), c -> c));
+
+    return membres.stream()
+        .filter(m -> m.getStatut() != MembreStatut.SORTI)
+        .map(m -> CycleRecapCotisationResponse.from(m, cotisationByMembre.get(m.getId())))
+        .collect(Collectors.toList());
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────

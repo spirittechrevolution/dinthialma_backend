@@ -93,6 +93,11 @@ public final class ResponseMessageConstants {
   public static final String CONTRIBUTION_VALIDATED = "Cotisation validée avec succès";
   public static final String CONTRIBUTION_ADMIN_RECORD_SUCCESS =
       "Cotisation enregistrée et validée avec succès";
+  public static final String CONTRIBUTION_UPDATE_SUCCESS = "Cotisation mise à jour avec succès";
+  public static final String CONTRIBUTION_RECAP_SUCCESS =
+      "Récapitulatif des cotisations récupéré avec succès";
+  public static final String CONTRIBUTION_CANNOT_EDIT =
+      "Cette cotisation ne peut pas être modifiée" + " (cycle clôturé ou cotisation en retard)";
 
   // Commission
   public static final String COMMISSION_CREATE_SUCCESS = "Commission créée avec succès";
