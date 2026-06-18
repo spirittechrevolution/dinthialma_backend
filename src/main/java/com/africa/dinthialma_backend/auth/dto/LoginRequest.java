@@ -26,8 +26,8 @@ public class LoginRequest {
 
   @Schema(
       description =
-          "Type de client – détermine la durée de vie de la session PIN : WEB = 24h, MOBILE = 30"
-              + " jours",
+          "Type de client – détermine la durée de vie de la session PIN : WEB = 1 an, MOBILE = 1"
+              + " an",
       example = "WEB",
       allowableValues = {"WEB", "MOBILE"})
   @NotNull(message = "Le type de client (WEB ou MOBILE) est obligatoire")

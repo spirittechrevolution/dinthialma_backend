@@ -142,7 +142,7 @@ public class UserSessionServiceImpl implements UserSessionService {
 
   private LocalDateTime computeExpiry(ClientType clientType, LocalDateTime from) {
     return switch (clientType) {
-      case WEB -> from.plusHours(Constants.Session.WEB_TTL_HOURS);
+      case WEB -> from.plusDays(Constants.Session.WEB_TTL_DAYS);
       case MOBILE -> from.plusDays(Constants.Session.MOBILE_TTL_DAYS);
     };
   }

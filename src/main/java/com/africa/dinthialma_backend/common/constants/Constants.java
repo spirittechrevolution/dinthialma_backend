@@ -68,11 +68,11 @@ public final class Constants {
 
   /** TTL des sessions PIN selon le type de client. */
   public static final class Session {
-    /** Durée de vie d'une session WEB en heures. */
-    public static final long WEB_TTL_HOURS = 24;
+    /** Durée de vie d'une session WEB en jours. */
+    public static final long WEB_TTL_DAYS = 365;
 
     /** Durée de vie d'une session MOBILE en jours. */
-    public static final long MOBILE_TTL_DAYS = 30;
+    public static final long MOBILE_TTL_DAYS = 365;
 
     private Session() {}
   }

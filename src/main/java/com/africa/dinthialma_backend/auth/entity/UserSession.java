@@ -32,8 +32,8 @@ import lombok.experimental.SuperBuilder;
  * <p>TTL par plateforme (défini dans le service) :
  *
  * <ul>
- *   <li>{@link ClientType#WEB} → 24 heures
- *   <li>{@link ClientType#MOBILE} → 30 jours
+ *   <li>{@link ClientType#WEB} → 1 an (365 jours)
+ *   <li>{@link ClientType#MOBILE} → 1 an (365 jours)
  * </ul>
  *
  * <p>Révocation (hard delete) lors de :
@@ -100,8 +100,8 @@ public class UserSession extends BaseEntity {
    * Date d'expiration de la session.
    *
    * <ul>
-   *   <li>WEB : {@code NOW() + 24 heures}
-   *   <li>MOBILE : {@code NOW() + 30 jours}
+   *   <li>WEB : {@code NOW() + 365 jours}
+   *   <li>MOBILE : {@code NOW() + 365 jours}
    * </ul>
    *
    * Renouvelée à chaque connexion PIN réussie.
