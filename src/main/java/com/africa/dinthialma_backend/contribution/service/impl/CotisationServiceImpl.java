@@ -422,7 +422,8 @@ public class CotisationServiceImpl implements CotisationService {
   @Override
   @Transactional(readOnly = true)
   public Page<CotisationResponse> listCotisations(
-      String keycloakId, UUID tontineId, UUID cycleId, Pageable pageable) throws CustomException {
+      String keycloakId, UUID tontineId, UUID cycleId, UUID membreId, Pageable pageable)
+      throws CustomException {
 
     User caller = findUserByKeycloakId(keycloakId);
     Tontine tontine = findTontineById(tontineId);
@@ -431,9 +432,19 @@ public class CotisationServiceImpl implements CotisationService {
         isSuperAdmin(caller) || tontine.getCreePar().getId().equals(caller.getId());
 
     if (isAdminOrSuper) {
+      if (cycleId != null && membreId != null) {
+        return cotisationRepository
+            .findByCycle_IdAndMembre_IdAndDeletedAtIsNull(cycleId, membreId, pageable)
+            .map(CotisationResponse::from);
+      }
       if (cycleId != null) {
         return cotisationRepository
             .findByCycle_IdAndDeletedAtIsNull(cycleId, pageable)
+            .map(CotisationResponse::from);
+      }
+      if (membreId != null) {
+        return cotisationRepository
+            .findByTontine_IdAndMembre_IdAndDeletedAtIsNull(tontineId, membreId, pageable)
             .map(CotisationResponse::from);
       }
       return cotisationRepository

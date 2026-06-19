@@ -75,8 +75,10 @@ public class CotisationController {
           "🔒 Rôles : membres, créateur, SUPER_ADMIN.\n\n"
               + "- **SUPER_ADMIN** et **créateur** : voient toutes les cotisations de la tontine.\n"
               + "- **MEMBER** : voit uniquement ses propres cotisations.\n\n"
-              + "Paramètre optionnel `cycleId` pour filtrer par cycle.\n\n"
-              + "Pagination : `?page=0&size=20&sort=createdAt,desc&cycleId=<uuid>`")
+              + "Paramètres optionnels :\n"
+              + "- `cycleId` : filtre par cycle\n"
+              + "- `membreId` : filtre par membre (admin/SUPER_ADMIN uniquement, ignoré pour MEMBER)\n\n"
+              + "Pagination : `?page=0&size=20&sort=createdAt,desc&cycleId=<uuid>&membreId=<uuid>`")
   @ApiResponses({
     @ApiResponse(
         responseCode = "200",
@@ -97,6 +99,12 @@ public class CotisationController {
               example = "660e8400-e29b-41d4-a716-446655440000")
           @RequestParam(required = false)
           UUID cycleId,
+      @Parameter(
+              description =
+                  "Filtrer par membre (optionnel, admin/SUPER_ADMIN uniquement — ignoré pour MEMBER)",
+              example = "770e8400-e29b-41d4-a716-446655440000")
+          @RequestParam(required = false)
+          UUID membreId,
       @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
           Pageable pageable,
       HttpServletRequest httpRequest)
@@ -104,7 +112,7 @@ public class CotisationController {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
     Page<CotisationResponse> cotisations =
-        cotisationService.listCotisations(keycloakId, tontineId, cycleId, pageable);
+        cotisationService.listCotisations(keycloakId, tontineId, cycleId, membreId, pageable);
 
     return ResponseEntity.ok(
         new CustomResponse(

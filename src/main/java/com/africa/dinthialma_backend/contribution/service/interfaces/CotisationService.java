@@ -55,16 +55,19 @@ public interface CotisationService {
       throws CustomException;
 
   /**
-   * Liste les cotisations d'une tontine, avec filtre optionnel par cycle.
+   * Liste les cotisations d'une tontine, avec filtres optionnels par cycle et par membre.
    *
-   * <p>Accès : SUPER_ADMIN et admin voient tout ; membre voit seulement ses propres cotisations.
+   * <p>Accès : SUPER_ADMIN et admin voient tout ; membre voit seulement ses propres cotisations. Le
+   * filtre {@code membreId} n'est appliqué que pour les admin/SUPER_ADMIN.
    *
    * @param keycloakId sub JWT
    * @param tontineId identifiant de la tontine
    * @param cycleId filtre optionnel (null = tous les cycles)
+   * @param membreId filtre optionnel admin (null = tous les membres)
    */
   Page<CotisationResponse> listCotisations(
-      String keycloakId, UUID tontineId, UUID cycleId, Pageable pageable) throws CustomException;
+      String keycloakId, UUID tontineId, UUID cycleId, UUID membreId, Pageable pageable)
+      throws CustomException;
 
   /**
    * Récupère une cotisation par son identifiant.
