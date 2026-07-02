@@ -16,6 +16,7 @@ import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.CycleRecapCotisationResponse;
+import com.africa.dinthialma_backend.contribution.dto.MembreTotalCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.UpdateCotisationRequest;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
@@ -614,6 +615,37 @@ public class CotisationServiceImpl implements CotisationService {
     return membres.stream()
         .filter(m -> m.getStatut() != MembreStatut.SORTI)
         .map(m -> CycleRecapCotisationResponse.from(m, cotisationByMembre.get(m.getId())))
+        .collect(Collectors.toList());
+  }
+
+  // ─── Récapitulatif total par membre ───────────────────────────────────────
+
+  @Override
+  @Transactional(readOnly = true)
+  public List<MembreTotalCotisationResponse> getTontineRecapTotal(String keycloakId, UUID tontineId)
+      throws CustomException {
+
+    User caller = findUserByKeycloakId(keycloakId);
+    Tontine tontine = findTontineById(tontineId);
+    assertIsCreatorOrSuperAdmin(caller, tontine);
+
+    List<TontineMembre> membres =
+        membreRepository.findByTontine_IdAndDeletedAtIsNullOrderByOrdreJackpotAscCreatedAtAsc(
+            tontineId);
+
+    Map<UUID, Object[]> totauxByMembre =
+        cotisationRepository.sumAndCountValideGroupByMembre(tontineId).stream()
+            .collect(Collectors.toMap(row -> (UUID) row[0], row -> row));
+
+    return membres.stream()
+        .filter(m -> m.getStatut() != MembreStatut.SORTI)
+        .map(
+            m -> {
+              Object[] row = totauxByMembre.get(m.getId());
+              BigDecimal total = row != null ? (BigDecimal) row[1] : BigDecimal.ZERO;
+              long nombre = row != null ? (Long) row[2] : 0L;
+              return MembreTotalCotisationResponse.from(m, total, nombre);
+            })
         .collect(Collectors.toList());
   }
 

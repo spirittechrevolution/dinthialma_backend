@@ -7,6 +7,7 @@ import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
 import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.CycleRecapCotisationResponse;
+import com.africa.dinthialma_backend.contribution.dto.MembreTotalCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.UpdateCotisationRequest;
 import com.africa.dinthialma_backend.contribution.service.interfaces.CotisationService;
@@ -391,5 +392,47 @@ public class CotisationController {
     return ResponseEntity.ok(
         new CustomResponse(
             SUCCESS, OK, ResponseMessageConstants.CONTRIBUTION_RECAP_SUCCESS, recap));
+  }
+
+  // ─── Récapitulatif total par membre ───────────────────────────────────────
+
+  @GetMapping("/recap-total")
+  @Operation(
+      summary = "Total cumulé des cotisations validées par membre",
+      description =
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "Retourne, pour chaque membre actif/suspendu de la tontine, le total des"
+              + " cotisations **VALIDÉES** tous cycles confondus (`totalCotise`) ainsi que le"
+              + " nombre de cotisations prises en compte. Permet au gestionnaire de connaître"
+              + " à tout moment le cumul cotisé par chaque membre, sans devoir se limiter à un"
+              + " cycle précis.\n\n"
+              + "Les membres sans cotisation validée apparaissent avec `totalCotise = 0`."
+              + " Les membres SORTI sont exclus. Tri par `ordreJackpot` croissant puis par date"
+              + " d'adhésion.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Total par membre",
+        content = @Content(schema = @Schema(implementation = MembreTotalCotisationResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine introuvable"),
+  })
+  public ResponseEntity<CustomResponse> getTontineRecapTotal(
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
+      HttpServletRequest httpRequest)
+      throws CustomException {
+
+    String keycloakId = headerParser.extractKeycloakId(httpRequest);
+    List<MembreTotalCotisationResponse> recap =
+        cotisationService.getTontineRecapTotal(keycloakId, tontineId);
+
+    return ResponseEntity.ok(
+        new CustomResponse(
+            SUCCESS, OK, ResponseMessageConstants.CONTRIBUTION_RECAP_TOTAL_SUCCESS, recap));
   }
 }

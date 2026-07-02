@@ -96,6 +96,8 @@ public final class ResponseMessageConstants {
   public static final String CONTRIBUTION_UPDATE_SUCCESS = "Cotisation mise à jour avec succès";
   public static final String CONTRIBUTION_RECAP_SUCCESS =
       "Récapitulatif des cotisations récupéré avec succès";
+  public static final String CONTRIBUTION_RECAP_TOTAL_SUCCESS =
+      "Total des cotisations par membre récupéré avec succès";
   public static final String CONTRIBUTION_CANNOT_EDIT =
       "Cette cotisation ne peut pas être modifiée" + " (cycle clôturé ou cotisation en retard)";
 

@@ -4,6 +4,7 @@ import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.CycleRecapCotisationResponse;
+import com.africa.dinthialma_backend.contribution.dto.MembreTotalCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.UpdateCotisationRequest;
 import java.util.List;
@@ -113,5 +114,19 @@ public interface CotisationService {
    * @param cycleId identifiant du cycle
    */
   List<CycleRecapCotisationResponse> getCycleRecap(String keycloakId, UUID tontineId, UUID cycleId)
+      throws CustomException;
+
+  /**
+   * Retourne le total cumulé cotisé (VALIDÉ) par membre, tous cycles confondus, pour une tontine.
+   *
+   * <p>Un enregistrement par membre actif/suspendu de la tontine. Les membres sans cotisation
+   * validée apparaissent avec {@code totalCotise = 0}. Les membres SORTI sont exclus.
+   *
+   * <p>Réservé au créateur de la tontine et au SUPER_ADMIN.
+   *
+   * @param keycloakId sub JWT de l'admin appelant
+   * @param tontineId identifiant de la tontine
+   */
+  List<MembreTotalCotisationResponse> getTontineRecapTotal(String keycloakId, UUID tontineId)
       throws CustomException;
 }

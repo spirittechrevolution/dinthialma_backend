@@ -98,4 +98,16 @@ public interface CotisationRepository extends JpaRepository<Cotisation, UUID> {
           + "   AND c.deletedAt IS NULL")
   BigDecimal sumMontantValideByTontineAndMembre(
       @Param("tontineId") UUID tontineId, @Param("membreId") UUID membreId);
+
+  /**
+   * Total cotisé (VALIDÉ) et nombre de cotisations validées, groupés par membre, pour une tontine.
+   * Chaque ligne : {@code [membreId (UUID), totalMontant (BigDecimal), nombre (Long)]}.
+   */
+  @Query(
+      "SELECT c.membre.id, COALESCE(SUM(c.montant), 0), COUNT(c) FROM Cotisation c"
+          + " WHERE c.tontine.id = :tontineId"
+          + "   AND c.statut = 'VALIDE'"
+          + "   AND c.deletedAt IS NULL"
+          + " GROUP BY c.membre.id")
+  List<Object[]> sumAndCountValideGroupByMembre(@Param("tontineId") UUID tontineId);
 }
