@@ -5,6 +5,10 @@ import com.africa.dinthialma_backend.admin.dto.GlobalDashboardResponse;
 import com.africa.dinthialma_backend.admin.dto.MyDashboardResponse;
 import com.africa.dinthialma_backend.admin.dto.UpdateUserRolesRequest;
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
+import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
+import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
+import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -59,13 +63,39 @@ public interface AdminDashboardService {
   AdminUserResponse updateUserRoles(String keycloakId, UUID userId, UpdateUserRolesRequest request)
       throws CustomException;
 
+  /**
+   * Liste paginée de toutes les tontines de la plateforme, filtrable par statut.
+   *
+   * <p>Réservé au SUPER_ADMIN.
+   *
+   * @param statut filtre optionnel (null = tous les statuts)
+   * @param pageable pagination (tri par défaut : createdAt DESC)
+   */
+  Page<TontineResponse> listAllTontines(String keycloakId, TontineStatut statut, Pageable pageable)
+      throws CustomException;
+
+  /**
+   * Liste paginée de toutes les cotisations de la plateforme, filtrable par statut et tontine.
+   *
+   * <p>Réservé au SUPER_ADMIN.
+   *
+   * @param statut filtre optionnel (null = tous les statuts)
+   * @param tontineId filtre optionnel (null = toutes les tontines)
+   * @param pageable pagination (tri par défaut : createdAt DESC)
+   */
+  Page<CotisationResponse> listAllContributions(
+      String keycloakId, CotisationStatut statut, UUID tontineId, Pageable pageable)
+      throws CustomException;
+
   // ─── ADMIN (créateur tontines) ───────────────────────────────────────────
 
   /**
-   * Retourne le tableau de bord de l'admin pour ses propres tontines.
+   * Retourne le tableau de bord de l'admin pour ses propres tontines, paginé par tontine.
    *
    * <p>Accessible à tout utilisateur ayant au moins une tontine créée. Les stats (EN_ATTENTE,
-   * EN_RETARD, cycle en cours) sont calculées par tontine.
+   * EN_RETARD, cycle en cours) sont calculées par tontine, uniquement pour la page demandée.
+   *
+   * @param pageable pagination des tontines (tri par défaut : createdAt DESC)
    */
-  MyDashboardResponse getMyDashboard(String keycloakId) throws CustomException;
+  MyDashboardResponse getMyDashboard(String keycloakId, Pageable pageable) throws CustomException;
 }

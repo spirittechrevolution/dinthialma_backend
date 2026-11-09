@@ -4,6 +4,7 @@ import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -59,6 +60,22 @@ public interface CotisationRepository extends JpaRepository<Cotisation, UUID> {
   List<Cotisation> findByTontine_IdAndStatutAndDeletedAtIsNull(
       UUID tontineId, CotisationStatut statut);
 
+  /** Cotisations par statut pour une tontine paginées. */
+  Page<Cotisation> findByTontine_IdAndStatutAndDeletedAtIsNull(
+      UUID tontineId, CotisationStatut statut, Pageable pageable);
+
+  /** Cotisations d'un cycle restreintes à un ensemble de membres (récap paginé). */
+  List<Cotisation> findByCycle_IdAndMembre_IdInAndDeletedAtIsNull(
+      UUID cycleId, Collection<UUID> membreIds);
+
+  // ─── Listes plateforme (SUPER_ADMIN) ──────────────────────────────────────
+
+  /** Toutes les cotisations non supprimées de la plateforme paginées. */
+  Page<Cotisation> findByDeletedAtIsNull(Pageable pageable);
+
+  /** Toutes les cotisations non supprimées d'un statut donné paginées. */
+  Page<Cotisation> findByStatutAndDeletedAtIsNull(CotisationStatut statut, Pageable pageable);
+
   /** Cotisations par statut pour un cycle. */
   List<Cotisation> findByCycle_IdAndStatutAndDeletedAtIsNull(UUID cycleId, CotisationStatut statut);
 
@@ -110,4 +127,18 @@ public interface CotisationRepository extends JpaRepository<Cotisation, UUID> {
           + "   AND c.deletedAt IS NULL"
           + " GROUP BY c.membre.id")
   List<Object[]> sumAndCountValideGroupByMembre(@Param("tontineId") UUID tontineId);
+
+  /**
+   * Variante de {@link #sumAndCountValideGroupByMembre(UUID)} restreinte à un ensemble de membres
+   * (page courante du récapitulatif). Chaque ligne : {@code [membreId, totalMontant, nombre]}.
+   */
+  @Query(
+      "SELECT c.membre.id, COALESCE(SUM(c.montant), 0), COUNT(c) FROM Cotisation c"
+          + " WHERE c.tontine.id = :tontineId"
+          + "   AND c.membre.id IN :membreIds"
+          + "   AND c.statut = 'VALIDE'"
+          + "   AND c.deletedAt IS NULL"
+          + " GROUP BY c.membre.id")
+  List<Object[]> sumAndCountValideGroupByMembreIn(
+      @Param("tontineId") UUID tontineId, @Param("membreIds") Collection<UUID> membreIds);
 }
