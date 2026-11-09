@@ -9,6 +9,10 @@ import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
+import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
+import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
+import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
+import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -32,6 +36,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -86,6 +91,82 @@ public class AdminDashboardController {
     return ResponseEntity.ok(
         new CustomResponse(
             SUCCESS, OK, ResponseMessageConstants.ADMIN_DASHBOARD_SUCCESS, response));
+  }
+
+  @GetMapping("/dashboard/tontines")
+  @Operation(
+      summary = "Liste paginée de toutes les tontines",
+      description =
+          "🔒 Rôle requis : **SUPER_ADMIN**.\n\n"
+              + "Retourne toutes les tontines non supprimées de la plateforme, avec leur statut"
+              + " et leur nombre de membres. Filtre optionnel `?statut=`"
+              + " (BROUILLON, ACTIVE, SUSPENDUE, TERMINEE).\n\n"
+              + "Pagination : `?page=0&size=20&sort=createdAt,desc`")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Page de tontines",
+        content = @Content(schema = @Schema(implementation = TontineResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit – SUPER_ADMIN requis"),
+  })
+  public ResponseEntity<CustomResponse> listAllTontines(
+      @Parameter(description = "Filtre optionnel par statut", example = "ACTIVE")
+          @RequestParam(required = false)
+          TontineStatut statut,
+      @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
+          Pageable pageable,
+      HttpServletRequest httpRequest)
+      throws CustomException {
+
+    String keycloakId = headerParser.extractKeycloakId(httpRequest);
+    Page<TontineResponse> page =
+        adminDashboardService.listAllTontines(keycloakId, statut, pageable);
+
+    return ResponseEntity.ok(
+        new CustomResponse(
+            SUCCESS, OK, ResponseMessageConstants.ADMIN_TONTINES_LIST_SUCCESS, page));
+  }
+
+  @GetMapping("/dashboard/contributions")
+  @Operation(
+      summary = "Liste paginée de toutes les cotisations",
+      description =
+          "🔒 Rôle requis : **SUPER_ADMIN**.\n\n"
+              + "Retourne toutes les cotisations non supprimées de la plateforme.\n\n"
+              + "Filtres optionnels (cumulables) :\n"
+              + "- `?statut=` : EN_ATTENTE, VALIDE, EN_RETARD\n"
+              + "- `?tontineId=` : restreint à une tontine\n\n"
+              + "Pagination : `?page=0&size=20&sort=createdAt,desc`")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Page de cotisations",
+        content = @Content(schema = @Schema(implementation = CotisationResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit – SUPER_ADMIN requis"),
+  })
+  public ResponseEntity<CustomResponse> listAllContributions(
+      @Parameter(description = "Filtre optionnel par statut", example = "EN_ATTENTE")
+          @RequestParam(required = false)
+          CotisationStatut statut,
+      @Parameter(
+              description = "Filtre optionnel par tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @RequestParam(required = false)
+          UUID tontineId,
+      @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
+          Pageable pageable,
+      HttpServletRequest httpRequest)
+      throws CustomException {
+
+    String keycloakId = headerParser.extractKeycloakId(httpRequest);
+    Page<CotisationResponse> page =
+        adminDashboardService.listAllContributions(keycloakId, statut, tontineId, pageable);
+
+    return ResponseEntity.ok(
+        new CustomResponse(
+            SUCCESS, OK, ResponseMessageConstants.ADMIN_CONTRIBUTIONS_LIST_SUCCESS, page));
   }
 
   // ─── Gestion des utilisateurs (SUPER_ADMIN) ──────────────────────────────
@@ -263,7 +344,9 @@ public class AdminDashboardController {
               + "Métriques personnelles pour chaque tontine gérée par l'appelant :\n\n"
               + "- Cotisations EN_ATTENTE et EN_RETARD\n"
               + "- Montant total validé\n"
-              + "- Cycle EN_COURS avec bénéficiaire désigné")
+              + "- Cycle EN_COURS avec bénéficiaire désigné\n\n"
+              + "`tontines` est paginé ; `nombreTontinesGerees` reste le total global.\n\n"
+              + "Pagination : `?page=0&size=20&sort=createdAt,desc`")
   @ApiResponses({
     @ApiResponse(
         responseCode = "200",
@@ -271,11 +354,14 @@ public class AdminDashboardController {
         content = @Content(schema = @Schema(implementation = MyDashboardResponse.class))),
     @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
   })
-  public ResponseEntity<CustomResponse> getMyDashboard(HttpServletRequest httpRequest)
+  public ResponseEntity<CustomResponse> getMyDashboard(
+      @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
+          Pageable pageable,
+      HttpServletRequest httpRequest)
       throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
-    MyDashboardResponse response = adminDashboardService.getMyDashboard(keycloakId);
+    MyDashboardResponse response = adminDashboardService.getMyDashboard(keycloakId, pageable);
 
     return ResponseEntity.ok(
         new CustomResponse(

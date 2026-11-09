@@ -4,10 +4,10 @@ import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.List;
 import java.util.UUID;
 import lombok.Builder;
 import lombok.Getter;
+import org.springframework.data.domain.Page;
 
 @Schema(
     description =
@@ -17,11 +17,16 @@ import lombok.Getter;
 @Builder
 public class MyDashboardResponse {
 
-  @Schema(description = "Nombre total de tontines gérées par cet admin", example = "3")
-  private int nombreTontinesGerees;
+  @Schema(
+      description = "Nombre total de tontines gérées par cet admin (toutes pages confondues)",
+      example = "3")
+  private long nombreTontinesGerees;
 
-  @Schema(description = "Détail par tontine gérée")
-  private List<TontineStats> tontines;
+  @Schema(
+      description =
+          "Détail paginé par tontine gérée (`content`, `totalElements`, `totalPages`, …)."
+              + " Pagination : `?page=0&size=20&sort=createdAt,desc`")
+  private Page<TontineStats> tontines;
 
   @Schema(description = "Métriques d'une tontine gérée par l'admin")
   @Getter
