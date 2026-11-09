@@ -21,13 +21,14 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.data.web.SortDefault;
+import org.springframework.data.web.SortDefault.SortDefaults;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -363,7 +364,9 @@ public class CotisationController {
               + "- `statutCotisation` **VALIDE** → cotisation validée et prise en compte\n"
               + "- `statutCotisation` **EN_RETARD** → cycle clôturé sans cotisation validée\n\n"
               + "Les membres sont triés par `ordreJackpot` croissant puis par date d'adhésion."
-              + " Les membres SORTI sont exclus.")
+              + " Les membres SORTI sont exclus.\n\n"
+              + "Pagination : `?page=0&size=20` (tri par défaut `ordreJackpot,asc` puis"
+              + " `createdAt,asc`).")
   @ApiResponses({
     @ApiResponse(
         responseCode = "200",
@@ -382,12 +385,18 @@ public class CotisationController {
       @Parameter(description = "UUID du cycle", example = "660e8400-e29b-41d4-a716-446655440000")
           @PathVariable
           UUID cycleId,
+      @PageableDefault(size = 20)
+          @SortDefaults({
+            @SortDefault(sort = "ordreJackpot", direction = Sort.Direction.ASC),
+            @SortDefault(sort = "createdAt", direction = Sort.Direction.ASC)
+          })
+          Pageable pageable,
       HttpServletRequest httpRequest)
       throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
-    List<CycleRecapCotisationResponse> recap =
-        cotisationService.getCycleRecap(keycloakId, tontineId, cycleId);
+    Page<CycleRecapCotisationResponse> recap =
+        cotisationService.getCycleRecap(keycloakId, tontineId, cycleId, pageable);
 
     return ResponseEntity.ok(
         new CustomResponse(
@@ -408,7 +417,9 @@ public class CotisationController {
               + " cycle précis.\n\n"
               + "Les membres sans cotisation validée apparaissent avec `totalCotise = 0`."
               + " Les membres SORTI sont exclus. Tri par `ordreJackpot` croissant puis par date"
-              + " d'adhésion.")
+              + " d'adhésion.\n\n"
+              + "Pagination : `?page=0&size=20` (tri par défaut `ordreJackpot,asc` puis"
+              + " `createdAt,asc`).")
   @ApiResponses({
     @ApiResponse(
         responseCode = "200",
@@ -424,12 +435,18 @@ public class CotisationController {
               example = "550e8400-e29b-41d4-a716-446655440000")
           @PathVariable
           UUID tontineId,
+      @PageableDefault(size = 20)
+          @SortDefaults({
+            @SortDefault(sort = "ordreJackpot", direction = Sort.Direction.ASC),
+            @SortDefault(sort = "createdAt", direction = Sort.Direction.ASC)
+          })
+          Pageable pageable,
       HttpServletRequest httpRequest)
       throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
-    List<MembreTotalCotisationResponse> recap =
-        cotisationService.getTontineRecapTotal(keycloakId, tontineId);
+    Page<MembreTotalCotisationResponse> recap =
+        cotisationService.getTontineRecapTotal(keycloakId, tontineId, pageable);
 
     return ResponseEntity.ok(
         new CustomResponse(

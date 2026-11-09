@@ -593,8 +593,8 @@ public class CotisationServiceImpl implements CotisationService {
 
   @Override
   @Transactional(readOnly = true)
-  public List<CycleRecapCotisationResponse> getCycleRecap(
-      String keycloakId, UUID tontineId, UUID cycleId) throws CustomException {
+  public Page<CycleRecapCotisationResponse> getCycleRecap(
+      String keycloakId, UUID tontineId, UUID cycleId, Pageable pageable) throws CustomException {
 
     User caller = findUserByKeycloakId(keycloakId);
     Tontine tontine = findTontineById(tontineId);
@@ -603,50 +603,54 @@ public class CotisationServiceImpl implements CotisationService {
     // Vérifie que le cycle appartient bien à la tontine
     findCycleById(tontineId, cycleId);
 
-    List<TontineMembre> membres =
-        membreRepository.findByTontine_IdAndDeletedAtIsNullOrderByOrdreJackpotAscCreatedAtAsc(
-            tontineId);
+    Page<TontineMembre> membres =
+        membreRepository.findByTontine_IdAndStatutNotAndDeletedAtIsNull(
+            tontineId, MembreStatut.SORTI, pageable);
+    if (membres.isEmpty()) {
+      return membres.map(m -> CycleRecapCotisationResponse.from(m, null));
+    }
 
-    List<Cotisation> cotisations = cotisationRepository.findByCycle_IdAndDeletedAtIsNull(cycleId);
-
+    List<UUID> membreIds = membres.getContent().stream().map(TontineMembre::getId).toList();
     Map<UUID, Cotisation> cotisationByMembre =
-        cotisations.stream().collect(Collectors.toMap(c -> c.getMembre().getId(), c -> c));
+        cotisationRepository
+            .findByCycle_IdAndMembre_IdInAndDeletedAtIsNull(cycleId, membreIds)
+            .stream()
+            .collect(Collectors.toMap(c -> c.getMembre().getId(), c -> c));
 
-    return membres.stream()
-        .filter(m -> m.getStatut() != MembreStatut.SORTI)
-        .map(m -> CycleRecapCotisationResponse.from(m, cotisationByMembre.get(m.getId())))
-        .collect(Collectors.toList());
+    return membres.map(
+        m -> CycleRecapCotisationResponse.from(m, cotisationByMembre.get(m.getId())));
   }
 
   // ─── Récapitulatif total par membre ───────────────────────────────────────
 
   @Override
   @Transactional(readOnly = true)
-  public List<MembreTotalCotisationResponse> getTontineRecapTotal(String keycloakId, UUID tontineId)
-      throws CustomException {
+  public Page<MembreTotalCotisationResponse> getTontineRecapTotal(
+      String keycloakId, UUID tontineId, Pageable pageable) throws CustomException {
 
     User caller = findUserByKeycloakId(keycloakId);
     Tontine tontine = findTontineById(tontineId);
     assertIsCreatorOrSuperAdmin(caller, tontine);
 
-    List<TontineMembre> membres =
-        membreRepository.findByTontine_IdAndDeletedAtIsNullOrderByOrdreJackpotAscCreatedAtAsc(
-            tontineId);
+    Page<TontineMembre> membres =
+        membreRepository.findByTontine_IdAndStatutNotAndDeletedAtIsNull(
+            tontineId, MembreStatut.SORTI, pageable);
+    if (membres.isEmpty()) {
+      return membres.map(m -> MembreTotalCotisationResponse.from(m, BigDecimal.ZERO, 0L));
+    }
 
+    List<UUID> membreIds = membres.getContent().stream().map(TontineMembre::getId).toList();
     Map<UUID, Object[]> totauxByMembre =
-        cotisationRepository.sumAndCountValideGroupByMembre(tontineId).stream()
+        cotisationRepository.sumAndCountValideGroupByMembreIn(tontineId, membreIds).stream()
             .collect(Collectors.toMap(row -> (UUID) row[0], row -> row));
 
-    return membres.stream()
-        .filter(m -> m.getStatut() != MembreStatut.SORTI)
-        .map(
-            m -> {
-              Object[] row = totauxByMembre.get(m.getId());
-              BigDecimal total = row != null ? (BigDecimal) row[1] : BigDecimal.ZERO;
-              long nombre = row != null ? (Long) row[2] : 0L;
-              return MembreTotalCotisationResponse.from(m, total, nombre);
-            })
-        .collect(Collectors.toList());
+    return membres.map(
+        m -> {
+          Object[] row = totauxByMembre.get(m.getId());
+          BigDecimal total = row != null ? (BigDecimal) row[1] : BigDecimal.ZERO;
+          long nombre = row != null ? (Long) row[2] : 0L;
+          return MembreTotalCotisationResponse.from(m, total, nombre);
+        });
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────

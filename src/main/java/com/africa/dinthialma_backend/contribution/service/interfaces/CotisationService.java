@@ -7,7 +7,6 @@ import com.africa.dinthialma_backend.contribution.dto.CycleRecapCotisationRespon
 import com.africa.dinthialma_backend.contribution.dto.MembreTotalCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.UpdateCotisationRequest;
-import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -112,9 +111,10 @@ public interface CotisationService {
    * @param keycloakId sub JWT de l'admin appelant
    * @param tontineId identifiant de la tontine
    * @param cycleId identifiant du cycle
+   * @param pageable pagination (tri par défaut : ordreJackpot ASC, createdAt ASC)
    */
-  List<CycleRecapCotisationResponse> getCycleRecap(String keycloakId, UUID tontineId, UUID cycleId)
-      throws CustomException;
+  Page<CycleRecapCotisationResponse> getCycleRecap(
+      String keycloakId, UUID tontineId, UUID cycleId, Pageable pageable) throws CustomException;
 
   /**
    * Retourne le total cumulé cotisé (VALIDÉ) par membre, tous cycles confondus, pour une tontine.
@@ -126,7 +126,8 @@ public interface CotisationService {
    *
    * @param keycloakId sub JWT de l'admin appelant
    * @param tontineId identifiant de la tontine
+   * @param pageable pagination (tri par défaut : ordreJackpot ASC, createdAt ASC)
    */
-  List<MembreTotalCotisationResponse> getTontineRecapTotal(String keycloakId, UUID tontineId)
-      throws CustomException;
+  Page<MembreTotalCotisationResponse> getTontineRecapTotal(
+      String keycloakId, UUID tontineId, Pageable pageable) throws CustomException;
 }

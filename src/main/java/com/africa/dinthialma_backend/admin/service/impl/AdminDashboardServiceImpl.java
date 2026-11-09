@@ -17,16 +17,18 @@ import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
+import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
+import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
+import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -241,72 +243,115 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
     return AdminUserResponse.from(refreshed);
   }
 
+  // ─── Listes plateforme SUPER_ADMIN ────────────────────────────────────────
+
+  @Override
+  @Transactional(readOnly = true)
+  public Page<TontineResponse> listAllTontines(
+      String keycloakId, TontineStatut statut, Pageable pageable) throws CustomException {
+    assertSuperAdmin(keycloakId);
+
+    Page<Tontine> tontines =
+        statut == null
+            ? tontineRepository.findByDeletedAtIsNull(pageable)
+            : tontineRepository.findByStatutAndDeletedAtIsNull(statut, pageable);
+
+    return tontines.map(
+        t ->
+            TontineResponse.from(
+                t, (int) membreRepository.countByTontine_IdAndDeletedAtIsNull(t.getId())));
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Page<CotisationResponse> listAllContributions(
+      String keycloakId, CotisationStatut statut, UUID tontineId, Pageable pageable)
+      throws CustomException {
+    assertSuperAdmin(keycloakId);
+
+    Page<Cotisation> cotisations;
+    if (tontineId != null && statut != null) {
+      cotisations =
+          cotisationRepository.findByTontine_IdAndStatutAndDeletedAtIsNull(
+              tontineId, statut, pageable);
+    } else if (tontineId != null) {
+      cotisations = cotisationRepository.findByTontine_IdAndDeletedAtIsNull(tontineId, pageable);
+    } else if (statut != null) {
+      cotisations = cotisationRepository.findByStatutAndDeletedAtIsNull(statut, pageable);
+    } else {
+      cotisations = cotisationRepository.findByDeletedAtIsNull(pageable);
+    }
+
+    return cotisations.map(CotisationResponse::from);
+  }
+
   // ─── Dashboard ADMIN (créateur tontines) ─────────────────────────────────
 
   @Override
   @Transactional(readOnly = true)
-  public MyDashboardResponse getMyDashboard(String keycloakId) throws CustomException {
+  public MyDashboardResponse getMyDashboard(String keycloakId, Pageable pageable)
+      throws CustomException {
     User caller = findUserByKeycloakId(keycloakId);
 
-    List<Tontine> mesTontines =
-        tontineRepository.findByCreePar_IdAndDeletedAtIsNull(caller.getId());
-
-    List<MyDashboardResponse.TontineStats> statsList = new ArrayList<>();
-
-    for (Tontine tontine : mesTontines) {
-      UUID tid = tontine.getId();
-
-      int nombreMembres = (int) membreRepository.countByTontine_IdAndDeletedAtIsNull(tid);
-      long enAttente =
-          cotisationRepository.countByTontine_IdAndStatutAndDeletedAtIsNull(
-              tid, CotisationStatut.EN_ATTENTE);
-      long enRetard =
-          cotisationRepository.countByTontine_IdAndStatutAndDeletedAtIsNull(
-              tid, CotisationStatut.EN_RETARD);
-      var montantValide = cotisationRepository.sumMontantValideByTontine(tid);
-
-      // Cycle EN_COURS
-      MyDashboardResponse.CycleEnCoursInfo cycleInfo = null;
-      Optional<CycleTontine> cycleOpt =
-          cycleRepository.findByTontine_IdAndStatutAndDeletedAtIsNull(tid, CycleStatut.EN_COURS);
-      if (cycleOpt.isPresent()) {
-        CycleTontine cycle = cycleOpt.get();
-        String benefNom = null;
-        UUID benefUserId = null;
-        var premierGagnant =
-            cycle.getGagnants().stream().filter(g -> g.getDeletedAt() == null).findFirst();
-        if (premierGagnant.isPresent() && premierGagnant.get().getMembre().getUser() != null) {
-          User benefUser = premierGagnant.get().getMembre().getUser();
-          benefNom = benefUser.getFirstName() + " " + benefUser.getLastName();
-          benefUserId = benefUser.getId();
-        }
-        cycleInfo =
-            MyDashboardResponse.CycleEnCoursInfo.builder()
-                .cycleId(cycle.getId())
-                .numeroCycle(cycle.getNumeroCycle())
-                .dateDebut(cycle.getDateDebut())
-                .dateFin(cycle.getDateFin())
-                .beneficiaireNom(benefNom)
-                .beneficiaireUserId(benefUserId)
-                .build();
-      }
-
-      statsList.add(
-          MyDashboardResponse.TontineStats.builder()
-              .tontineId(tid)
-              .nom(tontine.getNom())
-              .statut(tontine.getStatut())
-              .nombreMembres(nombreMembres)
-              .cotisationsEnAttente(enAttente)
-              .cotisationsEnRetard(enRetard)
-              .montantTotalValide(montantValide)
-              .cycleEnCours(cycleInfo)
-              .build());
-    }
+    Page<MyDashboardResponse.TontineStats> statsPage =
+        tontineRepository
+            .findByCreePar_IdAndDeletedAtIsNull(caller.getId(), pageable)
+            .map(this::buildTontineStats);
 
     return MyDashboardResponse.builder()
-        .nombreTontinesGerees(mesTontines.size())
-        .tontines(statsList)
+        .nombreTontinesGerees(statsPage.getTotalElements())
+        .tontines(statsPage)
+        .build();
+  }
+
+  /** Calcule les métriques d'une tontine pour le dashboard admin. */
+  private MyDashboardResponse.TontineStats buildTontineStats(Tontine tontine) {
+    UUID tid = tontine.getId();
+
+    int nombreMembres = (int) membreRepository.countByTontine_IdAndDeletedAtIsNull(tid);
+    long enAttente =
+        cotisationRepository.countByTontine_IdAndStatutAndDeletedAtIsNull(
+            tid, CotisationStatut.EN_ATTENTE);
+    long enRetard =
+        cotisationRepository.countByTontine_IdAndStatutAndDeletedAtIsNull(
+            tid, CotisationStatut.EN_RETARD);
+    var montantValide = cotisationRepository.sumMontantValideByTontine(tid);
+
+    // Cycle EN_COURS
+    MyDashboardResponse.CycleEnCoursInfo cycleInfo = null;
+    Optional<CycleTontine> cycleOpt =
+        cycleRepository.findByTontine_IdAndStatutAndDeletedAtIsNull(tid, CycleStatut.EN_COURS);
+    if (cycleOpt.isPresent()) {
+      CycleTontine cycle = cycleOpt.get();
+      String benefNom = null;
+      UUID benefUserId = null;
+      var premierGagnant =
+          cycle.getGagnants().stream().filter(g -> g.getDeletedAt() == null).findFirst();
+      if (premierGagnant.isPresent() && premierGagnant.get().getMembre().getUser() != null) {
+        User benefUser = premierGagnant.get().getMembre().getUser();
+        benefNom = benefUser.getFirstName() + " " + benefUser.getLastName();
+        benefUserId = benefUser.getId();
+      }
+      cycleInfo =
+          MyDashboardResponse.CycleEnCoursInfo.builder()
+              .cycleId(cycle.getId())
+              .numeroCycle(cycle.getNumeroCycle())
+              .dateDebut(cycle.getDateDebut())
+              .dateFin(cycle.getDateFin())
+              .beneficiaireNom(benefNom)
+              .beneficiaireUserId(benefUserId)
+              .build();
+    }
+
+    return MyDashboardResponse.TontineStats.builder()
+        .tontineId(tid)
+        .nom(tontine.getNom())
+        .statut(tontine.getStatut())
+        .nombreMembres(nombreMembres)
+        .cotisationsEnAttente(enAttente)
+        .cotisationsEnRetard(enRetard)
+        .montantTotalValide(montantValide)
+        .cycleEnCours(cycleInfo)
         .build();
   }
 

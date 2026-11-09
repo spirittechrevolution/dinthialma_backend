@@ -19,6 +19,12 @@ public interface TontineRepository extends JpaRepository<Tontine, UUID> {
   /** Tontines créées par un utilisateur (admin de ces tontines). */
   List<Tontine> findByCreePar_IdAndDeletedAtIsNull(UUID userId);
 
+  /** Tontines créées par un utilisateur paginées (dashboard admin). */
+  Page<Tontine> findByCreePar_IdAndDeletedAtIsNull(UUID userId, Pageable pageable);
+
+  /** Tontines non supprimées d'un statut donné paginées (usage SUPER_ADMIN). */
+  Page<Tontine> findByStatutAndDeletedAtIsNull(TontineStatut statut, Pageable pageable);
+
   /** Toutes les tontines non supprimées (usage SUPER_ADMIN). */
   List<Tontine> findByDeletedAtIsNull();
 

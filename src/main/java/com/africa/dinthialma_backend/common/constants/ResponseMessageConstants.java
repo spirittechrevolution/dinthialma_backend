@@ -118,6 +118,10 @@ public final class ResponseMessageConstants {
   public static final String ADMIN_USERS_LIST_SUCCESS =
       "Liste des utilisateurs récupérée avec succès";
   public static final String ADMIN_USER_GET_SUCCESS = "Utilisateur récupéré avec succès";
+  public static final String ADMIN_TONTINES_LIST_SUCCESS =
+      "Liste des tontines de la plateforme récupérée avec succès";
+  public static final String ADMIN_CONTRIBUTIONS_LIST_SUCCESS =
+      "Liste des cotisations de la plateforme récupérée avec succès";
   public static final String ADMIN_USER_DISABLED = "Compte utilisateur désactivé avec succès";
   public static final String ADMIN_USER_ENABLED = "Compte utilisateur réactivé avec succès";
   public static final String ADMIN_USER_ROLES_UPDATED = "Rôles mis à jour avec succès";
