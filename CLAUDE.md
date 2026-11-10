@@ -114,7 +114,7 @@
 | `/beneficiaires` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 historique des cycles TERMINE avec gagnants (pageable, tri numeroCycle ASC) |
 | `/` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 mode MANUEL uniquement |
 | `/{cycleId}/cloturer` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 EN_COURS → TERMINE, calcul jackpot + commissions |
-| `/{cycleId}/beneficiaire` | PATCH | ❌ | ❌ | ✅² | ✅ | 🔒 ordreBeneficiaire MANUEL + cycle TERMINE sans gagnant ; `membreIds` vide = tirage aléatoire de `nombreGagnants` |
+| `/{cycleId}/beneficiaire` | PATCH | ❌ | ❌ | ✅² | ✅ | 🔒 ordreBeneficiaire MANUEL + cycle TERMINE sans gagnant ; `membreIds` vide = tirage aléatoire de `nombreGagnants` ; refuse doublons, membres non ACTIF et membres `aRecuJackpot` |
 
 ### 💸 Commissions (`/v1/tontines/{tontineId}/commissions`)
 
@@ -133,13 +133,13 @@
 |----------|---------|-------|-------------|-------------|
 | `/dashboard` | GET | ❌ | ✅ | Statistiques globales plateforme |
 | `/dashboard/tontines` | GET | ❌ | ✅ | Toutes tontines + statuts (pageable, filtre `?statut=`) |
-| `/dashboard/users` | GET | ❌ | ✅ | Tous les utilisateurs (pageable) |
+| `/dashboard/users` | GET | ❌ | ✅ | Tous les utilisateurs (pageable, filtre `?accountStatus=ACTIVE|PRE_ENROLLED`, ACTIVE inclut les statuts NULL) |
 | `/dashboard/users/{id}` | GET | ❌ | ✅ | Détail utilisateur |
 | `/dashboard/users/{id}/disable` | POST | ❌ | ✅ | Désactiver un compte |
 | `/dashboard/users/{id}/enable` | POST | ❌ | ✅ | Réactiver un compte |
 | `/dashboard/users/{id}/roles` | PUT | ❌ | ✅ | Modifier les rôles |
 | `/dashboard/contributions` | GET | ❌ | ✅ | Toutes cotisations (pageable, filtres cumulables `?statut=` `?tontineId=`) |
-| `/my-dashboard` | GET | ✅ | ✅ | Métriques de l'admin pour ses tontines (`tontines` paginé, `nombreTontinesGerees` = total global) |
+| `/my-dashboard` | GET | ✅ | ✅ | Métriques de l'admin pour ses tontines (`tontines` = `PagedModel`) + agrégats globaux : `nombreTontinesGerees`, `montantTotalValide`, `totalMembres`, `totalCotisationsEnAttente/EnRetard` |
 
 ### 🔔 Notifications (`/v1/notifications`)
 
@@ -311,6 +311,12 @@ Tous les endpoints de liste retournent `Page<T>` (Spring Data) :
 
 Query params client : `?page=0&size=20&sort=createdAt,desc`
 
+Sérialisation : `PageSerializationMode.VIA_DTO` → `{ content: [...], page: { size, number, totalElements, totalPages } }`.
+Une page imbriquée dans un DTO doit être typée `PagedModel<T>` (pas `Page<T>`) pour que Springdoc documente le vrai format.
+
+> ⚠️ **Booléens préfixés** (`aRecuJackpot`…) : le getter Lombok `isARecuJackpot()` est sérialisé `arecuJackpot`.
+> Déclarer un getter explicite annoté `@JsonProperty("aRecuJackpot")` (cf. `MembreResponse`).
+
 ### ⛔ Imports — règle absolue : PAS de wildcard `*`
 
 **Interdit** :
@@ -462,7 +468,7 @@ Prochaine version disponible : **V027**
 | Complétion du nom si PRE_ENROLLED existant avec nom vide | ✅ | AUTO |
 | SMS invitation envoyé au membre pré-inscrit | ✅ | AUTO (non-bloquant) |
 | Retirer cotisant | ✅ | 🔒 créateur + SUPER_ADMIN |
-| Liste cotisants (avec accountStatus exposé) | ✅ | 🔒 membres + créateur + SUPER_ADMIN |
+| Liste cotisants (avec accountStatus, `aRecuJackpot`, `dateJackpot` exposés) | ✅ | 🔒 membres + créateur + SUPER_ADMIN |
 | Modifier statut (ACTIF/SUSPENDU/SORTI) | ✅ | 🔒 créateur + SUPER_ADMIN |
 
 ### Module Cotisation ✅ (complet)

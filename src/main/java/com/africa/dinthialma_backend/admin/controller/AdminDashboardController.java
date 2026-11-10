@@ -5,6 +5,7 @@ import com.africa.dinthialma_backend.admin.dto.GlobalDashboardResponse;
 import com.africa.dinthialma_backend.admin.dto.MyDashboardResponse;
 import com.africa.dinthialma_backend.admin.dto.UpdateUserRolesRequest;
 import com.africa.dinthialma_backend.admin.service.interfaces.AdminDashboardService;
+import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
@@ -177,6 +178,8 @@ public class AdminDashboardController {
       description =
           "🔒 Rôle requis : **SUPER_ADMIN**.\n\n"
               + "Retourne tous les utilisateurs non supprimés de la plateforme.\n\n"
+              + "Filtre optionnel `?accountStatus=ACTIVE|PRE_ENROLLED` (ACTIVE inclut les"
+              + " comptes antérieurs sans statut).\n\n"
               + "Pagination : `?page=0&size=20&sort=createdAt,desc`")
   @ApiResponses({
     @ApiResponse(
@@ -187,13 +190,17 @@ public class AdminDashboardController {
     @ApiResponse(responseCode = "403", description = "Accès interdit – SUPER_ADMIN requis"),
   })
   public ResponseEntity<CustomResponse> listUsers(
+      @Parameter(description = "Filtre optionnel par statut de compte", example = "PRE_ENROLLED")
+          @RequestParam(required = false)
+          AccountStatus accountStatus,
       @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
           Pageable pageable,
       HttpServletRequest httpRequest)
       throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
-    Page<AdminUserResponse> page = adminDashboardService.listUsers(keycloakId, pageable);
+    Page<AdminUserResponse> page =
+        adminDashboardService.listUsers(keycloakId, accountStatus, pageable);
 
     return ResponseEntity.ok(
         new CustomResponse(SUCCESS, OK, ResponseMessageConstants.ADMIN_USERS_LIST_SUCCESS, page));

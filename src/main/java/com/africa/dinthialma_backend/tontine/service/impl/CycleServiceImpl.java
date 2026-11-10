@@ -46,6 +46,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -618,6 +619,9 @@ public class CycleServiceImpl implements CycleService {
     List<TontineMembre> choisis;
 
     if (request.getMembreIds() != null && !request.getMembreIds().isEmpty()) {
+      if (new HashSet<>(request.getMembreIds()).size() != request.getMembreIds().size()) {
+        throw new BadRequestException("Un même membre ne peut pas être désigné deux fois");
+      }
       choisis = new ArrayList<>();
       for (UUID membreId : request.getMembreIds()) {
         TontineMembre m =
@@ -625,6 +629,10 @@ public class CycleServiceImpl implements CycleService {
                 .findByIdAndTontine_IdAndDeletedAtIsNull(membreId, tontineId)
                 .orElseThrow(
                     () -> new NotFoundException(ResponseMessageConstants.MEMBER_NOT_FOUND));
+        if (m.getStatut() != MembreStatut.ACTIF) {
+          throw new BadRequestException(
+              m.getUser().getFirstName() + " n'est pas un membre actif de cette tontine");
+        }
         if (m.isARecuJackpot()) {
           throw new BadRequestException(
               m.getUser().getFirstName() + " a déjà reçu un jackpot dans cette tontine");

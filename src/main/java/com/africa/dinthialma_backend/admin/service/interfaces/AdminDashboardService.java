@@ -4,6 +4,7 @@ import com.africa.dinthialma_backend.admin.dto.AdminUserResponse;
 import com.africa.dinthialma_backend.admin.dto.GlobalDashboardResponse;
 import com.africa.dinthialma_backend.admin.dto.MyDashboardResponse;
 import com.africa.dinthialma_backend.admin.dto.UpdateUserRolesRequest;
+import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
@@ -30,9 +31,11 @@ public interface AdminDashboardService {
    *
    * <p>Réservé au SUPER_ADMIN.
    *
+   * @param accountStatus filtre optionnel (null = tous ; ACTIVE inclut les comptes sans statut)
    * @param pageable pagination (page, size, sort)
    */
-  Page<AdminUserResponse> listUsers(String keycloakId, Pageable pageable) throws CustomException;
+  Page<AdminUserResponse> listUsers(
+      String keycloakId, AccountStatus accountStatus, Pageable pageable) throws CustomException;
 
   /**
    * Détail complet d'un utilisateur.

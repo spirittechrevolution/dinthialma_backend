@@ -1,5 +1,6 @@
 package com.africa.dinthialma_backend.auth.repository;
 
+import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
 import com.africa.dinthialma_backend.auth.codeList.UserRole;
 import com.africa.dinthialma_backend.auth.entity.User;
 import java.time.LocalDateTime;
@@ -38,6 +39,20 @@ public interface UserRepository extends JpaRepository<User, UUID> {
   Page<User> findByActiveTrueAndDeletedAtIsNull(Pageable pageable);
 
   Page<User> findByActiveFalseAndDeletedAtIsNull(Pageable pageable);
+
+  /** Comptes PRE_ENROLLED non supprimés (pageable) – filtre admin {@code ?accountStatus=}. */
+  Page<User> findByAccountStatusAndDeletedAtIsNull(AccountStatus accountStatus, Pageable pageable);
+
+  /**
+   * Comptes ACTIVE non supprimés (pageable). {@code account_status} NULL est traité comme ACTIVE
+   * (comptes créés avant V021).
+   */
+  @Query(
+      "SELECT u FROM User u"
+          + " WHERE u.deletedAt IS NULL"
+          + "   AND (u.accountStatus IS NULL"
+          + "        OR u.accountStatus = com.africa.dinthialma_backend.auth.codeList.AccountStatus.ACTIVE)")
+  Page<User> findActiveAccountsAndDeletedAtIsNull(Pageable pageable);
 
   /** Total utilisateurs non supprimés. */
   long countByDeletedAtIsNull();
