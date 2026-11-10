@@ -96,10 +96,14 @@
 
 | Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
 |----------|---------|------|--------|-------|-------------|-------|
-| `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 ¹MEMBER voit les siennes seulement |
+| `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 ¹MEMBER voit les siennes seulement ; filtres `?cycleId=` et `?membreId=` (admin uniquement, ignoré pour MEMBER) |
 | `/{id}` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
 | `/` | POST | ❌ | ✅¹ | ❌ | ✅ | 🔒 le cotisant enregistre son paiement |
+| `/admin` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 saisie admin pour n'importe quel membre (y compris PRE_ENROLLED), créée directement VALIDE |
+| `/{id}` | PATCH | ❌ | ❌ | ✅² | ✅ | 🔒 correction (champs non-null) : EN_ATTENTE ou VALIDE + cycle EN_COURS ; refusé si cycle TERMINE ou EN_RETARD |
 | `/{id}/valider` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 EN_ATTENTE → VALIDE |
+| `/recap/{cycleId}` | GET | ❌ | ❌ | ✅² | ✅ | 🔒 statut de cotisation par membre pour un cycle (pageable, SORTI exclus) |
+| `/recap-total` | GET | ❌ | ❌ | ✅² | ✅ | 🔒 total VALIDÉ cumulé par membre, tous cycles (pageable, SORTI exclus) |
 
 ### 🔄 Cycles (`/v1/tontines/{tontineId}/cycles`)
 
@@ -107,8 +111,10 @@
 |----------|---------|------|--------|-------|-------------|-------|
 | `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
 | `/{cycleId}` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
+| `/beneficiaires` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 historique des cycles TERMINE avec gagnants (pageable, tri numeroCycle ASC) |
 | `/` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 mode MANUEL uniquement |
 | `/{cycleId}/cloturer` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 EN_COURS → TERMINE, calcul jackpot + commissions |
+| `/{cycleId}/beneficiaire` | PATCH | ❌ | ❌ | ✅² | ✅ | 🔒 ordreBeneficiaire MANUEL + cycle TERMINE sans gagnant ; `membreIds` vide = tirage aléatoire de `nombreGagnants` |
 
 ### 💸 Commissions (`/v1/tontines/{tontineId}/commissions`)
 
@@ -126,14 +132,14 @@
 | Endpoint | Méthode | ADMIN | SUPER_ADMIN | Description |
 |----------|---------|-------|-------------|-------------|
 | `/dashboard` | GET | ❌ | ✅ | Statistiques globales plateforme |
-| `/dashboard/tontines` | GET | ❌ | ✅ | Toutes tontines + statuts |
+| `/dashboard/tontines` | GET | ❌ | ✅ | Toutes tontines + statuts (pageable, filtre `?statut=`) |
 | `/dashboard/users` | GET | ❌ | ✅ | Tous les utilisateurs (pageable) |
 | `/dashboard/users/{id}` | GET | ❌ | ✅ | Détail utilisateur |
 | `/dashboard/users/{id}/disable` | POST | ❌ | ✅ | Désactiver un compte |
 | `/dashboard/users/{id}/enable` | POST | ❌ | ✅ | Réactiver un compte |
 | `/dashboard/users/{id}/roles` | PUT | ❌ | ✅ | Modifier les rôles |
-| `/dashboard/contributions` | GET | ❌ | ✅ | Toutes cotisations (filtrables) |
-| `/my-dashboard` | GET | ✅ | ✅ | Métriques de l'admin pour ses tontines |
+| `/dashboard/contributions` | GET | ❌ | ✅ | Toutes cotisations (pageable, filtres cumulables `?statut=` `?tontineId=`) |
+| `/my-dashboard` | GET | ✅ | ✅ | Métriques de l'admin pour ses tontines (`tontines` paginé, `nombreTontinesGerees` = total global) |
 
 ### 🔔 Notifications (`/v1/notifications`)
 
@@ -297,6 +303,8 @@ Tous les endpoints de liste retournent `Page<T>` (Spring Data) :
 | Cycles | `numeroCycle` | ASC |
 | Membres | `ordreJackpot` | ASC |
 | Cotisations | `createdAt` | DESC |
+| Récaps cotisations par membre | `ordreJackpot`, puis `createdAt` | ASC, ASC |
+| Dashboard admin (`my-dashboard`, `/dashboard/tontines`, `/dashboard/contributions`) | `createdAt` | DESC |
 | Commissions | `createdAt` | ASC |
 | Users (admin) | `createdAt` | DESC |
 | Notifications | `createdAt` | DESC |
@@ -462,9 +470,13 @@ Prochaine version disponible : **V027**
 | Feature | Statut | Accès |
 |---------|--------|-------|
 | Enregistrer cotisation | ✅ | 🔒 cotisant lui-même |
+| Saisie admin directe (VALIDE, membres PRE_ENROLLED inclus) | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Modifier cotisation (PATCH, selon statut / cycle) | ✅ | 🔒 créateur + SUPER_ADMIN |
 | Valider cotisation | ✅ | 🔒 créateur + SUPER_ADMIN |
-| Liste cotisations | ✅ | 🔒 MEMBER voit les siennes ; admin voit tout |
+| Liste cotisations (filtres cycle + membre) | ✅ | 🔒 MEMBER voit les siennes ; admin voit tout |
 | Détail cotisation | ✅ | 🔒 propriétaire + créateur + SUPER_ADMIN |
+| Récapitulatif par membre pour un cycle (paginé) | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Total cumulé validé par membre (paginé) | ✅ | 🔒 créateur + SUPER_ADMIN |
 
 ### Module Cycle ✅ (complet)
 
@@ -474,6 +486,8 @@ Prochaine version disponible : **V027**
 | Détail cycle | ✅ | 🔒 membres + créateur + SUPER_ADMIN |
 | Ouvrir cycle (ROTATIVE MANUEL uniquement) | ✅ | 🔒 créateur + SUPER_ADMIN |
 | Clôturer cycle (ROTATIVE) | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Désigner les gagnants (MANUEL ou tirage aléatoire) | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Historique des bénéficiaires (paginé) | ✅ | 🔒 membres + créateur + SUPER_ADMIN |
 | Clôturer sous-cycle (EVENEMENTIELLE) | ✅ | 🔒 créateur + SUPER_ADMIN – activation sous-cycle suivant |
 | Clôture finale EVENEMENTIELLE | ✅ | AUTO détection dernier cycle – `distributionParMembre` calculée |
 | Calcul jackpot brut = somme cotisations VALIDEES | ✅ | AUTO à la clôture |
@@ -498,11 +512,13 @@ Prochaine version disponible : **V027**
 |---------|--------|-------|
 | Dashboard global (stats plateforme) | ✅ | 🔒 SUPER_ADMIN |
 | Liste tous utilisateurs (pageable) | ✅ | 🔒 SUPER_ADMIN |
+| Liste toutes tontines (pageable, filtre statut) | ✅ | 🔒 SUPER_ADMIN |
+| Liste toutes cotisations (pageable, filtres statut + tontine) | ✅ | 🔒 SUPER_ADMIN |
 | Détail utilisateur | ✅ | 🔒 SUPER_ADMIN |
 | Désactiver compte | ✅ | 🔒 SUPER_ADMIN |
 | Réactiver compte | ✅ | 🔒 SUPER_ADMIN |
 | Modifier rôles (replace-all idempotent) | ✅ | 🔒 SUPER_ADMIN |
-| Dashboard mes tontines (résumé admin) | ✅ | 🔒 ADMIN+ |
+| Dashboard mes tontines (résumé admin, paginé) | ✅ | 🔒 ADMIN+ |
 | Journal d'audit | 🔲 TODO | 🔒 SUPER_ADMIN |
 
 ### Module Notification ✅ (complet)
@@ -610,7 +626,7 @@ cd docker && docker compose up -d
 
 ✦ Sprint 3 – Dashboard Admin        ✅ TERMINÉ
   → AdminDashboardService (GlobalDashboard + MyDashboard)  ✅
-  → AdminDashboardController (7 endpoints)                 ✅
+  → AdminDashboardController (9 endpoints)                 ✅
   → Gestion utilisateurs (disable/enable/roles)            ✅
 
 ✦ Sprint 4 – Notifications & Audit  ✅ TERMINÉ
