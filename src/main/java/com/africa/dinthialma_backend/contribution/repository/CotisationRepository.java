@@ -103,6 +103,27 @@ public interface CotisationRepository extends JpaRepository<Cotisation, UUID> {
           + "   AND c.deletedAt IS NULL")
   BigDecimal sumMontantValideByTontine(@Param("tontineId") UUID tontineId);
 
+  /** Nombre de membres distincts ayant au moins une cotisation VALIDÉE dans une tontine. */
+  @Query(
+      "SELECT COUNT(DISTINCT c.membre.id) FROM Cotisation c"
+          + " WHERE c.tontine.id = :tontineId"
+          + "   AND c.statut = 'VALIDE'"
+          + "   AND c.deletedAt IS NULL")
+  long countMembresAyantCotiseValide(@Param("tontineId") UUID tontineId);
+
+  /** Montant total VALIDÉ sur toutes les tontines (non supprimées) créées par un utilisateur. */
+  @Query(
+      "SELECT COALESCE(SUM(c.montant), 0) FROM Cotisation c"
+          + " WHERE c.tontine.creePar.id = :userId"
+          + "   AND c.tontine.deletedAt IS NULL"
+          + "   AND c.statut = 'VALIDE'"
+          + "   AND c.deletedAt IS NULL")
+  BigDecimal sumMontantValideByCreateur(@Param("userId") UUID userId);
+
+  /** Nombre de cotisations d'un statut sur toutes les tontines (non supprimées) d'un créateur. */
+  long countByTontine_CreePar_IdAndTontine_DeletedAtIsNullAndStatutAndDeletedAtIsNull(
+      UUID userId, CotisationStatut statut);
+
   /** Cotisations enregistrées depuis une date (pour activité récente). */
   long countByCreatedAtGreaterThanEqualAndDeletedAtIsNull(LocalDateTime since);
 

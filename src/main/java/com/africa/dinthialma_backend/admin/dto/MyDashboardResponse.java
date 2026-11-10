@@ -1,13 +1,14 @@
 package com.africa.dinthialma_backend.admin.dto;
 
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
+import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 import lombok.Builder;
 import lombok.Getter;
-import org.springframework.data.domain.Page;
+import org.springframework.data.web.PagedModel;
 
 @Schema(
     description =
@@ -22,11 +23,34 @@ public class MyDashboardResponse {
       example = "3")
   private long nombreTontinesGerees;
 
+  // ─── Agrégats globaux (toutes tontines gérées, indépendants de la pagination) ──
+
+  @Schema(
+      description = "Somme des cotisations VALIDÉES sur toutes les tontines gérées, en FCFA",
+      example = "1250000")
+  private BigDecimal montantTotalValide;
+
+  @Schema(
+      description = "Nombre total de membres (non supprimés) sur toutes les tontines gérées",
+      example = "48")
+  private long totalMembres;
+
+  @Schema(
+      description = "Nombre total de cotisations EN_ATTENTE sur toutes les tontines gérées",
+      example = "7")
+  private long totalCotisationsEnAttente;
+
+  @Schema(
+      description = "Nombre total de cotisations EN_RETARD sur toutes les tontines gérées",
+      example = "2")
+  private long totalCotisationsEnRetard;
+
   @Schema(
       description =
-          "Détail paginé par tontine gérée (`content`, `totalElements`, `totalPages`, …)."
-              + " Pagination : `?page=0&size=20&sort=createdAt,desc`")
-  private Page<TontineStats> tontines;
+          "Détail paginé par tontine gérée : `{ content: [...], page: { size, number,"
+              + " totalElements, totalPages } }`. Pagination :"
+              + " `?page=0&size=20&sort=createdAt,desc`")
+  private PagedModel<TontineStats> tontines;
 
   @Schema(description = "Métriques d'une tontine gérée par l'admin")
   @Getter
@@ -43,6 +67,49 @@ public class MyDashboardResponse {
         description = "Statut courant",
         allowableValues = {"BROUILLON", "ACTIVE", "SUSPENDUE", "TERMINEE"})
     private TontineStatut statut;
+
+    @Schema(
+        description = "Type de tontine",
+        allowableValues = {"ROTATIVE", "EVENEMENTIELLE"})
+    private TontineType tontineType;
+
+    @Schema(
+        description = "Montant de la cotisation en FCFA (null si événementielle à montant libre)",
+        example = "20000",
+        nullable = true)
+    private BigDecimal montant;
+
+    @Schema(description = "Fréquence de cotisation", example = "MENSUEL")
+    private String frequence;
+
+    @Schema(description = "Date de début de la tontine", example = "2026-01-01")
+    private LocalDate dateDebut;
+
+    @Schema(
+        description = "Date d'échéance – événementielle uniquement, null sinon",
+        example = "2026-06-16",
+        nullable = true)
+    private LocalDate dateEcheance;
+
+    @Schema(
+        description = "Nom de l'événement – événementielle uniquement, null sinon",
+        example = "Tabaski 2026",
+        nullable = true)
+    private String nomEvenement;
+
+    @Schema(
+        description = "Montant libre – événementielle uniquement, null sinon",
+        example = "false",
+        nullable = true)
+    private Boolean montantLibre;
+
+    @Schema(
+        description =
+            "Événementielle uniquement (null sinon) : nombre de membres ayant au moins une"
+                + " cotisation VALIDÉE",
+        example = "9",
+        nullable = true)
+    private Long nombreMembresCotise;
 
     @Schema(description = "Nombre total de membres attendus", example = "12")
     private int nombreMembres;
