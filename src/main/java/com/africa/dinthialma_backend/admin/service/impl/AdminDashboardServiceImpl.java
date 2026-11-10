@@ -5,6 +5,7 @@ import com.africa.dinthialma_backend.admin.dto.GlobalDashboardResponse;
 import com.africa.dinthialma_backend.admin.dto.MyDashboardResponse;
 import com.africa.dinthialma_backend.admin.dto.UpdateUserRolesRequest;
 import com.africa.dinthialma_backend.admin.service.interfaces.AdminDashboardService;
+import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
 import com.africa.dinthialma_backend.auth.codeList.UserRole;
 import com.africa.dinthialma_backend.auth.entity.User;
 import com.africa.dinthialma_backend.auth.entity.UserRoleAssignment;
@@ -23,6 +24,7 @@ import com.africa.dinthialma_backend.contribution.repository.CotisationRepositor
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
+import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
@@ -37,6 +39,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PagedModel;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -127,10 +130,19 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
 
   @Override
   @Transactional(readOnly = true)
-  public Page<AdminUserResponse> listUsers(String keycloakId, Pageable pageable)
-      throws CustomException {
+  public Page<AdminUserResponse> listUsers(
+      String keycloakId, AccountStatus accountStatus, Pageable pageable) throws CustomException {
     assertSuperAdmin(keycloakId);
-    return userRepository.findByDeletedAtIsNull(pageable).map(AdminUserResponse::from);
+
+    Page<User> users;
+    if (accountStatus == null) {
+      users = userRepository.findByDeletedAtIsNull(pageable);
+    } else if (accountStatus == AccountStatus.ACTIVE) {
+      users = userRepository.findActiveAccountsAndDeletedAtIsNull(pageable);
+    } else {
+      users = userRepository.findByAccountStatusAndDeletedAtIsNull(accountStatus, pageable);
+    }
+    return users.map(AdminUserResponse::from);
   }
 
   @Override
@@ -292,16 +304,30 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
   public MyDashboardResponse getMyDashboard(String keycloakId, Pageable pageable)
       throws CustomException {
     User caller = findUserByKeycloakId(keycloakId);
+    UUID uid = caller.getId();
 
     Page<MyDashboardResponse.TontineStats> statsPage =
         tontineRepository
-            .findByCreePar_IdAndDeletedAtIsNull(caller.getId(), pageable)
+            .findByCreePar_IdAndDeletedAtIsNull(uid, pageable)
             .map(this::buildTontineStats);
 
+    // Agrégats globaux : calculés en base sur toutes les tontines, indépendamment de la page
     return MyDashboardResponse.builder()
         .nombreTontinesGerees(statsPage.getTotalElements())
-        .tontines(statsPage)
+        .montantTotalValide(cotisationRepository.sumMontantValideByCreateur(uid))
+        .totalMembres(
+            membreRepository.countByTontine_CreePar_IdAndTontine_DeletedAtIsNullAndDeletedAtIsNull(
+                uid))
+        .totalCotisationsEnAttente(countCotisationsCreateur(uid, CotisationStatut.EN_ATTENTE))
+        .totalCotisationsEnRetard(countCotisationsCreateur(uid, CotisationStatut.EN_RETARD))
+        .tontines(new PagedModel<>(statsPage))
         .build();
+  }
+
+  private long countCotisationsCreateur(UUID userId, CotisationStatut statut) {
+    return cotisationRepository
+        .countByTontine_CreePar_IdAndTontine_DeletedAtIsNullAndStatutAndDeletedAtIsNull(
+            userId, statut);
   }
 
   /** Calcule les métriques d'une tontine pour le dashboard admin. */
@@ -343,10 +369,21 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
               .build();
     }
 
+    boolean evenementielle = tontine.getTontineType() == TontineType.EVENEMENTIELLE;
+
     return MyDashboardResponse.TontineStats.builder()
         .tontineId(tid)
         .nom(tontine.getNom())
         .statut(tontine.getStatut())
+        .tontineType(tontine.getTontineType())
+        .montant(tontine.getMontant())
+        .frequence(tontine.getFrequence())
+        .dateDebut(tontine.getDateDebut())
+        .dateEcheance(evenementielle ? tontine.getDateEcheance() : null)
+        .nomEvenement(evenementielle ? tontine.getNomEvenement() : null)
+        .montantLibre(evenementielle ? tontine.isMontantLibre() : null)
+        .nombreMembresCotise(
+            evenementielle ? cotisationRepository.countMembresAyantCotiseValide(tid) : null)
         .nombreMembres(nombreMembres)
         .cotisationsEnAttente(enAttente)
         .cotisationsEnRetard(enRetard)

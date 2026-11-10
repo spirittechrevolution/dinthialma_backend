@@ -1,5 +1,6 @@
 package com.africa.dinthialma_backend.admin.dto;
 
+import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
 import com.africa.dinthialma_backend.auth.entity.User;
 import com.africa.dinthialma_backend.auth.entity.UserRoleAssignment;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -41,6 +42,13 @@ public class AdminUserResponse {
   @Schema(description = "Compte actif ou désactivé", example = "true")
   private boolean active;
 
+  @Schema(
+      description =
+          "Statut d'activation du compte. PRE_ENROLLED = ajouté par un admin de tontine, pas"
+              + " encore inscrit sur l'application.",
+      allowableValues = {"ACTIVE", "PRE_ENROLLED"})
+  private AccountStatus accountStatus;
+
   @Schema(description = "Un code PIN a été configuré sur ce compte", example = "true")
   private boolean pinConfigured;
 
@@ -72,6 +80,8 @@ public class AdminUserResponse {
         .email(user.getEmail())
         .avatarUrl(user.getAvatarUrl())
         .active(user.isActive())
+        .accountStatus(
+            user.getAccountStatus() != null ? user.getAccountStatus() : AccountStatus.ACTIVE)
         .pinConfigured(user.getPinHash() != null)
         .roles(roleNames)
         .createdAt(user.getCreatedAt())

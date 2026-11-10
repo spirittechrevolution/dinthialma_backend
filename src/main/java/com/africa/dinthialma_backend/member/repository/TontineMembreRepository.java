@@ -32,6 +32,9 @@ public interface TontineMembreRepository extends JpaRepository<TontineMembre, UU
   Page<TontineMembre> findByTontine_IdAndStatutNotAndDeletedAtIsNull(
       UUID tontineId, MembreStatut statut, Pageable pageable);
 
+  /** Nombre de membres non supprimés sur toutes les tontines (non supprimées) d'un créateur. */
+  long countByTontine_CreePar_IdAndTontine_DeletedAtIsNullAndDeletedAtIsNull(UUID userId);
+
   /** Membres actifs d'une tontine (pour génération des cycles). */
   List<TontineMembre> findByTontine_IdAndStatutAndDeletedAtIsNull(
       UUID tontineId, MembreStatut statut);
