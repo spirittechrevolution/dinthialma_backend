@@ -23,6 +23,8 @@ import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -59,7 +61,10 @@ public class AuthController {
               + " gestionnaire avant de s'inscrire, la connexion retourne HTTP 403 avec un message"
               + " invitant à s'inscrire sur l'application.")
   @ApiResponses({
-    @ApiResponse(responseCode = "200", description = "Connexion réussie – tokens JWT retournés"),
+    @ApiResponse(
+        responseCode = "200",
+        description = "Connexion réussie – tokens JWT retournés",
+        content = @Content(schema = @Schema(implementation = LoginResponse.class))),
     @ApiResponse(responseCode = "401", description = "Identifiants incorrects"),
     @ApiResponse(
         responseCode = "403",
@@ -83,7 +88,10 @@ public class AuthController {
       summary = "Rafraîchir les tokens JWT",
       description = "Échange un refresh_token Keycloak valide contre de nouveaux tokens JWT.")
   @ApiResponses({
-    @ApiResponse(responseCode = "200", description = "Nouveaux tokens retournés"),
+    @ApiResponse(
+        responseCode = "200",
+        description = "Nouveaux tokens retournés",
+        content = @Content(schema = @Schema(implementation = LoginResponse.class))),
     @ApiResponse(responseCode = "401", description = "Refresh token invalide ou expiré"),
   })
   public ResponseEntity<CustomResponse> refresh(@RequestBody @Valid RefreshTokenRequest request)
@@ -174,7 +182,8 @@ public class AuthController {
   @ApiResponses({
     @ApiResponse(
         responseCode = "201",
-        description = "Compte créé (nouveau) ou activé (PRE_ENROLLED)"),
+        description = "Compte créé (nouveau) ou activé (PRE_ENROLLED)",
+        content = @Content(schema = @Schema(implementation = RegisterResponse.class))),
     @ApiResponse(responseCode = "400", description = "OTP non vérifié ou données invalides"),
     @ApiResponse(responseCode = "409", description = "Téléphone déjà utilisé par un compte ACTIVE"),
   })
@@ -272,7 +281,10 @@ public class AuthController {
       description =
           "Pré-requis : PIN configuré et session active existante (connexion mot de passe préalable).")
   @ApiResponses({
-    @ApiResponse(responseCode = "200", description = "Connexion PIN réussie – tokens JWT"),
+    @ApiResponse(
+        responseCode = "200",
+        description = "Connexion PIN réussie – tokens JWT",
+        content = @Content(schema = @Schema(implementation = LoginResponse.class))),
     @ApiResponse(responseCode = "400", description = "PIN non configuré"),
     @ApiResponse(responseCode = "401", description = "PIN incorrect ou session expirée"),
     @ApiResponse(responseCode = "404", description = "Utilisateur introuvable"),

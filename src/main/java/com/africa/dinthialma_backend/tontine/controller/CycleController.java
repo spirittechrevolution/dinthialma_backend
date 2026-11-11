@@ -180,10 +180,12 @@ public class CycleController {
       summary = "Ouvrir un cycle manuellement",
       description =
           "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
-              + "**Mode MANUEL uniquement.** Crée et ouvre un nouveau cycle avec les dates et le"
-              + " bénéficiaire spécifiés.\n\n"
+              + "**Mode MANUEL uniquement.** Crée et ouvre un nouveau cycle avec les dates"
+              + " spécifiées (`dateDebut`, `dateFin`).\n\n"
               + "Conditions : tontine ACTIVE, aucun autre cycle EN_COURS, dateDebut ≤ dateFin.\n\n"
-              + "Si `beneficiaireId` est fourni, un SMS d'annonce est envoyé au bénéficiaire.")
+              + "Les membres ACTIFS reçoivent une notification `CYCLE_OUVERT`. Les gagnants ne"
+              + " sont pas choisis ici : ils sont désignés après la clôture via"
+              + " `PATCH /{cycleId}/beneficiaire` (ordre MANUEL).")
   @ApiResponses({
     @ApiResponse(
         responseCode = "201",

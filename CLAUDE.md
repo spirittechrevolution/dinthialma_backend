@@ -76,7 +76,7 @@
 | Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
 |----------|---------|------|--------|-------|-------------|-------|
 | `/` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 tout auth peut créer → devient ADMIN |
-| `/` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 SUPER_ADMIN voit tout ; autres voient les leurs |
+| `/` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 SUPER_ADMIN voit tout ; autres voient les leurs ; `?role=GERE\|COTISE` ; chaque tontine porte `monRole`, `monMembreId`, `monStatutMembre` |
 | `/{id}` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 ¹membre de la tontine ²créateur |
 | `/{id}` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 BROUILLON seulement |
 | `/{id}` | DELETE | ❌ | ❌ | ✅² | ✅ | 🔒 soft delete, BROUILLON seulement |
@@ -96,7 +96,7 @@
 
 | Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
 |----------|---------|------|--------|-------|-------------|-------|
-| `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 ¹MEMBER voit les siennes seulement ; filtres `?cycleId=` et `?membreId=` (admin uniquement, ignoré pour MEMBER) |
+| `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 ¹MEMBER voit les siennes seulement ; filtres `?cycleId=`, `?membreId=` (admin uniquement, ignoré pour MEMBER), `?statut=` (multi) et `?q=` (nom, téléphone, référence) — filtre tontine toujours appliqué |
 | `/{id}` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
 | `/` | POST | ❌ | ✅¹ | ❌ | ✅ | 🔒 le cotisant enregistre son paiement |
 | `/admin` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 saisie admin pour n'importe quel membre (y compris PRE_ENROLLED), créée directement VALIDE |
@@ -139,7 +139,14 @@
 | `/dashboard/users/{id}/enable` | POST | ❌ | ✅ | Réactiver un compte |
 | `/dashboard/users/{id}/roles` | PUT | ❌ | ✅ | Modifier les rôles |
 | `/dashboard/contributions` | GET | ❌ | ✅ | Toutes cotisations (pageable, filtres cumulables `?statut=` `?tontineId=`) |
-| `/my-dashboard` | GET | ✅ | ✅ | Métriques de l'admin pour ses tontines (`tontines` = `PagedModel`) + agrégats globaux : `nombreTontinesGerees`, `montantTotalValide`, `totalMembres`, `totalCotisationsEnAttente/EnRetard` |
+| `/my-dashboard` | GET | ✅ | ✅ | Métriques de l'admin pour ses tontines (`tontines` = `PagedModel`) + agrégats globaux : `nombreTontinesGerees`, `montantTotalValide`, `totalMembres`, `totalCotisationsEnAttente/EnRetard`, `totalCollecteToursEnCours`, `totalAttenduToursEnCours` ; par tontine : `gagnantsADesigner` + `cycleEnCours` (`montantCollecte`, `montantEnAttente`, `montantAttendu`, `membresAyantPaye`, `membresEnAttente`, `membresActifs`) |
+
+### 🙋 Mon espace (`/v1/me`)
+
+| Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
+|----------|---------|------|--------|-------|-------------|-------|
+| `/summary` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 résumé « Je cotise » : par tontine où je cotise (membership, totaux, tours, tour EN_COURS, `cotisationDue` A_PAYER/EN_ATTENTE/VALIDE, gestionnaire) + totaux et jackpots reçus ; liste non paginée |
+| `/gestion/cotisations` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 paiements de **toutes les tontines que j'ai créées** (file « À valider »), filtres `?statut=` (multi), `?tontineId=`, `?q=` ; pageable |
 
 ### 🔔 Notifications (`/v1/notifications`)
 
@@ -230,6 +237,11 @@ src/main/java/com/africa/dinthialma_backend/
 │       ├── interfaces/ NotificationService
 │       ├── impl/       NotificationServiceImpl
 │       └── (directs)   SmsService, WhatsappService, SchedulerService
+├── me/             ✅ Vues transverses de l'utilisateur connecté (/v1/me)
+│   ├── codeList/       StatutCotisationDue
+│   ├── controller/     MeController
+│   ├── dto/            MeSummaryResponse
+│   └── service/        MeService + MeServiceImpl
 ├── admin/          ✅ Complet (GlobalDashboard + gestion users + MyDashboard)
 │   ├── controller/     AdminDashboardController
 │   ├── dto/            GlobalDashboardResponse, AdminUserResponse,
@@ -686,6 +698,17 @@ cd docker && docker compose up -d
       → MembreServiceImpl : INVITATION_TONTINE + STATUT_MEMBRE
       → SchedulerService : RAPPEL_COTISATION sur 4 chemins (ROTATIVE + 3 EVENEMENTIELLE)
       → SchedulerService : CYCLE_BIENTOT_CLOTURE (J-2) + TOUR_PROCHE (J-3 ROTATION)
+
+✦ Sprint 8 – Besoins front v2, lot A (cf. Docs/BESOINS_BACKEND.md)  🔄 EN REVUE
+  B01 TontineResponse : monRole / monMembreId / monStatutMembre + ?role=GERE|COTISE  ✅
+  B07 Cotisations : ?statut= (multi) + ?q= via CotisationSpecifications            ✅
+      → correctif : cycleId d'une autre tontine ne fuit plus
+  B06 GET /v1/me/gestion/cotisations (file « À valider »)                         ✅
+  B05 my-dashboard : collecté / attendu du tour en cours + gagnantsADesigner       ✅
+  B04 GET /v1/me/summary (résumé « Je cotise »)                                    ✅
+  B08 Docs OpenAPI : schémas login / refresh / login-pin / register / notifications ✅
+  → Prochains lots : B02 codes d'erreur stables ; B18 refus de paiement (index
+    partiel à la place de uq_cot_cycle_membre) ; B14, B15, B11, B13, B09, B10, B19
 ```
 
 ---

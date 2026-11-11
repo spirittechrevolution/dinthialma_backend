@@ -6,6 +6,9 @@ import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
 import com.africa.dinthialma_backend.notification.dto.NotificationResponse;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -42,9 +45,13 @@ public class NotificationController {
       description =
           "🔒 Rôles : tout utilisateur authentifié.\n\n"
               + "Retourne toutes les notifications de l'utilisateur (lues et non lues) triées par"
-              + " date décroissante. Le frontend peut distinguer NOUVELLES (isRead=false) et"
-              + " PRÉCÉDENTES (isRead=true) en filtrant côté client.\n\n"
+              + " date décroissante. Le frontend peut distinguer NOUVELLES (`read=false`) et"
+              + " PRÉCÉDENTES (`read=true`) en filtrant côté client.\n\n"
               + "Pagination : `?page=0&size=20`")
+  @ApiResponse(
+      responseCode = "200",
+      description = "Page de notifications",
+      content = @Content(schema = @Schema(implementation = NotificationResponse.class)))
   public ResponseEntity<CustomResponse> getMyNotifications(
       @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
           Pageable pageable,
