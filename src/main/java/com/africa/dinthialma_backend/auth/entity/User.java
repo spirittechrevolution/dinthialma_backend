@@ -13,6 +13,7 @@ import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -66,6 +67,7 @@ public class User extends BaseEntity {
 
   /** Indique si le compte est actif (non suspendu). */
   @Column(name = "is_active", nullable = false)
+  @Builder.Default
   private boolean active = true;
 
   // ─── PIN connexion rapide (mobile) ────────────────────────────────
@@ -123,6 +125,7 @@ public class User extends BaseEntity {
       cascade = CascadeType.ALL,
       fetch = FetchType.LAZY,
       orphanRemoval = true)
+  @Builder.Default
   private Set<UserRoleAssignment> roles = new HashSet<>();
 
   /**
@@ -134,5 +137,6 @@ public class User extends BaseEntity {
       cascade = CascadeType.ALL,
       fetch = FetchType.LAZY,
       orphanRemoval = true)
+  @Builder.Default
   private Set<UserSession> sessions = new HashSet<>();
 }
