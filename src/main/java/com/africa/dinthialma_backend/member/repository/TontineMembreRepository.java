@@ -53,6 +53,29 @@ public interface TontineMembreRepository extends JpaRepository<TontineMembre, UU
   /** Récupère un membre par son id dans le contexte d'une tontine. */
   Optional<TontineMembre> findByIdAndTontine_IdAndDeletedAtIsNull(UUID id, UUID tontineId);
 
+  /** Nombre de membres d'un statut donné dans une tontine (ex : ACTIF). */
+  long countByTontine_IdAndStatutAndDeletedAtIsNull(UUID tontineId, MembreStatut statut);
+
+  /**
+   * Pour chaque tontine (non supprimée) d'un créateur ayant un cycle EN_COURS : paramètres de
+   * montant et nombre de membres ACTIFS. Chaque ligne : {@code [montantLibre (Boolean), montant
+   * (BigDecimal), montantMinimum (BigDecimal), membresActifs (Long)]}.
+   */
+  @Query(
+      "SELECT t.montantLibre, t.montant, t.montantMinimum, COUNT(m) FROM TontineMembre m"
+          + " JOIN m.tontine t"
+          + " WHERE t.creePar.id = :userId"
+          + "   AND t.deletedAt IS NULL"
+          + "   AND m.deletedAt IS NULL"
+          + "   AND m.statut = com.africa.dinthialma_backend.member.codeList.MembreStatut.ACTIF"
+          + "   AND EXISTS ("
+          + "     SELECT 1 FROM CycleTontine c WHERE c.tontine = t"
+          + "     AND c.statut = com.africa.dinthialma_backend.tontine.codeList.CycleStatut.EN_COURS"
+          + "     AND c.deletedAt IS NULL"
+          + "   )"
+          + " GROUP BY t.id, t.montantLibre, t.montant, t.montantMinimum")
+  List<Object[]> findParametresToursEnCoursByCreateur(@Param("userId") UUID userId);
+
   /** Nombre de cotisants actifs dans une tontine. */
   long countByTontine_IdAndDeletedAtIsNull(UUID tontineId);
 

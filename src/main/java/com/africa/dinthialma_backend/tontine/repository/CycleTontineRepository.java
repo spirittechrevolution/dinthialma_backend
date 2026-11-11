@@ -50,6 +50,14 @@ public interface CycleTontineRepository extends JpaRepository<CycleTontine, UUID
   List<CycleTontine> findByStatutAndDateFinAndDeletedAtIsNull(
       @Param("statut") CycleStatut statut, @Param("dateFin") LocalDate dateFin);
 
+  /** Vrai si la tontine a au moins un cycle TERMINÉ sans gagnant désigné. */
+  @Query(
+      "SELECT COUNT(c) > 0 FROM CycleTontine c WHERE c.tontine.id = :tontineId"
+          + " AND c.statut = com.africa.dinthialma_backend.tontine.codeList.CycleStatut.TERMINE"
+          + " AND c.deletedAt IS NULL"
+          + " AND NOT EXISTS (SELECT g FROM CycleGagnant g WHERE g.cycle = c AND g.deletedAt IS NULL)")
+  boolean existsTermineSansGagnant(@Param("tontineId") UUID tontineId);
+
   /** Cycles TERMINÉ ayant au moins un gagnant désigné, pour l'historique jackpots d'une tontine. */
   @Query(
       value =

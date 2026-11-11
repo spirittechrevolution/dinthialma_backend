@@ -131,4 +131,19 @@ public class Tontine extends BaseEntity {
   /** Soft delete – null = active, non-null = supprimée. */
   @Column(name = "deleted_at")
   private LocalDateTime deletedAt;
+
+  /**
+   * Montant attendu d'un membre pour un cycle : le montant fixe, ou le plancher en mode libre.
+   *
+   * @return null si le montant est libre sans plancher (aucun attendu calculable)
+   */
+  public BigDecimal getMontantAttenduParMembre() {
+    return montantAttenduParMembre(montantLibre, montant, montantMinimum);
+  }
+
+  /** Variante statique utilisable sur des colonnes issues d'une projection JPQL. */
+  public static BigDecimal montantAttenduParMembre(
+      boolean montantLibre, BigDecimal montant, BigDecimal montantMinimum) {
+    return montantLibre ? montantMinimum : montant;
+  }
 }

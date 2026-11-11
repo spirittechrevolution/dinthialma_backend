@@ -21,6 +21,7 @@ import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
+import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
@@ -30,6 +31,7 @@ import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -320,8 +322,24 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                 uid))
         .totalCotisationsEnAttente(countCotisationsCreateur(uid, CotisationStatut.EN_ATTENTE))
         .totalCotisationsEnRetard(countCotisationsCreateur(uid, CotisationStatut.EN_RETARD))
+        .totalCollecteToursEnCours(cotisationRepository.sumMontantValideToursEnCoursByCreateur(uid))
+        .totalAttenduToursEnCours(computeTotalAttenduToursEnCours(uid))
         .tontines(new PagedModel<>(statsPage))
         .build();
+  }
+
+  /** Somme, sur les tontines gérées ayant un tour EN_COURS, de (montant par membre × ACTIFS). */
+  private BigDecimal computeTotalAttenduToursEnCours(UUID userId) {
+    BigDecimal total = BigDecimal.ZERO;
+    for (Object[] row : membreRepository.findParametresToursEnCoursByCreateur(userId)) {
+      BigDecimal parMembre =
+          Tontine.montantAttenduParMembre(
+              Boolean.TRUE.equals(row[0]), (BigDecimal) row[1], (BigDecimal) row[2]);
+      if (parMembre != null) {
+        total = total.add(parMembre.multiply(BigDecimal.valueOf((Long) row[3])));
+      }
+    }
+    return total;
   }
 
   private long countCotisationsCreateur(UUID userId, CotisationStatut statut) {
@@ -358,6 +376,26 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         benefNom = benefUser.getFirstName() + " " + benefUser.getLastName();
         benefUserId = benefUser.getId();
       }
+
+      // Collecte du tour : une requête groupée par statut
+      long payes = 0;
+      long enAttenteTour = 0;
+      BigDecimal collecte = BigDecimal.ZERO;
+      BigDecimal montantEnAttente = BigDecimal.ZERO;
+      for (Object[] row : cotisationRepository.countAndSumByStatutForCycle(cycle.getId())) {
+        CotisationStatut statut = (CotisationStatut) row[0];
+        if (statut == CotisationStatut.VALIDE) {
+          payes = (Long) row[1];
+          collecte = (BigDecimal) row[2];
+        } else if (statut == CotisationStatut.EN_ATTENTE) {
+          enAttenteTour = (Long) row[1];
+          montantEnAttente = (BigDecimal) row[2];
+        }
+      }
+      long actifs =
+          membreRepository.countByTontine_IdAndStatutAndDeletedAtIsNull(tid, MembreStatut.ACTIF);
+      BigDecimal parMembre = tontine.getMontantAttenduParMembre();
+
       cycleInfo =
           MyDashboardResponse.CycleEnCoursInfo.builder()
               .cycleId(cycle.getId())
@@ -366,10 +404,21 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
               .dateFin(cycle.getDateFin())
               .beneficiaireNom(benefNom)
               .beneficiaireUserId(benefUserId)
+              .montantCollecte(collecte)
+              .montantEnAttente(montantEnAttente)
+              .montantAttendu(
+                  parMembre != null ? parMembre.multiply(BigDecimal.valueOf(actifs)) : null)
+              .membresAyantPaye(payes)
+              .membresEnAttente(enAttenteTour)
+              .membresActifs(actifs)
               .build();
     }
 
     boolean evenementielle = tontine.getTontineType() == TontineType.EVENEMENTIELLE;
+    boolean gagnantsADesigner =
+        tontine.getTontineType() == TontineType.ROTATIVE
+            && "MANUEL".equals(tontine.getOrdreBeneficiaire())
+            && cycleRepository.existsTermineSansGagnant(tid);
 
     return MyDashboardResponse.TontineStats.builder()
         .tontineId(tid)
@@ -389,6 +438,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         .cotisationsEnRetard(enRetard)
         .montantTotalValide(montantValide)
         .cycleEnCours(cycleInfo)
+        .gagnantsADesigner(gagnantsADesigner)
         .build();
   }
 

@@ -136,6 +136,31 @@ public interface CotisationRepository
   long countByTontine_CreePar_IdAndTontine_DeletedAtIsNullAndStatutAndDeletedAtIsNull(
       UUID userId, CotisationStatut statut);
 
+  /**
+   * Nombre et somme des cotisations d'un cycle, groupés par statut. Une cotisation max par membre
+   * et par cycle : le nombre est donc aussi un nombre de membres. Chaque ligne : {@code [statut
+   * (CotisationStatut), nombre (Long), montant (BigDecimal)]}.
+   */
+  @Query(
+      "SELECT c.statut, COUNT(c), COALESCE(SUM(c.montant), 0) FROM Cotisation c"
+          + " WHERE c.cycle.id = :cycleId"
+          + "   AND c.deletedAt IS NULL"
+          + " GROUP BY c.statut")
+  List<Object[]> countAndSumByStatutForCycle(@Param("cycleId") UUID cycleId);
+
+  /**
+   * Montant VALIDÉ sur les cycles EN_COURS de toutes les tontines (non supprimées) d'un créateur.
+   */
+  @Query(
+      "SELECT COALESCE(SUM(c.montant), 0) FROM Cotisation c"
+          + " WHERE c.tontine.creePar.id = :userId"
+          + "   AND c.tontine.deletedAt IS NULL"
+          + "   AND c.cycle.statut = com.africa.dinthialma_backend.tontine.codeList.CycleStatut.EN_COURS"
+          + "   AND c.cycle.deletedAt IS NULL"
+          + "   AND c.statut = 'VALIDE'"
+          + "   AND c.deletedAt IS NULL")
+  BigDecimal sumMontantValideToursEnCoursByCreateur(@Param("userId") UUID userId);
+
   /** Cotisations enregistrées depuis une date (pour activité récente). */
   long countByCreatedAtGreaterThanEqualAndDeletedAtIsNull(LocalDateTime since);
 
