@@ -4,6 +4,7 @@ import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
+import com.africa.dinthialma_backend.tontine.codeList.RoleFiltreTontine;
 import com.africa.dinthialma_backend.tontine.dto.CreateTontineRequest;
 import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.dto.UpdateTontineRequest;
@@ -33,6 +34,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -115,13 +117,16 @@ public class TontineController {
     @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
   })
   public ResponseEntity<CustomResponse> listTontines(
+      @Parameter(description = "GERE = tontines créées par moi ; COTISE = tontines où je cotise")
+          @RequestParam(required = false)
+          RoleFiltreTontine role,
       @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
           Pageable pageable,
       HttpServletRequest httpRequest)
       throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
-    Page<TontineResponse> tontines = tontineService.listTontines(keycloakId, pageable);
+    Page<TontineResponse> tontines = tontineService.listTontines(keycloakId, role, pageable);
 
     return ResponseEntity.ok(
         new CustomResponse(SUCCESS, OK, ResponseMessageConstants.TONTINE_LIST_SUCCESS, tontines));
@@ -134,7 +139,8 @@ public class TontineController {
       summary = "Récupérer une tontine",
       description =
           "🔒 Rôles : créateur de la tontine, membres de la tontine, SUPER_ADMIN.\n\n"
-              + "Retourne le détail complet de la tontine avec les informations du créateur.")
+              + "Retourne le détail complet de la tontine avec les informations du créateur et la"
+              + " relation de l'appelant (`monRole`, `monMembreId`, `monStatutMembre`).")
   @ApiResponses({
     @ApiResponse(
         responseCode = "200",

@@ -47,6 +47,24 @@ public interface TontineRepository extends JpaRepository<Tontine, UUID> {
           + "   AND t.deletedAt IS NULL")
   List<Tontine> findByMembreUserId(@Param("userId") UUID userId);
 
+  /** Tontines auxquelles l'utilisateur cotise, paginées (filtre {@code ?role=COTISE}). */
+  @Query(
+      value =
+          "SELECT t FROM Tontine t"
+              + " WHERE t.deletedAt IS NULL"
+              + "   AND EXISTS ("
+              + "     SELECT 1 FROM TontineMembre m"
+              + "     WHERE m.tontine = t AND m.user.id = :userId AND m.deletedAt IS NULL"
+              + "   )",
+      countQuery =
+          "SELECT COUNT(t) FROM Tontine t"
+              + " WHERE t.deletedAt IS NULL"
+              + "   AND EXISTS ("
+              + "     SELECT 1 FROM TontineMembre m"
+              + "     WHERE m.tontine = t AND m.user.id = :userId AND m.deletedAt IS NULL"
+              + "   )")
+  Page<Tontine> findByMembreUserId(@Param("userId") UUID userId, Pageable pageable);
+
   /**
    * Tontines visibles par un utilisateur : celles qu'il a créées + celles où il est cotisant.
    *

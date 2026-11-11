@@ -1,6 +1,7 @@
 package com.africa.dinthialma_backend.tontine.service.interfaces;
 
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.tontine.codeList.RoleFiltreTontine;
 import com.africa.dinthialma_backend.tontine.dto.CreateTontineRequest;
 import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.dto.UpdateTontineRequest;
@@ -35,8 +36,13 @@ public interface TontineService {
    *   <li>SUPER_ADMIN → toutes les tontines
    *   <li>Autres → tontines créées + tontines où l'utilisateur est cotisant
    * </ul>
+   *
+   * <p>Chaque élément porte {@code monRole}, {@code monMembreId} et {@code monStatutMembre}.
+   *
+   * @param role filtre optionnel : GERE (créées) ou COTISE (où il cotise), y compris SUPER_ADMIN
    */
-  Page<TontineResponse> listTontines(String keycloakId, Pageable pageable) throws CustomException;
+  Page<TontineResponse> listTontines(String keycloakId, RoleFiltreTontine role, Pageable pageable)
+      throws CustomException;
 
   /**
    * Met à jour les informations d'une tontine.

@@ -2,6 +2,7 @@ package com.africa.dinthialma_backend.member.repository;
 
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -44,6 +45,10 @@ public interface TontineMembreRepository extends JpaRepository<TontineMembre, UU
 
   /** Récupère l'enregistrement cotisant d'un utilisateur dans une tontine. */
   Optional<TontineMembre> findByTontine_IdAndUser_IdAndDeletedAtIsNull(UUID tontineId, UUID userId);
+
+  /** Memberships d'un utilisateur parmi un ensemble de tontines (page « Mes tontines »). */
+  List<TontineMembre> findByUser_IdAndTontine_IdInAndDeletedAtIsNull(
+      UUID userId, Collection<UUID> tontineIds);
 
   /** Récupère un membre par son id dans le contexte d'une tontine. */
   Optional<TontineMembre> findByIdAndTontine_IdAndDeletedAtIsNull(UUID id, UUID tontineId);

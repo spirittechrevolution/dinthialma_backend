@@ -17,6 +17,7 @@ import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
+import com.africa.dinthialma_backend.tontine.codeList.RoleFiltreTontine;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.dto.CreateTontineRequest;
@@ -34,7 +35,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -96,7 +99,7 @@ public class TontineServiceImpl implements TontineService {
     assignRoleIfAbsent(caller, UserRole.ADMIN);
     auditService.logCreate(caller, "tontines", saved.getId());
     log.info("Tontine créée – id={} type={} par userId={}", saved.getId(), type, caller.getId());
-    return TontineResponse.from(saved, 0);
+    return TontineResponse.from(saved, 0, caller.getId(), null);
   }
 
   // ─── Lecture ─────────────────────────────────────────────────────────────
@@ -109,27 +112,41 @@ public class TontineServiceImpl implements TontineService {
 
     assertCanAccess(caller, tontine);
 
-    int nombreMembres = (int) membreRepository.countByTontine_IdAndDeletedAtIsNull(id);
-    return TontineResponse.from(tontine, nombreMembres);
+    return toResponse(tontine, caller);
   }
 
   @Override
   @Transactional(readOnly = true)
-  public Page<TontineResponse> listTontines(String keycloakId, Pageable pageable)
-      throws CustomException {
+  public Page<TontineResponse> listTontines(
+      String keycloakId, RoleFiltreTontine role, Pageable pageable) throws CustomException {
     User caller = findUserByKeycloakId(keycloakId);
+    UUID uid = caller.getId();
 
     Page<Tontine> tontines;
-    if (isSuperAdmin(caller)) {
+    if (role == RoleFiltreTontine.GERE) {
+      tontines = tontineRepository.findByCreePar_IdAndDeletedAtIsNull(uid, pageable);
+    } else if (role == RoleFiltreTontine.COTISE) {
+      tontines = tontineRepository.findByMembreUserId(uid, pageable);
+    } else if (isSuperAdmin(caller)) {
       tontines = tontineRepository.findByDeletedAtIsNull(pageable);
     } else {
-      tontines = tontineRepository.findVisibleByUserId(caller.getId(), pageable);
+      tontines = tontineRepository.findVisibleByUserId(uid, pageable);
     }
+
+    // Memberships de l'appelant sur la page courante : une seule requête
+    List<UUID> tontineIds = tontines.getContent().stream().map(Tontine::getId).toList();
+    Map<UUID, TontineMembre> mesMemberships =
+        tontineIds.isEmpty()
+            ? Map.of()
+            : membreRepository
+                .findByUser_IdAndTontine_IdInAndDeletedAtIsNull(uid, tontineIds)
+                .stream()
+                .collect(Collectors.toMap(m -> m.getTontine().getId(), m -> m, (a, b) -> a));
 
     return tontines.map(
         t -> {
           int count = (int) membreRepository.countByTontine_IdAndDeletedAtIsNull(t.getId());
-          return TontineResponse.from(t, count);
+          return TontineResponse.from(t, count, uid, mesMemberships.get(t.getId()));
         });
   }
 
@@ -245,8 +262,7 @@ public class TontineServiceImpl implements TontineService {
     }
 
     Tontine saved = tontineRepository.save(tontine);
-    int nombreMembres = (int) membreRepository.countByTontine_IdAndDeletedAtIsNull(id);
-    return TontineResponse.from(saved, nombreMembres);
+    return toResponse(saved, caller);
   }
 
   // ─── Suppression ─────────────────────────────────────────────────────────
@@ -294,10 +310,9 @@ public class TontineServiceImpl implements TontineService {
     }
 
     Tontine saved = tontineRepository.save(tontine);
-    int nombreMembres = (int) membreRepository.countByTontine_IdAndDeletedAtIsNull(id);
     auditService.log(caller, "tontines", id, "statut", oldStatut, TontineStatut.ACTIVE.name());
     log.info("Tontine activée – id={} type={}", id, tontine.getTontineType());
-    return TontineResponse.from(saved, nombreMembres);
+    return toResponse(saved, caller);
   }
 
   // ─── Suspension ──────────────────────────────────────────────────────────
@@ -314,7 +329,6 @@ public class TontineServiceImpl implements TontineService {
 
     tontine.setStatut(TontineStatut.SUSPENDUE);
     Tontine saved = tontineRepository.save(tontine);
-    int nombreMembres = (int) membreRepository.countByTontine_IdAndDeletedAtIsNull(id);
     auditService.log(
         caller,
         "tontines",
@@ -323,7 +337,7 @@ public class TontineServiceImpl implements TontineService {
         TontineStatut.ACTIVE.name(),
         TontineStatut.SUSPENDUE.name());
     log.info("Tontine suspendue – id={}", id);
-    return TontineResponse.from(saved, nombreMembres);
+    return toResponse(saved, caller);
   }
 
   // ─── Génération automatique des cycles (ROTATIVE) ────────────────────────
@@ -495,6 +509,16 @@ public class TontineServiceImpl implements TontineService {
     if (membreRepository.existsByTontine_IdAndUser_IdAndDeletedAtIsNull(
         tontine.getId(), caller.getId())) return;
     throw new ForbiddenException(ResponseMessageConstants.TONTINE_ACCESS_DENIED);
+  }
+
+  /** Réponse enrichie du rôle de l'appelant (détail et mutations unitaires). */
+  private TontineResponse toResponse(Tontine tontine, User caller) {
+    int nombreMembres = (int) membreRepository.countByTontine_IdAndDeletedAtIsNull(tontine.getId());
+    TontineMembre monMembership =
+        membreRepository
+            .findByTontine_IdAndUser_IdAndDeletedAtIsNull(tontine.getId(), caller.getId())
+            .orElse(null);
+    return TontineResponse.from(tontine, nombreMembres, caller.getId(), monMembership);
   }
 
   private boolean isSuperAdmin(User user) {
