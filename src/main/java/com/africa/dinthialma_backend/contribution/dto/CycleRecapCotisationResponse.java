@@ -71,11 +71,17 @@ public class CycleRecapCotisationResponse {
 
   @Schema(
       description = "Statut de la cotisation. null = aucune cotisation soumise pour ce cycle.",
-      allowableValues = {"EN_ATTENTE", "VALIDE", "EN_RETARD"})
+      allowableValues = {"EN_ATTENTE", "VALIDE", "EN_RETARD", "REFUSE"})
   private CotisationStatut statutCotisation;
 
   @Schema(description = "Date de validation par l'admin (null si pas encore validé)")
   private LocalDateTime dateValidation;
+
+  @Schema(
+      description =
+          "Motif du refus – présent seulement si la seule déclaration du cycle est REFUSE",
+      nullable = true)
+  private String motifRefus;
 
   @Schema(description = "Date de soumission de la cotisation (null si aucune)")
   private LocalDateTime cotisationCreatedAt;
@@ -117,6 +123,7 @@ public class CycleRecapCotisationResponse {
           .note(cotisation.getNote())
           .statutCotisation(cotisation.getStatut())
           .dateValidation(cotisation.getDateValidation())
+          .motifRefus(cotisation.getMotifRefus())
           .cotisationCreatedAt(cotisation.getCreatedAt())
           .enregistrePar(saisieParInfo);
     }

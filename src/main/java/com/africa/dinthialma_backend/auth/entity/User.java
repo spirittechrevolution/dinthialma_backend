@@ -2,6 +2,7 @@ package com.africa.dinthialma_backend.auth.entity;
 
 import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
 import com.africa.dinthialma_backend.common.base.BaseEntity;
+import com.africa.dinthialma_backend.me.dto.PreferencesDto;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -13,10 +14,13 @@ import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * Entité utilisateur Dinthialma.
@@ -66,6 +70,7 @@ public class User extends BaseEntity {
 
   /** Indique si le compte est actif (non suspendu). */
   @Column(name = "is_active", nullable = false)
+  @Builder.Default
   private boolean active = true;
 
   // ─── PIN connexion rapide (mobile) ────────────────────────────────
@@ -110,6 +115,15 @@ public class User extends BaseEntity {
   @Column(name = "account_status")
   private AccountStatus accountStatus;
 
+  /** Jeton opaque du QR membre (B15) – null tant que l'utilisateur n'a pas affiché son QR. */
+  @Column(name = "qr_token", length = 64)
+  private String qrToken;
+
+  /** Préférences synchronisées entre appareils (B22), JSONB – null tant que jamais enregistrées. */
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "preferences", columnDefinition = "jsonb")
+  private PreferencesDto preferences;
+
   /** Soft delete – null = actif, non-null = compte désactivé. */
   @Column(name = "deleted_at")
   private LocalDateTime deletedAt;
@@ -123,6 +137,7 @@ public class User extends BaseEntity {
       cascade = CascadeType.ALL,
       fetch = FetchType.LAZY,
       orphanRemoval = true)
+  @Builder.Default
   private Set<UserRoleAssignment> roles = new HashSet<>();
 
   /**
@@ -134,5 +149,6 @@ public class User extends BaseEntity {
       cascade = CascadeType.ALL,
       fetch = FetchType.LAZY,
       orphanRemoval = true)
+  @Builder.Default
   private Set<UserSession> sessions = new HashSet<>();
 }

@@ -53,6 +53,18 @@ public class UserNotification extends BaseEntity {
   @Column(name = "tontine_id")
   private UUID tontineId;
 
+  /** Cycle concerné (tour, reçu) – nullable. */
+  @Column(name = "cycle_id")
+  private UUID cycleId;
+
+  /** Cotisation concernée (reçu) – nullable. */
+  @Column(name = "cotisation_id")
+  private UUID cotisationId;
+
+  /** Membership concerné (fiche membre) – nullable. */
+  @Column(name = "membre_id")
+  private UUID membreId;
+
   /** Soft delete. */
   @Column(name = "deleted_at")
   private LocalDateTime deletedAt;

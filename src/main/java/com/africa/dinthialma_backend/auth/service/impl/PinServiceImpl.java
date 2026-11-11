@@ -16,6 +16,7 @@ import com.africa.dinthialma_backend.common.constants.Constants;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.common.exception.TooManyRequestsException;
 import com.africa.dinthialma_backend.common.exception.UnAuthorizedException;
@@ -73,7 +74,8 @@ public class PinServiceImpl implements PinService {
     validatePinFormat(request.getPin());
 
     if (!request.getPin().equals(request.getConfirmPin())) {
-      throw new BadRequestException(ResponseMessageConstants.AUTH_PIN_MISMATCH);
+      throw new BadRequestException(
+          ResponseMessageConstants.AUTH_PIN_MISMATCH, ErrorCode.PIN_MISMATCH);
     }
 
     String pinHash = ARGON2.encode(request.getPin());
@@ -103,12 +105,14 @@ public class PinServiceImpl implements PinService {
     // Vérifier que le compte est actif
     if (!user.isActive()) {
       log.warn("Tentative de connexion PIN sur compte désactivé – userId={}", user.getId());
-      throw new UnAuthorizedException(ResponseMessageConstants.AUTH_ACCOUNT_DISABLED);
+      throw new UnAuthorizedException(
+          ResponseMessageConstants.AUTH_ACCOUNT_DISABLED, ErrorCode.ACCOUNT_DISABLED);
     }
 
     // Vérifier que le PIN est configuré
     if (user.getPinHash() == null) {
-      throw new BadRequestException(ResponseMessageConstants.AUTH_PIN_NOT_CONFIGURED);
+      throw new BadRequestException(
+          ResponseMessageConstants.AUTH_PIN_NOT_CONFIGURED, ErrorCode.PIN_NOT_CONFIGURED);
     }
 
     // Vérifier l'expiration du PIN (90 jours)
@@ -119,7 +123,8 @@ public class PinServiceImpl implements PinService {
         throw new BadRequestException(
             "Votre code PIN a expiré après "
                 + Constants.Pin.EXPIRY_DAYS
-                + " jours. Veuillez en configurer un nouveau via l'option 'Réinitialiser mon PIN'.");
+                + " jours. Veuillez en configurer un nouveau via l'option 'Réinitialiser mon PIN'.",
+            ErrorCode.PIN_EXPIRED);
       }
     }
 
@@ -130,7 +135,9 @@ public class PinServiceImpl implements PinService {
           ChronoUnit.MINUTES.between(LocalDateTime.now(), user.getPinLockedUntil()) + 1;
       log.warn("PIN verrouillé pour userId={} – encore {} min", user.getId(), minutesLeft);
       throw new TooManyRequestsException(
-          String.format(ResponseMessageConstants.AUTH_PIN_LOCKED, minutesLeft));
+          String.format(ResponseMessageConstants.AUTH_PIN_LOCKED, minutesLeft),
+          ErrorCode.PIN_LOCKED,
+          Math.max(1, ChronoUnit.SECONDS.between(LocalDateTime.now(), user.getPinLockedUntil())));
     }
 
     // Valider le PIN
@@ -164,7 +171,8 @@ public class PinServiceImpl implements PinService {
           "Aucune session active pour userId={} clientType={}",
           user.getId(),
           request.getClientType());
-      throw new UnAuthorizedException(ResponseMessageConstants.AUTH_SESSION_NOT_FOUND);
+      throw new UnAuthorizedException(
+          ResponseMessageConstants.AUTH_SESSION_NOT_FOUND, ErrorCode.PIN_SESSION_EXPIRED);
     }
 
     UserSession session = sessionOpt.get();
@@ -263,11 +271,20 @@ public class PinServiceImpl implements PinService {
         otpVerificationRepository
             .findTopByPhoneAndPurposeAndUsedFalseOrderByCreatedAtDesc(
                 phone, Constants.OtpPurpose.RESET_PIN)
-            .orElseThrow(() -> new BadRequestException(ResponseMessageConstants.AUTH_OTP_INVALID));
+            .orElseThrow(
+                () ->
+                    new BadRequestException(
+                        ResponseMessageConstants.AUTH_OTP_INVALID, ErrorCode.OTP_INVALID));
 
-    if (otp.isExpired() || !otp.getCode().equals(code)) {
-      log.warn("OTP reset PIN invalide ou expiré pour : {}", phone);
-      throw new BadRequestException(ResponseMessageConstants.AUTH_OTP_INVALID);
+    if (otp.isExpired()) {
+      log.warn("OTP reset PIN expiré pour : {}", phone);
+      throw new BadRequestException(
+          ResponseMessageConstants.AUTH_OTP_INVALID, ErrorCode.OTP_EXPIRED);
+    }
+    if (!otp.getCode().equals(code)) {
+      log.warn("OTP reset PIN incorrect pour : {}", phone);
+      throw new BadRequestException(
+          ResponseMessageConstants.AUTH_OTP_INVALID, ErrorCode.OTP_INVALID);
     }
 
     otp.setVerified(true);
@@ -286,7 +303,10 @@ public class PinServiceImpl implements PinService {
         otpVerificationRepository
             .findTopByPhoneAndPurposeAndVerifiedTrueAndUsedFalseOrderByCreatedAtDesc(
                 phone, Constants.OtpPurpose.RESET_PIN)
-            .orElseThrow(() -> new BadRequestException(ResponseMessageConstants.AUTH_OTP_INVALID));
+            .orElseThrow(
+                () ->
+                    new BadRequestException(
+                        ResponseMessageConstants.AUTH_OTP_INVALID, ErrorCode.OTP_NOT_VERIFIED));
 
     User user =
         userRepository
@@ -296,7 +316,8 @@ public class PinServiceImpl implements PinService {
     validatePinFormat(request.getNewPin());
 
     if (!request.getNewPin().equals(request.getConfirmPin())) {
-      throw new BadRequestException(ResponseMessageConstants.AUTH_PIN_MISMATCH);
+      throw new BadRequestException(
+          ResponseMessageConstants.AUTH_PIN_MISMATCH, ErrorCode.PIN_MISMATCH);
     }
 
     // Mettre à jour le PIN
@@ -347,7 +368,9 @@ public class PinServiceImpl implements PinService {
 
       throw new TooManyRequestsException(
           String.format(
-              ResponseMessageConstants.AUTH_PIN_LOCKED, Constants.Pin.LOCK_DURATION_MINUTES));
+              ResponseMessageConstants.AUTH_PIN_LOCKED, Constants.Pin.LOCK_DURATION_MINUTES),
+          ErrorCode.PIN_LOCKED,
+          Constants.Pin.LOCK_DURATION_MINUTES * 60L);
     }
 
     userRepository.save(user);
@@ -356,16 +379,19 @@ public class PinServiceImpl implements PinService {
         user.getId(),
         newAttempts,
         Constants.Pin.MAX_ATTEMPTS);
-    throw new UnAuthorizedException(ResponseMessageConstants.AUTH_PIN_INVALID);
+    throw new UnAuthorizedException(
+        ResponseMessageConstants.AUTH_PIN_INVALID, ErrorCode.PIN_INVALID);
   }
 
   /** Valide le format du PIN : 6 chiffres, non trivial. */
   private void validatePinFormat(String pin) throws CustomException {
     if (pin == null || !pin.matches("\\d{6}")) {
-      throw new BadRequestException(ResponseMessageConstants.AUTH_PIN_INVALID_FORMAT);
+      throw new BadRequestException(
+          ResponseMessageConstants.AUTH_PIN_INVALID_FORMAT, ErrorCode.PIN_INVALID_FORMAT);
     }
     if (Constants.Pin.FORBIDDEN_PINS.contains(pin)) {
-      throw new BadRequestException(ResponseMessageConstants.AUTH_PIN_TOO_SIMPLE);
+      throw new BadRequestException(
+          ResponseMessageConstants.AUTH_PIN_TOO_SIMPLE, ErrorCode.PIN_TOO_SIMPLE);
     }
   }
 

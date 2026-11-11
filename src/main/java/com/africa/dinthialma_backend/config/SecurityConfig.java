@@ -44,9 +44,10 @@ public class SecurityConfig {
     // Auth – endpoints publics
     "/v1/auth/login",
     "/v1/auth/login-pin",
-    "/pin/reset",
-    "/pin/reset/send-otp",
-    "/pin/reset/verify-otp",
+    "/v1/auth/refresh",
+    "/v1/auth/pin/reset",
+    "/v1/auth/pin/reset/send-otp",
+    "/v1/auth/pin/reset/verify-otp",
     "/v1/auth/login/phone",
     "/v1/auth/register/send-otp",
     "/v1/auth/register/verify-otp",
@@ -58,6 +59,10 @@ public class SecurityConfig {
     "/v1/auth/forgot-password/reset",
     // CodeList – endpoint public pour peupler les selects frontend
     "/v1/code-list/type/**",
+    // Configuration publique (contact support, version minimale de l'app)
+    "/v1/public/config",
+    // Aperçu public d'une invitation de tontine (page d'invitation, QR « t_ »)
+    "/v1/public/invitations/**",
   };
 
   private final CustomAccessDenied customAccessDenied;

@@ -34,6 +34,9 @@ public interface UserSessionRepository extends JpaRepository<UserSession, UUID> 
   Optional<UserSession> findTopByUserIdAndExpiresAtAfterOrderByExpiresAtDesc(
       UUID userId, LocalDateTime now);
 
+  /** Sessions d'un utilisateur, la plus récemment utilisée d'abord (appareils connectés). */
+  List<UserSession> findByUserIdOrderByLastUsedAtDesc(UUID userId);
+
   /** Toutes les sessions (actives et expirées) d'un utilisateur, paginées. */
   Page<UserSession> findByUserId(UUID userId, Pageable pageable);
 

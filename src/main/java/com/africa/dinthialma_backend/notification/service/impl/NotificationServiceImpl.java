@@ -6,6 +6,7 @@ import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.notification.codeList.NotificationType;
+import com.africa.dinthialma_backend.notification.dto.NotificationLiens;
 import com.africa.dinthialma_backend.notification.dto.NotificationResponse;
 import com.africa.dinthialma_backend.notification.entity.UserNotification;
 import com.africa.dinthialma_backend.notification.repository.NotificationRepository;
@@ -31,6 +32,18 @@ public class NotificationServiceImpl implements NotificationService {
   @Override
   public void notify(
       UUID userId, NotificationType type, String title, String body, UUID tontineId) {
+    notify(userId, type, title, body, tontineId, NotificationLiens.AUCUN);
+  }
+
+  @Override
+  public void notify(
+      UUID userId,
+      NotificationType type,
+      String title,
+      String body,
+      UUID tontineId,
+      NotificationLiens liens) {
+    NotificationLiens l = liens != null ? liens : NotificationLiens.AUCUN;
     try {
       User user =
           userRepository
@@ -44,6 +57,9 @@ public class NotificationServiceImpl implements NotificationService {
               .body(body)
               .isRead(false)
               .tontineId(tontineId)
+              .cycleId(l.cycleId())
+              .cotisationId(l.cotisationId())
+              .membreId(l.membreId())
               .build();
       notificationRepository.save(notif);
     } catch (Exception e) {

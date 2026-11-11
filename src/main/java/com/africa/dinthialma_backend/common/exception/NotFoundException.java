@@ -7,4 +7,8 @@ public class NotFoundException extends CustomException {
   public NotFoundException(String message) {
     super(HttpStatus.NOT_FOUND, message);
   }
+
+  public NotFoundException(String message, ErrorCode code) {
+    super(HttpStatus.NOT_FOUND, message, code);
+  }
 }

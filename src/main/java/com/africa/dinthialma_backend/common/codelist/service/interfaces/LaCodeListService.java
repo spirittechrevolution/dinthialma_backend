@@ -64,4 +64,10 @@ public interface LaCodeListService {
    * @throws CustomException 404 si introuvable · 409 si doublon type/value
    */
   LaCodeList updateCodeList(LaCodeList codeList, UUID id) throws CustomException;
+
+  /**
+   * Suppression logique d'une valeur créée manuellement. Les valeurs système ({@code
+   * is_system_assign}) sont refusées ({@code CODE_LIST_SYSTEM_VALUE}).
+   */
+  void deleteCodeList(UUID id) throws CustomException;
 }

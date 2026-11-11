@@ -6,6 +6,7 @@ import com.africa.dinthialma_backend.admin.dto.MyDashboardResponse;
 import com.africa.dinthialma_backend.admin.dto.UpdateUserRolesRequest;
 import com.africa.dinthialma_backend.admin.service.interfaces.AdminDashboardService;
 import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
+import com.africa.dinthialma_backend.auth.codeList.UserRole;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
@@ -101,7 +102,7 @@ public class AdminDashboardController {
           "🔒 Rôle requis : **SUPER_ADMIN**.\n\n"
               + "Retourne toutes les tontines non supprimées de la plateforme, avec leur statut"
               + " et leur nombre de membres. Filtre optionnel `?statut=`"
-              + " (BROUILLON, ACTIVE, SUSPENDUE, TERMINEE).\n\n"
+              + " (BROUILLON, ACTIVE, SUSPENDUE, TERMINEE) et recherche `?q=` sur le nom.\n\n"
               + "Pagination : `?page=0&size=20&sort=createdAt,desc`")
   @ApiResponses({
     @ApiResponse(
@@ -115,6 +116,9 @@ public class AdminDashboardController {
       @Parameter(description = "Filtre optionnel par statut", example = "ACTIVE")
           @RequestParam(required = false)
           TontineStatut statut,
+      @Parameter(description = "Recherche sur le nom de la tontine ou de l'événement")
+          @RequestParam(required = false)
+          String q,
       @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
           Pageable pageable,
       HttpServletRequest httpRequest)
@@ -122,7 +126,7 @@ public class AdminDashboardController {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
     Page<TontineResponse> page =
-        adminDashboardService.listAllTontines(keycloakId, statut, pageable);
+        adminDashboardService.listAllTontines(keycloakId, statut, q, pageable);
 
     return ResponseEntity.ok(
         new CustomResponse(
@@ -179,7 +183,8 @@ public class AdminDashboardController {
           "🔒 Rôle requis : **SUPER_ADMIN**.\n\n"
               + "Retourne tous les utilisateurs non supprimés de la plateforme.\n\n"
               + "Filtre optionnel `?accountStatus=ACTIVE|PRE_ENROLLED` (ACTIVE inclut les"
-              + " comptes antérieurs sans statut).\n\n"
+              + " comptes antérieurs sans statut), `?role=` (USER, MEMBER, ADMIN, SUPER_ADMIN)"
+              + " et recherche `?q=` (prénom, nom, téléphone, email).\n\n"
               + "Pagination : `?page=0&size=20&sort=createdAt,desc`")
   @ApiResponses({
     @ApiResponse(
@@ -193,6 +198,12 @@ public class AdminDashboardController {
       @Parameter(description = "Filtre optionnel par statut de compte", example = "PRE_ENROLLED")
           @RequestParam(required = false)
           AccountStatus accountStatus,
+      @Parameter(description = "Filtre par rôle applicatif", example = "ADMIN")
+          @RequestParam(required = false)
+          UserRole role,
+      @Parameter(description = "Recherche sur le prénom, le nom, le téléphone ou l'email")
+          @RequestParam(required = false)
+          String q,
       @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
           Pageable pageable,
       HttpServletRequest httpRequest)
@@ -200,7 +211,7 @@ public class AdminDashboardController {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
     Page<AdminUserResponse> page =
-        adminDashboardService.listUsers(keycloakId, accountStatus, pageable);
+        adminDashboardService.listUsers(keycloakId, accountStatus, role, q, pageable);
 
     return ResponseEntity.ok(
         new CustomResponse(SUCCESS, OK, ResponseMessageConstants.ADMIN_USERS_LIST_SUCCESS, page));

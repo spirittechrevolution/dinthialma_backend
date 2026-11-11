@@ -5,6 +5,7 @@ import jakarta.persistence.Basic;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
+import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -50,6 +51,10 @@ public class LaCodeList extends BaseEntity {
   @Basic(optional = false)
   @Column(name = "is_system_assign", nullable = false)
   private boolean isSystemAssign;
+
+  /** Suppression logique (B23) – null = valeur active. */
+  @Column(name = "deleted_at")
+  private LocalDateTime deletedAt;
 
   @Override
   public String toString() {

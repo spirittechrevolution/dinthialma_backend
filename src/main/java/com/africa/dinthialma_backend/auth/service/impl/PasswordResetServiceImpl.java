@@ -14,6 +14,7 @@ import com.africa.dinthialma_backend.common.constants.Constants;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.common.util.OtpUtils;
 import com.africa.dinthialma_backend.notification.service.WhatsappService;
@@ -92,16 +93,21 @@ public class PasswordResetServiceImpl implements PasswordResetService {
         otpVerificationRepository
             .findTopByPhoneAndPurposeAndUsedFalseOrderByCreatedAtDesc(
                 phone, Constants.OtpPurpose.RESET_PASSWORD)
-            .orElseThrow(() -> new BadRequestException(ResponseMessageConstants.AUTH_OTP_INVALID));
+            .orElseThrow(
+                () ->
+                    new BadRequestException(
+                        ResponseMessageConstants.AUTH_OTP_INVALID, ErrorCode.OTP_INVALID));
 
     if (otp.isExpired()) {
       log.warn("OTP reset mot de passe expiré pour : {}", phone);
-      throw new BadRequestException(ResponseMessageConstants.AUTH_OTP_INVALID);
+      throw new BadRequestException(
+          ResponseMessageConstants.AUTH_OTP_INVALID, ErrorCode.OTP_EXPIRED);
     }
 
     if (!otp.getCode().equals(request.getCode())) {
       log.warn("Code OTP reset mot de passe incorrect pour : {}", phone);
-      throw new BadRequestException(ResponseMessageConstants.AUTH_OTP_INVALID);
+      throw new BadRequestException(
+          ResponseMessageConstants.AUTH_OTP_INVALID, ErrorCode.OTP_INVALID);
     }
 
     otp.setVerified(true);
@@ -122,7 +128,10 @@ public class PasswordResetServiceImpl implements PasswordResetService {
         otpVerificationRepository
             .findTopByPhoneAndPurposeAndVerifiedTrueAndUsedFalseOrderByCreatedAtDesc(
                 phone, Constants.OtpPurpose.RESET_PASSWORD)
-            .orElseThrow(() -> new BadRequestException(ResponseMessageConstants.AUTH_OTP_INVALID));
+            .orElseThrow(
+                () ->
+                    new BadRequestException(
+                        ResponseMessageConstants.AUTH_OTP_INVALID, ErrorCode.OTP_NOT_VERIFIED));
 
     // Retrouver l'utilisateur local
     User user =

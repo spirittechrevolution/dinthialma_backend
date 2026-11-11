@@ -2,6 +2,7 @@ package com.africa.dinthialma_backend.notification.service.interfaces;
 
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.notification.codeList.NotificationType;
+import com.africa.dinthialma_backend.notification.dto.NotificationLiens;
 import com.africa.dinthialma_backend.notification.dto.NotificationResponse;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -15,6 +16,18 @@ public interface NotificationService {
    * loggées en interne pour ne pas impacter les transactions métier appelantes.
    */
   void notify(UUID userId, NotificationType type, String title, String body, UUID tontineId);
+
+  /**
+   * Variante avec liens précis (cycle, cotisation, membre) pour que le front ouvre l'écran exact.
+   * Même garantie : n'échoue jamais.
+   */
+  void notify(
+      UUID userId,
+      NotificationType type,
+      String title,
+      String body,
+      UUID tontineId,
+      NotificationLiens liens);
 
   /** Liste paginée des notifications de l'utilisateur connecté (plus récentes en premier). */
   Page<NotificationResponse> getMyNotifications(String keycloakId, Pageable pageable)

@@ -91,6 +91,7 @@ public final class ResponseMessageConstants {
   public static final String CONTRIBUTION_GET_SUCCESS = "Cotisation récupérée avec succès";
   public static final String CONTRIBUTION_NOT_FOUND = "Cotisation introuvable";
   public static final String CONTRIBUTION_VALIDATED = "Cotisation validée avec succès";
+  public static final String CONTRIBUTION_REFUSED = "Cotisation refusée";
   public static final String CONTRIBUTION_ADMIN_RECORD_SUCCESS =
       "Cotisation enregistrée et validée avec succès";
   public static final String CONTRIBUTION_UPDATE_SUCCESS = "Cotisation mise à jour avec succès";
@@ -110,6 +111,33 @@ public final class ResponseMessageConstants {
   public static final String COMMISSION_NOT_FOUND = "Commission introuvable";
   public static final String COMMISSION_ALREADY_EXISTS =
       "Une commission de ce type existe déjà sur cette tontine";
+
+  // Espace personnel (/v1/me)
+  public static final String ME_SUMMARY_SUCCESS = "Résumé de mes cotisations récupéré avec succès";
+  public static final String ME_VALIDATION_GROUPEE_SUCCESS = "Validation groupée traitée";
+  public static final String ME_JACKPOTS_SUCCESS = "Mes jackpots récupérés avec succès";
+  public static final String ME_QR_SUCCESS = "QR membre récupéré avec succès";
+  public static final String ME_ACTIVITE_SUCCESS = "Fil d'activité récupéré avec succès";
+  public static final String QR_RESOLVE_SUCCESS = "QR résolu avec succès";
+  public static final String QR_NOT_FOUND = "QR inconnu ou révoqué";
+  public static final String ME_PASSWORD_CHANGED = "Mot de passe modifié avec succès";
+  public static final String ME_SESSIONS_SUCCESS = "Appareils connectés récupérés avec succès";
+  public static final String ME_SESSION_REVOKED = "Appareil déconnecté";
+  public static final String ME_PREFERENCES_SUCCESS = "Préférences récupérées avec succès";
+  public static final String SESSION_NOT_FOUND = "Session introuvable";
+  public static final String PUBLIC_CONFIG_SUCCESS = "Configuration publique récupérée";
+
+  // Invitations / demandes d'adhésion
+  public static final String INVITATION_SUCCESS = "Invitation récupérée avec succès";
+  public static final String INVITATION_REVOKED = "Invitation révoquée";
+  public static final String INVITATION_NOT_FOUND = "Invitation introuvable ou révoquée";
+  public static final String DEMANDE_CREATED = "Demande d'adhésion envoyée";
+  public static final String DEMANDE_LIST_SUCCESS = "Demandes d'adhésion récupérées avec succès";
+  public static final String DEMANDE_ACCEPTED = "Demande acceptée : le membre a été ajouté";
+  public static final String DEMANDE_REFUSED = "Demande refusée";
+  public static final String DEMANDE_NOT_FOUND = "Demande d'adhésion introuvable";
+  public static final String ME_GESTION_COTISATIONS_SUCCESS =
+      "Paiements de mes tontines gérées récupérés avec succès";
 
   // Admin Dashboard
   public static final String ADMIN_DASHBOARD_SUCCESS = "Dashboard récupéré avec succès";
@@ -138,6 +166,7 @@ public final class ResponseMessageConstants {
   public static final String CODELIST_POST_SUCCESS = "Code list créé avec succès";
   public static final String CODELIST_POST_FAILURE = "Échec de la création du code list";
   public static final String CODELIST_POST_DUPLICATE = "Ce couple type/valeur existe déjà";
+  public static final String CODELIST_DELETE_SUCCESS = "Valeur de liste supprimée";
   public static final String CODELIST_PUT_SUCCESS = "Code list mis à jour avec succès";
   public static final String CODELIST_PUT_FAILURE = "Échec de la mise à jour du code list";
   public static final String CODELIST_PUT_FAILURE_BAD_REQUEST =

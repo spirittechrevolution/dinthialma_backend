@@ -92,7 +92,33 @@ public class Cotisation extends BaseEntity {
   @Column(name = "date_validation")
   private LocalDateTime dateValidation;
 
+  /** Motif du refus – renseigné seulement si statut = REFUSE. */
+  @Column(name = "motif_refus", length = 500)
+  private String motifRefus;
+
+  /** Admin ayant refusé la déclaration – null si non refusée. */
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "refuse_par")
+  private User refusePar;
+
+  /** Date/heure du refus. */
+  @Column(name = "date_refus")
+  private LocalDateTime dateRefus;
+
   /** Soft delete. */
   @Column(name = "deleted_at")
   private LocalDateTime deletedAt;
+
+  /**
+   * Entre deux cotisations d'un même membre sur un même cycle, retient celle à afficher : la
+   * cotisation active (non REFUSE) si elle existe, sinon le refus le plus récent. Depuis V027, un
+   * cycle peut contenir des refus suivis d'une nouvelle déclaration.
+   */
+  public static Cotisation plusPertinente(Cotisation a, Cotisation b) {
+    boolean aRefusee = a.getStatut() == CotisationStatut.REFUSE;
+    boolean bRefusee = b.getStatut() == CotisationStatut.REFUSE;
+    if (aRefusee != bRefusee) return aRefusee ? b : a;
+    if (a.getCreatedAt() == null || b.getCreatedAt() == null) return a;
+    return b.getCreatedAt().isAfter(a.getCreatedAt()) ? b : a;
+  }
 }

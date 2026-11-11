@@ -3,12 +3,15 @@ package com.africa.dinthialma_backend.contribution.controller;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
+import com.africa.dinthialma_backend.common.util.CsvExport;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
+import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.CycleRecapCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.MembreTotalCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
+import com.africa.dinthialma_backend.contribution.dto.RefuseCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.UpdateCotisationRequest;
 import com.africa.dinthialma_backend.contribution.service.interfaces.CotisationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -21,6 +24,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -79,7 +83,12 @@ public class CotisationController {
               + "- **MEMBER** : voit uniquement ses propres cotisations.\n\n"
               + "Paramètres optionnels :\n"
               + "- `cycleId` : filtre par cycle\n"
-              + "- `membreId` : filtre par membre (admin/SUPER_ADMIN uniquement, ignoré pour MEMBER)\n\n"
+              + "- `membreId` : filtre par membre (admin/SUPER_ADMIN uniquement, ignoré pour MEMBER)\n"
+              + "- `statut` : un ou plusieurs statuts (`?statut=EN_ATTENTE&statut=EN_RETARD`),"
+              + " absent = tous\n"
+              + "- `q` : recherche sur le prénom, le nom, le téléphone du cotisant ou la référence"
+              + " de transaction\n\n"
+              + "Un `cycleId` qui n'appartient pas à la tontine renvoie une page vide.\n\n"
               + "Pagination : `?page=0&size=20&sort=createdAt,desc&cycleId=<uuid>&membreId=<uuid>`")
   @ApiResponses({
     @ApiResponse(
@@ -107,6 +116,12 @@ public class CotisationController {
               example = "770e8400-e29b-41d4-a716-446655440000")
           @RequestParam(required = false)
           UUID membreId,
+      @Parameter(description = "Filtrer par statut (multi-valeurs, optionnel)")
+          @RequestParam(required = false)
+          List<CotisationStatut> statut,
+      @Parameter(description = "Recherche : nom, téléphone du cotisant ou référence de transaction")
+          @RequestParam(required = false)
+          String q,
       @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
           Pageable pageable,
       HttpServletRequest httpRequest)
@@ -114,7 +129,8 @@ public class CotisationController {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
     Page<CotisationResponse> cotisations =
-        cotisationService.listCotisations(keycloakId, tontineId, cycleId, membreId, pageable);
+        cotisationService.listCotisations(
+            keycloakId, tontineId, cycleId, membreId, statut, q, pageable);
 
     return ResponseEntity.ok(
         new CustomResponse(
@@ -298,6 +314,55 @@ public class CotisationController {
         new CustomResponse(SUCCESS, OK, ResponseMessageConstants.CONTRIBUTION_VALIDATED, response));
   }
 
+  // ─── Refus ───────────────────────────────────────────────────────────────
+
+  @PutMapping("/{cotisationId}/refuser")
+  @Operation(
+      summary = "Refuser une cotisation déclarée",
+      description =
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "L'admin rejette un paiement déclaré (ex : transfert non reçu) : statut"
+              + " **EN_ATTENTE → REFUSE**, avec un `motif` obligatoire.\n\n"
+              + "- Remplit `motifRefus`, `refusePar` et `dateRefus`.\n"
+              + "- Le membre reçoit une notification `COTISATION_REFUSEE` (in-app + WhatsApp).\n"
+              + "- Une cotisation REFUSE n'entre dans aucun total et **ne bloque pas** une"
+              + " nouvelle déclaration du membre sur le même cycle.\n\n"
+              + "Erreur `COTISATION_NOT_PENDING` si la cotisation n'est pas EN_ATTENTE.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Cotisation refusée",
+        content = @Content(schema = @Schema(implementation = CotisationResponse.class))),
+    @ApiResponse(
+        responseCode = "400",
+        description = "Motif manquant (VALIDATION_ERROR) ou cotisation pas EN_ATTENTE"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine ou cotisation introuvable"),
+  })
+  public ResponseEntity<CustomResponse> refuseCotisation(
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
+      @Parameter(
+              description = "UUID de la cotisation à refuser",
+              example = "880e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID cotisationId,
+      @RequestBody @Valid RefuseCotisationRequest request,
+      HttpServletRequest httpRequest)
+      throws CustomException {
+
+    String keycloakId = headerParser.extractKeycloakId(httpRequest);
+    CotisationResponse response =
+        cotisationService.refuseCotisation(keycloakId, tontineId, cotisationId, request);
+
+    return ResponseEntity.ok(
+        new CustomResponse(SUCCESS, OK, ResponseMessageConstants.CONTRIBUTION_REFUSED, response));
+  }
+
   // ─── Modification ─────────────────────────────────────────────────────────
 
   @PatchMapping("/{cotisationId}")
@@ -401,6 +466,37 @@ public class CotisationController {
     return ResponseEntity.ok(
         new CustomResponse(
             SUCCESS, OK, ResponseMessageConstants.CONTRIBUTION_RECAP_SUCCESS, recap));
+  }
+
+  // ─── Export CSV (B24) ─────────────────────────────────────────────────────
+
+  @GetMapping("/export")
+  @Operation(
+      summary = "Exporter les cotisations en CSV",
+      description =
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "Fichier CSV (séparateur `;`, UTF-8 avec BOM pour Excel) : tour, membre,"
+              + " téléphone, montant, statut, méthode, référence, dates, motif de refus, note."
+              + " Filtres optionnels `cycleId` et `statut` (multi). Au plus 10 000 lignes.\n\n"
+              + "Seul `format=csv` est pris en charge.")
+  @ApiResponses({
+    @ApiResponse(responseCode = "200", description = "Fichier CSV"),
+    @ApiResponse(responseCode = "400", description = "Format non pris en charge"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+  })
+  public ResponseEntity<byte[]> exportCotisations(
+      @PathVariable UUID tontineId,
+      @Parameter(description = "Format d'export (csv)") @RequestParam(defaultValue = "csv")
+          String format,
+      @RequestParam(required = false) UUID cycleId,
+      @RequestParam(required = false) List<CotisationStatut> statut,
+      HttpServletRequest httpRequest)
+      throws CustomException {
+    CsvExport.verifierFormat(format);
+    byte[] csv =
+        cotisationService.exportCotisationsCsv(
+            headerParser.extractKeycloakId(httpRequest), tontineId, cycleId, statut);
+    return CsvExport.reponse(csv, "cotisations-" + tontineId + ".csv");
   }
 
   // ─── Récapitulatif total par membre ───────────────────────────────────────

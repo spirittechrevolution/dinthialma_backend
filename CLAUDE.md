@@ -46,7 +46,7 @@
 | `/refresh` | POST | ✅ | ✅ | ✅ | ✅ | ✅ | refresh_token → nouveaux tokens |
 | `/register/send-otp` | POST | ✅ | – | – | – | – | envoie OTP SMS |
 | `/register/verify-otp` | POST | ✅ | – | – | – | – | vérifie OTP |
-| `/register/complete` | POST | ✅ | – | – | – | – | finalise inscription |
+| `/register/complete` | POST | ✅ | – | – | – | – | finalise inscription ; avec `clientType` (+`deviceInfo`) : connexion automatique, jetons à plat dans la réponse comme `/login` |
 | `/forgot-password/send-otp` | POST | ✅ | – | – | – | – | anti-énumération |
 | `/forgot-password/verify-otp` | POST | ✅ | – | – | – | – | |
 | `/forgot-password/reset` | POST | ✅ | – | – | – | – | |
@@ -76,7 +76,7 @@
 | Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
 |----------|---------|------|--------|-------|-------------|-------|
 | `/` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 tout auth peut créer → devient ADMIN |
-| `/` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 SUPER_ADMIN voit tout ; autres voient les leurs |
+| `/` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 SUPER_ADMIN voit tout ; autres voient les leurs ; `?role=GERE\|COTISE` ; chaque tontine porte `monRole`, `monMembreId`, `monStatutMembre` |
 | `/{id}` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 ¹membre de la tontine ²créateur |
 | `/{id}` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 BROUILLON seulement |
 | `/{id}` | DELETE | ❌ | ❌ | ✅² | ✅ | 🔒 soft delete, BROUILLON seulement |
@@ -87,7 +87,7 @@
 
 | Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
 |----------|---------|------|--------|-------|-------------|-------|
-| `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
+| `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 filtres `?statut=`, `?q=` (nom, téléphone), `?cycleId=&aPaye=true\|false` (cotisation active ou non sur le cycle ; cycle hors tontine → 404) |
 | `/` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 ajout par **phone** (+ firstName/lastName si numéro inconnu) |
 | `/{membreId}` | DELETE | ❌ | ❌ | ✅² | ✅ | 🔒 soft delete, statut → SORTI |
 | `/{membreId}/statut` | PATCH | ❌ | ❌ | ✅² | ✅ | 🔒 ACTIF / SUSPENDU / SORTI |
@@ -96,12 +96,13 @@
 
 | Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
 |----------|---------|------|--------|-------|-------------|-------|
-| `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 ¹MEMBER voit les siennes seulement ; filtres `?cycleId=` et `?membreId=` (admin uniquement, ignoré pour MEMBER) |
+| `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 ¹MEMBER voit les siennes seulement ; filtres `?cycleId=`, `?membreId=` (admin uniquement, ignoré pour MEMBER), `?statut=` (multi) et `?q=` (nom, téléphone, référence) — filtre tontine toujours appliqué |
 | `/{id}` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
 | `/` | POST | ❌ | ✅¹ | ❌ | ✅ | 🔒 le cotisant enregistre son paiement |
 | `/admin` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 saisie admin pour n'importe quel membre (y compris PRE_ENROLLED), créée directement VALIDE |
 | `/{id}` | PATCH | ❌ | ❌ | ✅² | ✅ | 🔒 correction (champs non-null) : EN_ATTENTE ou VALIDE + cycle EN_COURS ; refusé si cycle TERMINE ou EN_RETARD |
 | `/{id}/valider` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 EN_ATTENTE → VALIDE |
+| `/{id}/refuser` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 EN_ATTENTE → REFUSE, `motif` obligatoire ; notifie le membre (`COTISATION_REFUSEE`) ; le membre peut redéclarer sur le même cycle |
 | `/recap/{cycleId}` | GET | ❌ | ❌ | ✅² | ✅ | 🔒 statut de cotisation par membre pour un cycle (pageable, SORTI exclus) |
 | `/recap-total` | GET | ❌ | ❌ | ✅² | ✅ | 🔒 total VALIDÉ cumulé par membre, tous cycles (pageable, SORTI exclus) |
 
@@ -132,20 +133,60 @@
 | Endpoint | Méthode | ADMIN | SUPER_ADMIN | Description |
 |----------|---------|-------|-------------|-------------|
 | `/dashboard` | GET | ❌ | ✅ | Statistiques globales plateforme |
-| `/dashboard/tontines` | GET | ❌ | ✅ | Toutes tontines + statuts (pageable, filtre `?statut=`) |
-| `/dashboard/users` | GET | ❌ | ✅ | Tous les utilisateurs (pageable, filtre `?accountStatus=ACTIVE|PRE_ENROLLED`, ACTIVE inclut les statuts NULL) |
+| `/dashboard/tontines` | GET | ❌ | ✅ | Toutes tontines + statuts (pageable, filtres `?statut=`, `?q=`) |
+| `/dashboard/users` | GET | ❌ | ✅ | Tous les utilisateurs (pageable, filtres `?accountStatus=ACTIVE|PRE_ENROLLED` (ACTIVE inclut NULL), `?role=`, `?q=` prénom/nom/téléphone/email) |
 | `/dashboard/users/{id}` | GET | ❌ | ✅ | Détail utilisateur |
 | `/dashboard/users/{id}/disable` | POST | ❌ | ✅ | Désactiver un compte |
 | `/dashboard/users/{id}/enable` | POST | ❌ | ✅ | Réactiver un compte |
 | `/dashboard/users/{id}/roles` | PUT | ❌ | ✅ | Modifier les rôles |
 | `/dashboard/contributions` | GET | ❌ | ✅ | Toutes cotisations (pageable, filtres cumulables `?statut=` `?tontineId=`) |
-| `/my-dashboard` | GET | ✅ | ✅ | Métriques de l'admin pour ses tontines (`tontines` = `PagedModel`) + agrégats globaux : `nombreTontinesGerees`, `montantTotalValide`, `totalMembres`, `totalCotisationsEnAttente/EnRetard` |
+| `/my-dashboard` | GET | ✅ | ✅ | Métriques de l'admin pour ses tontines (`tontines` = `PagedModel`) + agrégats globaux : `nombreTontinesGerees`, `montantTotalValide`, `totalMembres`, `totalCotisationsEnAttente/EnRetard`, `totalCollecteToursEnCours`, `totalAttenduToursEnCours` ; par tontine : `gagnantsADesigner` + `cycleEnCours` (`montantCollecte`, `montantEnAttente`, `montantAttendu`, `membresAyantPaye`, `membresEnAttente`, `membresActifs`) |
+
+### 🙋 Mon espace (`/v1/me`)
+
+| Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
+|----------|---------|------|--------|-------|-------------|-------|
+| `/summary` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 résumé « Je cotise » : par tontine où je cotise (membership, totaux, tours, tour EN_COURS, `cotisationDue` A_PAYER/EN_ATTENTE/VALIDE, gestionnaire) + totaux et jackpots reçus ; liste non paginée |
+| `/gestion/cotisations` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 paiements de **toutes les tontines que j'ai créées** (file « À valider »), filtres `?statut=` (multi), `?tontineId=`, `?q=` ; pageable |
+| `/gestion/cotisations/valider` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 validation groupée `{cotisationIds}` (1–100) ; chaque cotisation dans sa propre transaction, résultat par id avec `code` d'échec ; toujours 200 |
+| `/jackpots` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 jackpots reçus + `aVenir` (ROTATION : rang, tour et date estimés ; TIRAGE / CHOIX : sans estimation) |
+| `/activite` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 fil cotisations + jackpots (UNION native, tri date DESC imposé), `?mode=COTISE\|GERE`, `?tontineId=`, `?type=`, `?statut=` |
+| `/qr` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 mon QR : jeton opaque stable `m_…` + url (pas de téléphone) |
+| `/qr/regenerer` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 nouveau jeton, l'ancien → 404 |
+| `/activite/export` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 export CSV du fil (mêmes filtres), `;` + BOM UTF-8, 10 000 lignes max |
+| `/password` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 changer de mot de passe (ancien vérifié) ; `deconnecterAutresAppareils` ; codes `CURRENT_PASSWORD_INVALID`, `PASSWORD_UNCHANGED` |
+| `/sessions` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 appareils connectés (1 session par clientType), `courante` via le `sid` du JWT |
+| `/sessions/{id}` | DELETE | ✅ | ✅ | ✅ | ✅ | 🔒 déconnexion à distance (révocation Keycloak + suppression) ; 404 si pas à moi |
+| `/preferences` | GET / PUT | ✅ | ✅ | ✅ | ✅ | 🔒 préférences synchronisées (JSONB) : favoris (50 max), dernierMode, masquerMontant, dernierMoyenPaiement |
+| `/gestion/demandes` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 demandes d'adhésion reçues sur mes tontines (`?statut=`, `?tontineId=`), avec téléphone |
+| `/demandes` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 mes demandes d'adhésion envoyées |
+
+### ✉️ Invitations et demandes d'adhésion
+
+| Endpoint | Méthode | Accès | Notes |
+|----------|---------|-------|-------|
+| `/v1/tontines/{id}/invitation` | POST | créateur, SUPER_ADMIN | code `XXXX-XXXX` + url + qrToken `t_<code>` ; `?regenerer=true` ; tontine BROUILLON/ACTIVE |
+| `/v1/tontines/{id}/invitation` | DELETE | créateur, SUPER_ADMIN | révoque (lien et QR → 404) |
+| `/v1/public/invitations/{code}` | GET | 🌐 public | aperçu minimal sans données des membres ; `placesRestantes`, `ouverte` |
+| `/v1/invitations/{code}/demandes` | POST | tout auth | demande EN_ATTENTE ; `DEMANDE_DEJA_EN_ATTENTE`, `MEMBER_ALREADY_IN_TONTINE`, `TONTINE_FULL`, `TONTINE_NOT_OPEN` |
+| `/v1/tontines/{id}/demandes/{demandeId}/accepter` | PUT | créateur, SUPER_ADMIN | réutilise l'ajout de membre (`ordreJackpot` optionnel) ; `DEMANDE_NOT_PENDING` |
+| `/v1/tontines/{id}/demandes/{demandeId}/refuser` | PUT | créateur, SUPER_ADMIN | motif optionnel, notification `ADHESION_REFUSEE` |
+
+### 🌐 Public / divers
+
+| Endpoint | Méthode | Accès | Notes |
+|----------|---------|-------|-------|
+| `/v1/public/config` | GET | 🌐 public | `supportWhatsapp`, `supportEmail`, `versionMinimaleApp` (env `SUPPORT_WHATSAPP`, `SUPPORT_EMAIL`, `APP_VERSION_MINIMALE`) ; champ absent si non configuré |
+| `/v1/tontines/{id}/cotisations/export` | GET | créateur, SUPER_ADMIN | export CSV (`format=csv`, `cycleId`, `statut`) |
+| `/v1/code-list/{id}` | DELETE | SUPER_ADMIN | suppression logique ; valeurs système refusées (`CODE_LIST_SYSTEM_VALUE`) ; recréer restaure |
+
+> `GET /v1/qr/{token}` (tout auth) : résout un QR membre → identité sans téléphone + `dansMesTontines` (tontines gérées par l'appelant : membreId, statut, `aPayeCycleEnCours`). Préfixe `t_` réservé aux invitations (B16).
 
 ### 🔔 Notifications (`/v1/notifications`)
 
 | Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
 |----------|---------|------|--------|-------|-------------|-------|
-| `/` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 notifications paginées (lues + non lues, tri createdAt DESC) |
+| `/` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 notifications paginées (lues + non lues, tri createdAt DESC) ; liens `tontineId`, `cycleId`, `cotisationId`, `membreId` quand ils existent |
 | `/unread-count` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 compteur badge cloche |
 | `/{id}/read` | PATCH | ✅ | ✅ | ✅ | ✅ | 🔒 marquer une notification lue (idempotent) |
 | `/read-all` | PATCH | ✅ | ✅ | ✅ | ✅ | 🔒 tout marquer lu en une opération (bulk) |
@@ -221,7 +262,7 @@ src/main/java/com/africa/dinthialma_backend/
 │       ├── interfaces/ CotisationService
 │       └── impl/       CotisationServiceImpl
 ├── notification/   ✅ SMS (LAfricaMobile) + notifications in-app
-│   ├── codeList/       NotificationType (12 valeurs)
+│   ├── codeList/       NotificationType (15 valeurs)
 │   ├── controller/     NotificationController
 │   ├── dto/            NotificationResponse
 │   ├── entity/         UserNotification
@@ -230,6 +271,21 @@ src/main/java/com/africa/dinthialma_backend/
 │       ├── interfaces/ NotificationService
 │       ├── impl/       NotificationServiceImpl
 │       └── (directs)   SmsService, WhatsappService, SchedulerService
+├── me/             ✅ Vues transverses de l'utilisateur connecté (/v1/me, /v1/qr)
+│   ├── codeList/       StatutCotisationDue, ModeActivite, TypeActivite
+│   ├── controller/     MeController, QrController, CompteController
+│   ├── dto/            MeSummaryResponse, MesJackpotsResponse, ActiviteResponse,
+│   │                   ValidationGroupeeRequest/Response, MonQrResponse, QrResolutionResponse
+│   ├── repository/     ActiviteRepository (requête native UNION)
+│   └── service/        MeService(+Impl), QrService(+Impl)
+├── adhesion/       ✅ Invitations par code + demandes d'adhésion (B16/B17)
+│   ├── codeList/       StatutDemande
+│   ├── controller/     AdhesionController
+│   ├── dto/            InvitationResponse, InvitationApercuResponse,
+│   │                   DemandeAdhesionResponse, DemandeRequests
+│   ├── entity/         DemandeAdhesion
+│   ├── repository/     DemandeAdhesionRepository
+│   └── service/        AdhesionService(+Impl)
 ├── admin/          ✅ Complet (GlobalDashboard + gestion users + MyDashboard)
 │   ├── controller/     AdminDashboardController
 │   ├── dto/            GlobalDashboardResponse, AdminUserResponse,
@@ -253,9 +309,12 @@ src/main/java/com/africa/dinthialma_backend/
 | 2 | Toutes les autres routes | JWT Keycloak obligatoire |
 
 Routes publiques : `/api-docs/**`, `/swagger-ui/**`, `/actuator/health`,
-`/v1/auth/login`, `/v1/auth/logout`, `/v1/auth/register/**`,
+`/v1/auth/login`, `/v1/auth/logout`, `/v1/auth/refresh`, `/v1/auth/register/**`,
 `/v1/auth/forgot-password/**`, `/v1/auth/login-pin`, `/v1/auth/pin/reset/**`,
-`/v1/code-list/type/**`
+`/v1/code-list/type/**`, `/v1/public/config`, `/v1/public/invitations/**`
+
+> ⚠️ Les routes de `WHITELIST` (`SecurityConfig`) doivent porter le préfixe complet `/v1/...`
+> (le context path `/api` est exclu). Une entrée sans préfixe est silencieusement inopérante.
 
 ### Vérification des droits — pattern service
 
@@ -284,6 +343,12 @@ private boolean isSuperAdmin(User user) {
 - **Soft delete** : `deletedAt` (`LocalDateTime`, null = actif) – jamais de suppression physique
 - **Réponses API** : toujours `CustomResponse(status, statusCode, message, data)`
 - **Exceptions** : hiérarchie `CustomException` → `ApiExceptionHandler` → JSON normalisé
+- **Codes d'erreur** : toute erreur porte `code` (enum `ErrorCode`), absent sur les succès.
+  Pour un cas que le front doit distinguer, lever l'exception avec un code métier
+  (`new ConflictException(msg, ErrorCode.COTISATION_ALREADY_EXISTS)`) ; sinon le handler
+  déduit un code générique du statut (`NOT_FOUND`, `FORBIDDEN`…). Détails éventuels dans
+  `data` (ex. `PIN_LOCKED` → `data.retryAfterSeconds`). On **ajoute** des valeurs à
+  `ErrorCode`, on n'en renomme ni n'en supprime jamais.
 - **Services** : interface dans `service/interfaces/` + impl dans `service/impl/` ; `@Transactional` sur écriture
 - **Phone** : toujours stocké SANS le `+` (normalisé via `PhoneUtils.normalize()` en entrée)
 - **JPQL** : pas de `SELECT DISTINCT` dans les repositories — PostgreSQL gère la déduplication nativement
@@ -316,6 +381,7 @@ Une page imbriquée dans un DTO doit être typée `PagedModel<T>` (pas `Page<T>`
 
 > ⚠️ **Booléens préfixés** (`aRecuJackpot`…) : le getter Lombok `isARecuJackpot()` est sérialisé `arecuJackpot`.
 > Déclarer un getter explicite annoté `@JsonProperty("aRecuJackpot")` (cf. `MembreResponse`).
+> Même piège pour tout champ commençant par « a » + majuscule (`aVenir`, `aPayeCycleEnCours`).
 
 ### ⛔ Imports — règle absolue : PAS de wildcard `*`
 
@@ -409,8 +475,14 @@ public class ModuleController {
 | V024 | `add_nombre_gagnants_and_cycle_gagnants.sql` | `tontines.nombre_gagnants`, table `cycle_gagnants` |
 | V025 | `add_evenementielle_fields_to_tontines.sql` | `tontines.tontine_type`, `date_echeance`, `nom_evenement`, `montant_libre`, `montant_minimum` ; `ordre_beneficiaire` nullable |
 | V026 | `create_user_notifications.sql` | `user_notifications` (id, user_id FK, type, title, body, is_read, tontine_id, timestamps, deleted_at) ; index sur (user_id, is_read) et createdAt DESC |
+| V027 | `add_refus_to_cotisations.sql` | `cotisations.motif_refus`, `refuse_par`, `date_refus` ; `uq_cot_cycle_membre` remplacée par l'index unique partiel `uq_cot_cycle_membre_actif` (`WHERE deleted_at IS NULL AND statut <> 'REFUSE'`) |
+| V028 | `add_liens_to_user_notifications.sql` | `user_notifications.cycle_id`, `cotisation_id`, `membre_id` (liens précis, sans FK) |
+| V029 | `add_qr_token_to_users.sql` | `users.qr_token` + index unique partiel (QR membre opaque) |
+| V030 | `add_deleted_at_to_la_code_list.sql` | `la_code_list.deleted_at` (suppression logique) |
+| V031 | `add_preferences_to_users.sql` | `users.preferences` JSONB |
+| V032 | `create_invitations_et_demandes_adhesion.sql` | `tontines.code_invitation` (unique) + table `demandes_adhesion` (1 EN_ATTENTE max par personne/tontine) |
 
-Prochaine version disponible : **V027**
+Prochaine version disponible : **V033**
 
 ---
 
@@ -479,6 +551,7 @@ Prochaine version disponible : **V027**
 | Saisie admin directe (VALIDE, membres PRE_ENROLLED inclus) | ✅ | 🔒 créateur + SUPER_ADMIN |
 | Modifier cotisation (PATCH, selon statut / cycle) | ✅ | 🔒 créateur + SUPER_ADMIN |
 | Valider cotisation | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Refuser cotisation (motif, redéclaration possible) | ✅ | 🔒 créateur + SUPER_ADMIN |
 | Liste cotisations (filtres cycle + membre) | ✅ | 🔒 MEMBER voit les siennes ; admin voit tout |
 | Détail cotisation | ✅ | 🔒 propriétaire + créateur + SUPER_ADMIN |
 | Récapitulatif par membre pour un cycle (paginé) | ✅ | 🔒 créateur + SUPER_ADMIN |
@@ -552,13 +625,16 @@ Prochaine version disponible : **V027**
 | Marquer tout lu (bulk `@Modifying`) | ✅ | 🔒 tout auth |
 | `notify()` non-bloquant (try/catch interne, jamais de rollback) | ✅ | INFRA |
 
-#### Mapping événements → `NotificationType` (12 valeurs)
+#### Mapping événements → `NotificationType` (15 valeurs)
 
 | Événement | Type | Destinataire |
 |-----------|------|--------------|
 | Membre soumet une cotisation | `PAIEMENT_RECU` | Admin de la tontine |
 | Membre soumet une cotisation | `COTISATION_SOUMISE` | Membre lui-même |
 | Cotisation validée par admin | `COTISATION_VALIDEE` | Membre cotisant |
+| Cotisation refusée par admin (avec motif) | `COTISATION_REFUSEE` | Membre cotisant |
+| Demande d'adhésion reçue (code d'invitation) | `DEMANDE_ADHESION` | Gestionnaire |
+| Demande d'adhésion refusée | `ADHESION_REFUSEE` | Demandeur |
 | Jackpot distribué (ROTATIVE) | `JACKPOT_DISTRIBUE` | Gagnant + admin |
 | Distribution finale (EVENEMENTIELLE) | `DISTRIBUTION_FINALE` | Chaque membre |
 | Cycle clôturé avec retards | `PAIEMENT_EN_RETARD` | Admin |
@@ -674,7 +750,7 @@ cd docker && docker compose up -d
       → processEvenementielleReminders() : jours clés J-30/7/3/1
   7.2 UserNotification entity + repository + service + controller       ✅ FAIT
       → Migration V026 : table user_notifications
-      → NotificationType enum (12 valeurs)
+      → NotificationType enum (12 valeurs, 13 depuis B18)
       → notify() non-bloquant (try/catch interne)
       → 4 endpoints : GET / · GET /unread-count · PATCH /{id}/read · PATCH /read-all
       → Bulk markAllAsRead via @Modifying @Query (non itératif)
@@ -686,6 +762,37 @@ cd docker && docker compose up -d
       → MembreServiceImpl : INVITATION_TONTINE + STATUT_MEMBRE
       → SchedulerService : RAPPEL_COTISATION sur 4 chemins (ROTATIVE + 3 EVENEMENTIELLE)
       → SchedulerService : CYCLE_BIENTOT_CLOTURE (J-2) + TOUR_PROCHE (J-3 ROTATION)
+
+✦ Sprint 8 – Besoins front v2, lot A (cf. Docs/BESOINS_BACKEND.md)  🔄 EN REVUE
+  B01 TontineResponse : monRole / monMembreId / monStatutMembre + ?role=GERE|COTISE  ✅
+  B07 Cotisations : ?statut= (multi) + ?q= via CotisationSpecifications            ✅
+      → correctif : cycleId d'une autre tontine ne fuit plus
+  B06 GET /v1/me/gestion/cotisations (file « À valider »)                         ✅
+  B05 my-dashboard : collecté / attendu du tour en cours + gagnantsADesigner       ✅
+  B04 GET /v1/me/summary (résumé « Je cotise »)                                    ✅
+  B08 Docs OpenAPI : schémas login / refresh / login-pin / register / notifications ✅
+  B02 Codes d'erreur stables (champ `code`, enum ErrorCode)                     ✅
+      → fix : /v1/auth/refresh et /v1/auth/pin/reset/** réellement publics
+      → fix : 400/404/405 au lieu de 500 (JSON illisible, route inconnue…)
+  B18 Refus de paiement : PUT /cotisations/{id}/refuser + V027 (index partiel)  ✅
+  B03 charset=UTF-8 forcé sur toutes les réponses (données en base saines)       ✅
+  B11 Recherche/filtres serveur : tontines, membres (aPaye), users, console      ✅
+  B13 Connexion automatique après inscription (clientType optionnel)            ✅
+  B14 Validation groupée POST /v1/me/gestion/cotisations/valider                ✅
+  B19 Liens précis des notifications (V028)                                     ✅
+  B10 GET /v1/me/jackpots (reçus + estimation du prochain tour)                 ✅
+  B15 QR membre opaque + résolution GET /v1/qr/{token} (V029)                   ✅
+  B09 GET /v1/me/activite (fil cotisations + jackpots)                          ✅
+      → fix : POST /cycles (MANUEL) renvoyait 500 (@Builder.Default manquant)
+  P2 :
+  B21 POST /v1/me/password · B20 GET/DELETE /v1/me/sessions                    ✅
+  B23 DELETE /v1/code-list/{id} (V030, SUPER_ADMIN)                             ✅
+      → fix : RoleGuard renvoyait 401 au lieu de 403 sur rôle insuffisant
+  B25 GET /v1/public/config · B24 exports CSV                                   ✅
+  B22 GET/PUT /v1/me/preferences (V031, JSONB)                                  ✅
+  B16/B17 invitation par code + demandes d'adhésion (V032)                      ✅
+  ⏸ B19 notifications push : EN STAND-BY (non bloquant – in-app + WhatsApp couvrent le
+    besoin ; à reprendre avec une lib Web Push + clés VAPID par environnement)
 ```
 
 ---

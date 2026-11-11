@@ -23,6 +23,8 @@ import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -30,11 +32,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 /** Contrôleur d'authentification – inscription, connexion, déconnexion, reset, PIN. */
+@Slf4j
 @RestController
 @RequestMapping("/v1/auth")
 @RequiredArgsConstructor
@@ -59,7 +63,10 @@ public class AuthController {
               + " gestionnaire avant de s'inscrire, la connexion retourne HTTP 403 avec un message"
               + " invitant à s'inscrire sur l'application.")
   @ApiResponses({
-    @ApiResponse(responseCode = "200", description = "Connexion réussie – tokens JWT retournés"),
+    @ApiResponse(
+        responseCode = "200",
+        description = "Connexion réussie – tokens JWT retournés",
+        content = @Content(schema = @Schema(implementation = LoginResponse.class))),
     @ApiResponse(responseCode = "401", description = "Identifiants incorrects"),
     @ApiResponse(
         responseCode = "403",
@@ -83,7 +90,10 @@ public class AuthController {
       summary = "Rafraîchir les tokens JWT",
       description = "Échange un refresh_token Keycloak valide contre de nouveaux tokens JWT.")
   @ApiResponses({
-    @ApiResponse(responseCode = "200", description = "Nouveaux tokens retournés"),
+    @ApiResponse(
+        responseCode = "200",
+        description = "Nouveaux tokens retournés",
+        content = @Content(schema = @Schema(implementation = LoginResponse.class))),
     @ApiResponse(responseCode = "401", description = "Refresh token invalide ou expiré"),
   })
   public ResponseEntity<CustomResponse> refresh(@RequestBody @Valid RefreshTokenRequest request)
@@ -170,17 +180,42 @@ public class AuthController {
               + "**Cas PRE_ENROLLED** : si le numéro appartient à un compte pré-inscrit par un"
               + " gestionnaire de tontine, cette étape **active** le compte existant (keycloakId,"
               + " firstName, lastName mis à jour, statut → ACTIVE, rôles USER + MEMBER attribués)."
-              + " Les memberships tontine déjà créés sont conservés.")
+              + " Les memberships tontine déjà créés sont conservés.\n\n"
+              + "**Connexion automatique** : si `clientType` (WEB/MOBILE) est fourni, la réponse"
+              + " contient aussi `access_token`, `refresh_token`, `expires_in` et"
+              + " `pin_configured` (false), comme `/login` : l'app enchaîne directement sur la"
+              + " création du code secret. Si la connexion échoue, l'inscription reste réussie et"
+              + " ces champs sont absents.")
   @ApiResponses({
     @ApiResponse(
         responseCode = "201",
-        description = "Compte créé (nouveau) ou activé (PRE_ENROLLED)"),
+        description = "Compte créé (nouveau) ou activé (PRE_ENROLLED)",
+        content = @Content(schema = @Schema(implementation = RegisterResponse.class))),
     @ApiResponse(responseCode = "400", description = "OTP non vérifié ou données invalides"),
     @ApiResponse(responseCode = "409", description = "Téléphone déjà utilisé par un compte ACTIVE"),
   })
   public ResponseEntity<CustomResponse> completeRegistration(
       @RequestBody @Valid RegisterCompleteRequest request) throws CustomException {
     RegisterResponse response = registrationService.completeRegistration(request);
+
+    // Connexion automatique (B13) : APRÈS le commit de l'inscription, pour qu'un échec de
+    // connexion ne puisse jamais annuler un compte déjà créé. Non bloquante.
+    if (request.getClientType() != null) {
+      try {
+        LoginRequest login = new LoginRequest();
+        login.setUsername(response.getPhone());
+        login.setPassword(request.getPassword());
+        login.setClientType(request.getClientType());
+        login.setDeviceInfo(request.getDeviceInfo());
+        response.setTokens(loginService.login(login));
+      } catch (Exception e) {
+        log.warn(
+            "[Register] Connexion automatique impossible pour userId={} : {}",
+            response.getUserId(),
+            e.getMessage());
+      }
+    }
+
     return ResponseEntity.status(HttpStatus.CREATED)
         .body(
             new CustomResponse(
@@ -272,7 +307,10 @@ public class AuthController {
       description =
           "Pré-requis : PIN configuré et session active existante (connexion mot de passe préalable).")
   @ApiResponses({
-    @ApiResponse(responseCode = "200", description = "Connexion PIN réussie – tokens JWT"),
+    @ApiResponse(
+        responseCode = "200",
+        description = "Connexion PIN réussie – tokens JWT",
+        content = @Content(schema = @Schema(implementation = LoginResponse.class))),
     @ApiResponse(responseCode = "400", description = "PIN non configuré"),
     @ApiResponse(responseCode = "401", description = "PIN incorrect ou session expirée"),
     @ApiResponse(responseCode = "404", description = "Utilisateur introuvable"),

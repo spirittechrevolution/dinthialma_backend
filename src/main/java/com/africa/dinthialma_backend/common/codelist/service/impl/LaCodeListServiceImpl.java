@@ -3,9 +3,12 @@ package com.africa.dinthialma_backend.common.codelist.service.impl;
 import com.africa.dinthialma_backend.common.codelist.entity.LaCodeList;
 import com.africa.dinthialma_backend.common.codelist.repository.LaCodeListRepository;
 import com.africa.dinthialma_backend.common.codelist.service.interfaces.LaCodeListService;
+import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.ConflictException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -26,26 +29,39 @@ public class LaCodeListServiceImpl implements LaCodeListService {
   @Override
   @Transactional(readOnly = true)
   public List<LaCodeList> findAllByType(String type) {
-    return codeListRepository.findAllByType(type);
+    return codeListRepository.findAllByTypeAndDeletedAtIsNull(type);
   }
 
   @Override
   @Transactional(readOnly = true)
   public Page<LaCodeList> findAll(Pageable pageable) {
-    return codeListRepository.findAll(pageable);
+    return codeListRepository.findByDeletedAtIsNull(pageable);
   }
 
   @Override
   @Transactional(readOnly = true)
   public LaCodeList findById(UUID id) throws CustomException {
     return codeListRepository
-        .findById(id)
+        .findByIdAndDeletedAtIsNull(id)
         .orElseThrow(() -> new NotFoundException("Code list introuvable avec l'id : " + id));
   }
 
   @Override
   @Transactional
   public LaCodeList createCodeList(LaCodeList codeList) throws CustomException {
+    // Une valeur supprimée (soft delete) du même couple type/value est restaurée
+    var supprimee =
+        codeListRepository
+            .findByTypeAndValue(codeList.getType(), codeList.getValue())
+            .filter(c -> c.getDeletedAt() != null);
+    if (supprimee.isPresent()) {
+      LaCodeList restauree = supprimee.get();
+      restauree.setDeletedAt(null);
+      restauree.setDescription(codeList.getDescription());
+      restauree.setSystemAssign(codeList.isSystemAssign());
+      log.info("Code list restauré – {} / {}", restauree.getType(), restauree.getValue());
+      return codeListRepository.save(restauree);
+    }
     if (codeListRepository.existsByTypeAndValue(codeList.getType(), codeList.getValue())) {
       throw new ConflictException(
           "Un code list avec le type '"
@@ -97,5 +113,22 @@ public class LaCodeListServiceImpl implements LaCodeListService {
       log.error("Conflit d'unicité lors de la mise à jour du code list : {}", ex.getMessage());
       throw new ConflictException("Un code list avec ce type et cette valeur existe déjà");
     }
+  }
+
+  @Override
+  @Transactional
+  public void deleteCodeList(UUID id) throws CustomException {
+    LaCodeList existing = findById(id);
+    if (existing.isSystemAssign()) {
+      throw new BadRequestException(
+          "Les valeurs système ne peuvent pas être supprimées", ErrorCode.CODE_LIST_SYSTEM_VALUE);
+    }
+    existing.setDeletedAt(LocalDateTime.now());
+    codeListRepository.save(existing);
+    log.info(
+        "Code list supprimé (soft delete) – id={} {} / {}",
+        id,
+        existing.getType(),
+        existing.getValue());
   }
 }

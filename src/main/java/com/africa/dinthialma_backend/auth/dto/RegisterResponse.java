@@ -1,8 +1,8 @@
 package com.africa.dinthialma_backend.auth.dto;
 
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.UUID;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -10,7 +10,6 @@ import lombok.Setter;
 @Schema(description = "Réponse après inscription réussie")
 @Getter
 @Setter
-@AllArgsConstructor
 @NoArgsConstructor
 public class RegisterResponse {
 
@@ -36,4 +35,29 @@ public class RegisterResponse {
       description = "Rôle Keycloak attribué automatiquement à l'inscription",
       example = "DINTHIALMA_USER")
   private String role;
+
+  /**
+   * Jetons de la connexion automatique (si {@code clientType} a été fourni et que la connexion a
+   * réussi), aplatis au premier niveau : {@code access_token}, {@code refresh_token}, {@code
+   * expires_in}, {@code pin_configured}… exactement comme la réponse de {@code /login}. Absents
+   * sinon : le front redirige alors vers l'écran de connexion.
+   */
+  @JsonUnwrapped private LoginResponse tokens;
+
+  public RegisterResponse(
+      UUID userId,
+      String keycloakId,
+      String phone,
+      String firstName,
+      String lastName,
+      String email,
+      String role) {
+    this.userId = userId;
+    this.keycloakId = keycloakId;
+    this.phone = phone;
+    this.firstName = firstName;
+    this.lastName = lastName;
+    this.email = email;
+    this.role = role;
+  }
 }

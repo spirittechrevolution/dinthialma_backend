@@ -1,6 +1,7 @@
 package com.africa.dinthialma_backend.member.service.interfaces;
 
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.dto.AddMembreRequest;
 import com.africa.dinthialma_backend.member.dto.MembreResponse;
 import com.africa.dinthialma_backend.member.dto.UpdateMembreStatutRequest;
@@ -37,7 +38,14 @@ public interface MembreService {
    *
    * <p>Accès : membres de la tontine + admin + SUPER_ADMIN.
    */
-  Page<MembreResponse> listMembres(String keycloakId, UUID tontineId, Pageable pageable)
+  Page<MembreResponse> listMembres(
+      String keycloakId,
+      UUID tontineId,
+      MembreStatut statut,
+      String q,
+      UUID cycleId,
+      Boolean aPaye,
+      Pageable pageable)
       throws CustomException;
 
   /**
