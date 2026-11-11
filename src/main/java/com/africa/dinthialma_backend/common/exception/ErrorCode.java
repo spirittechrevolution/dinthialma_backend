@@ -90,6 +90,10 @@ public enum ErrorCode {
   /** Action réservée à une cotisation EN_ATTENTE (validation, refus). */
   COTISATION_NOT_PENDING,
 
+  // ─── Listes de valeurs ──────────────────────────────────────────────────
+  /** Valeur système (seed) : non supprimable. */
+  CODE_LIST_SYSTEM_VALUE,
+
   // ─── Cycles ─────────────────────────────────────────────────────────────
   CYCLE_ALREADY_IN_PROGRESS;
 

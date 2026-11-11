@@ -15,6 +15,15 @@ public interface LaCodeListRepository extends CrudRepository<LaCodeList, UUID> {
   /** Retourne toutes les valeurs d'un type donné (ex : FREQUENCE_TONTINE). */
   List<LaCodeList> findAllByType(String type);
 
+  /** Valeurs actives d'un type (les valeurs supprimées sont exclues). */
+  List<LaCodeList> findAllByTypeAndDeletedAtIsNull(String type);
+
+  /** Valeurs actives paginées. */
+  Page<LaCodeList> findByDeletedAtIsNull(Pageable pageable);
+
+  /** Valeur active par id. */
+  Optional<LaCodeList> findByIdAndDeletedAtIsNull(UUID id);
+
   /** Recherche une valeur unique par type + value (pour les contraintes d'unicité). */
   Optional<LaCodeList> findByTypeAndValue(String type, String value);
 

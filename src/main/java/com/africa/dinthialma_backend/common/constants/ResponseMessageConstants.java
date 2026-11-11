@@ -154,6 +154,7 @@ public final class ResponseMessageConstants {
   public static final String CODELIST_POST_SUCCESS = "Code list créé avec succès";
   public static final String CODELIST_POST_FAILURE = "Échec de la création du code list";
   public static final String CODELIST_POST_DUPLICATE = "Ce couple type/valeur existe déjà";
+  public static final String CODELIST_DELETE_SUCCESS = "Valeur de liste supprimée";
   public static final String CODELIST_PUT_SUCCESS = "Code list mis à jour avec succès";
   public static final String CODELIST_PUT_FAILURE = "Échec de la mise à jour du code list";
   public static final String CODELIST_PUT_FAILURE_BAD_REQUEST =
