@@ -5,6 +5,7 @@ import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
 import com.africa.dinthialma_backend.me.dto.ChangePasswordRequest;
+import com.africa.dinthialma_backend.me.dto.PreferencesDto;
 import com.africa.dinthialma_backend.me.dto.SessionResponse;
 import com.africa.dinthialma_backend.me.service.interfaces.CompteService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -67,6 +69,54 @@ public class CompteController {
         request);
     return ResponseEntity.ok(
         new CustomResponse(SUCCESS, OK, ResponseMessageConstants.ME_PASSWORD_CHANGED, null));
+  }
+
+  @GetMapping("/preferences")
+  @Operation(
+      summary = "Mes préférences",
+      description =
+          "🔒 Rôles : tout utilisateur authentifié.\n\n"
+              + "Préférences synchronisées entre appareils : `tontinesFavorites`, `dernierMode`"
+              + " (COTISE/GERE), `masquerMontant`, `dernierMoyenPaiement`. Valeurs par défaut si"
+              + " elles n'ont jamais été enregistrées.")
+  @ApiResponse(
+      responseCode = "200",
+      description = "Mes préférences",
+      content = @Content(schema = @Schema(implementation = PreferencesDto.class)))
+  public ResponseEntity<CustomResponse> getPreferences(HttpServletRequest httpRequest)
+      throws CustomException {
+    return ResponseEntity.ok(
+        new CustomResponse(
+            SUCCESS,
+            OK,
+            ResponseMessageConstants.ME_PREFERENCES_SUCCESS,
+            compteService.getPreferences(headerParser.extractKeycloakId(httpRequest))));
+  }
+
+  @PutMapping("/preferences")
+  @Operation(
+      summary = "Enregistrer mes préférences",
+      description =
+          "🔒 Rôles : tout utilisateur authentifié.\n\n"
+              + "Remplace l'ensemble des préférences (envoyer l'objet complet). Favoris"
+              + " dédoublonnés, 50 max ; champs inconnus ignorés.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Préférences enregistrées",
+        content = @Content(schema = @Schema(implementation = PreferencesDto.class))),
+    @ApiResponse(responseCode = "400", description = "Données invalides (VALIDATION_ERROR)"),
+  })
+  public ResponseEntity<CustomResponse> savePreferences(
+      @RequestBody @Valid PreferencesDto preferences, HttpServletRequest httpRequest)
+      throws CustomException {
+    return ResponseEntity.ok(
+        new CustomResponse(
+            SUCCESS,
+            OK,
+            ResponseMessageConstants.ME_PREFERENCES_SUCCESS,
+            compteService.savePreferences(
+                headerParser.extractKeycloakId(httpRequest), preferences)));
   }
 
   @GetMapping("/sessions")

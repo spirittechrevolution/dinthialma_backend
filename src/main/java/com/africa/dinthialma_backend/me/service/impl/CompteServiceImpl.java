@@ -14,13 +14,16 @@ import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.common.exception.UnAuthorizedException;
 import com.africa.dinthialma_backend.me.dto.ChangePasswordRequest;
+import com.africa.dinthialma_backend.me.dto.PreferencesDto;
 import com.africa.dinthialma_backend.me.dto.SessionResponse;
 import com.africa.dinthialma_backend.me.service.interfaces.CompteService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -112,6 +115,30 @@ public class CompteServiceImpl implements CompteService {
             .orElseThrow(() -> new NotFoundException(ResponseMessageConstants.SESSION_NOT_FOUND));
     revoquer(session);
     log.info("Session révoquée à distance – userId={} sessionId={}", user.getId(), sessionId);
+  }
+
+  // ─── B22 : préférences ───────────────────────────────────────────────────
+
+  @Override
+  @Transactional(readOnly = true)
+  public PreferencesDto getPreferences(String keycloakId) throws CustomException {
+    PreferencesDto prefs = findUser(keycloakId).getPreferences();
+    return prefs != null ? prefs : new PreferencesDto();
+  }
+
+  @Override
+  @Transactional
+  public PreferencesDto savePreferences(String keycloakId, PreferencesDto preferences)
+      throws CustomException {
+    User user = findUser(keycloakId);
+    PreferencesDto prefs = preferences != null ? preferences : new PreferencesDto();
+    prefs.setTontinesFavorites(
+        prefs.getTontinesFavorites() == null
+            ? new ArrayList<>()
+            : new ArrayList<>(new LinkedHashSet<>(prefs.getTontinesFavorites())));
+    user.setPreferences(prefs);
+    userRepository.save(user);
+    return prefs;
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
