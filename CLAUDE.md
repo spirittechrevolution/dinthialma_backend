@@ -791,7 +791,8 @@ cd docker && docker compose up -d
   B25 GET /v1/public/config · B24 exports CSV                                   ✅
   B22 GET/PUT /v1/me/preferences (V031, JSONB)                                  ✅
   B16/B17 invitation par code + demandes d'adhésion (V032)                      ✅
-  → Restant : B19 notifications push (Web Push : dépendance + clés VAPID à décider)
+  ⏸ B19 notifications push : EN STAND-BY (non bloquant – in-app + WhatsApp couvrent le
+    besoin ; à reprendre avec une lib Web Push + clés VAPID par environnement)
 ```
 
 ---
