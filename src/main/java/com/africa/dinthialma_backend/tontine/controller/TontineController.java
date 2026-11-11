@@ -5,6 +5,7 @@ import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
 import com.africa.dinthialma_backend.tontine.codeList.RoleFiltreTontine;
+import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.dto.CreateTontineRequest;
 import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.dto.UpdateTontineRequest;
@@ -108,6 +109,14 @@ public class TontineController {
               + "- **SUPER_ADMIN** : voit toutes les tontines de la plateforme.\n"
               + "- **Autres** : voit uniquement les tontines dont il est créateur + celles où il"
               + " est cotisant.\n\n"
+              + "Chaque tontine indique la relation de l'appelant : `monRole`"
+              + " (GESTIONNAIRE / MEMBRE / GESTIONNAIRE_ET_MEMBRE / LECTURE), `monMembreId` et"
+              + " `monStatutMembre`.\n\n"
+              + "Filtres optionnels :\n"
+              + "- `role=GERE|COTISE` (s'applique aussi au SUPER_ADMIN, qui ne voit alors que ses"
+              + " propres tontines)\n"
+              + "- `statut` (BROUILLON, ACTIVE, SUSPENDUE, TERMINEE)\n"
+              + "- `q` : nom de la tontine ou de l'événement, insensible à la casse\n\n"
               + "Pagination : `?page=0&size=20&sort=createdAt,desc`")
   @ApiResponses({
     @ApiResponse(
@@ -120,13 +129,20 @@ public class TontineController {
       @Parameter(description = "GERE = tontines créées par moi ; COTISE = tontines où je cotise")
           @RequestParam(required = false)
           RoleFiltreTontine role,
+      @Parameter(description = "Filtre par statut (BROUILLON, ACTIVE, SUSPENDUE, TERMINEE)")
+          @RequestParam(required = false)
+          TontineStatut statut,
+      @Parameter(description = "Recherche sur le nom de la tontine ou de l'événement")
+          @RequestParam(required = false)
+          String q,
       @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
           Pageable pageable,
       HttpServletRequest httpRequest)
       throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
-    Page<TontineResponse> tontines = tontineService.listTontines(keycloakId, role, pageable);
+    Page<TontineResponse> tontines =
+        tontineService.listTontines(keycloakId, role, statut, q, pageable);
 
     return ResponseEntity.ok(
         new CustomResponse(SUCCESS, OK, ResponseMessageConstants.TONTINE_LIST_SUCCESS, tontines));

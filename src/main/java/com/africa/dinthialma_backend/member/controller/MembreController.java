@@ -4,6 +4,7 @@ import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
+import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.dto.AddMembreRequest;
 import com.africa.dinthialma_backend.member.dto.MembreResponse;
 import com.africa.dinthialma_backend.member.dto.UpdateMembreStatutRequest;
@@ -33,6 +34,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -69,6 +71,12 @@ public class MembreController {
       description =
           "🔒 Rôles : membres de la tontine, créateur, SUPER_ADMIN.\n\n"
               + "Retourne les cotisants triés par ordre jackpot (position dans la rotation).\n\n"
+              + "Filtres optionnels :\n"
+              + "- `statut` (ACTIF, SUSPENDU, SORTI)\n"
+              + "- `q` : prénom, nom ou téléphone (insensible à la casse, « + » ignoré)\n"
+              + "- `cycleId` + `aPaye` : `aPaye=false` = membres sans cotisation active"
+              + " (EN_ATTENTE ou VALIDE) sur ce cycle, `aPaye=true` = membres ayant payé ou"
+              + " déclaré. Un `cycleId` hors tontine renvoie 404.\n\n"
               + "Pagination : `?page=0&size=20&sort=ordreJackpot,asc`")
   @ApiResponses({
     @ApiResponse(
@@ -77,7 +85,7 @@ public class MembreController {
         content = @Content(schema = @Schema(implementation = MembreResponse.class))),
     @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
     @ApiResponse(responseCode = "403", description = "Accès interdit"),
-    @ApiResponse(responseCode = "404", description = "Tontine introuvable"),
+    @ApiResponse(responseCode = "404", description = "Tontine ou cycle introuvable"),
   })
   public ResponseEntity<CustomResponse> listMembres(
       @Parameter(
@@ -85,13 +93,31 @@ public class MembreController {
               example = "550e8400-e29b-41d4-a716-446655440000")
           @PathVariable
           UUID tontineId,
+      @Parameter(description = "Filtre par statut du membre (ACTIF, SUSPENDU, SORTI)")
+          @RequestParam(required = false)
+          MembreStatut statut,
+      @Parameter(description = "Recherche sur le prénom, le nom ou le téléphone")
+          @RequestParam(required = false)
+          String q,
+      @Parameter(
+              description =
+                  "Cycle de référence pour le filtre aPaye (doit appartenir à la tontine)")
+          @RequestParam(required = false)
+          UUID cycleId,
+      @Parameter(
+              description =
+                  "Avec cycleId : true = membres ayant une cotisation active (EN_ATTENTE ou"
+                      + " VALIDE) sur ce cycle, false = pas encore payé")
+          @RequestParam(required = false)
+          Boolean aPaye,
       @PageableDefault(size = 20, sort = "ordreJackpot", direction = Sort.Direction.ASC)
           Pageable pageable,
       HttpServletRequest httpRequest)
       throws CustomException {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
-    Page<MembreResponse> membres = membreService.listMembres(keycloakId, tontineId, pageable);
+    Page<MembreResponse> membres =
+        membreService.listMembres(keycloakId, tontineId, statut, q, cycleId, aPaye, pageable);
 
     return ResponseEntity.ok(
         new CustomResponse(SUCCESS, OK, ResponseMessageConstants.MEMBER_LIST_SUCCESS, membres));

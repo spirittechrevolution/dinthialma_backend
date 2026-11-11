@@ -7,14 +7,23 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /** Accès base pour les tontines – filtre systématique sur {@code deleted_at IS NULL}. */
 @Repository
-public interface TontineRepository extends JpaRepository<Tontine, UUID> {
+public interface TontineRepository
+    extends JpaRepository<Tontine, UUID>, JpaSpecificationExecutor<Tontine> {
+
+  /** Liste filtrée (cf. {@link TontineSpecifications}) avec le créateur chargé. */
+  @Override
+  @EntityGraph(attributePaths = {"creePar"})
+  Page<Tontine> findAll(Specification<Tontine> spec, Pageable pageable);
 
   /** Tontines créées par un utilisateur (admin de ces tontines). */
   List<Tontine> findByCreePar_IdAndDeletedAtIsNull(UUID userId);

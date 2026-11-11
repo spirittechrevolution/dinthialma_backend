@@ -1,12 +1,12 @@
 package com.africa.dinthialma_backend.contribution.repository;
 
 import com.africa.dinthialma_backend.auth.entity.User;
+import com.africa.dinthialma_backend.common.util.SearchUtils;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import jakarta.persistence.criteria.Join;
 import java.util.Collection;
-import java.util.Locale;
 import java.util.UUID;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -62,18 +62,16 @@ public final class CotisationSpecifications {
    * référence de transaction. Le « + » initial d'un numéro est ignoré (téléphones stockés sans).
    */
   public static Specification<Cotisation> recherche(String q) {
-    if (q == null || q.isBlank()) return null;
-    String terme = q.trim();
-    if (terme.startsWith("+")) terme = terme.substring(1);
-    String motif = "%" + terme.toLowerCase(Locale.ROOT) + "%";
+    String motif = SearchUtils.motifLike(q);
+    if (motif == null) return null;
     return (root, query, cb) -> {
       Join<Cotisation, TontineMembre> membre = root.join("membre");
       Join<TontineMembre, User> user = membre.join("user");
       return cb.or(
-          cb.like(cb.lower(user.get("firstName")), motif),
-          cb.like(cb.lower(user.get("lastName")), motif),
-          cb.like(user.get("phone"), motif),
-          cb.like(cb.lower(root.get("referenceTransaction")), motif));
+          cb.like(cb.lower(user.get("firstName")), motif, '\\'),
+          cb.like(cb.lower(user.get("lastName")), motif, '\\'),
+          cb.like(user.get("phone"), motif, '\\'),
+          cb.like(cb.lower(root.get("referenceTransaction")), motif, '\\'));
     };
   }
 }

@@ -27,6 +27,7 @@ import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
+import com.africa.dinthialma_backend.tontine.repository.TontineSpecifications;
 import com.africa.dinthialma_backend.tontine.service.interfaces.TontineService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -42,6 +43,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -118,20 +120,30 @@ public class TontineServiceImpl implements TontineService {
   @Override
   @Transactional(readOnly = true)
   public Page<TontineResponse> listTontines(
-      String keycloakId, RoleFiltreTontine role, Pageable pageable) throws CustomException {
+      String keycloakId, RoleFiltreTontine role, TontineStatut statut, String q, Pageable pageable)
+      throws CustomException {
     User caller = findUserByKeycloakId(keycloakId);
     UUID uid = caller.getId();
 
-    Page<Tontine> tontines;
+    Specification<Tontine> perimetre;
     if (role == RoleFiltreTontine.GERE) {
-      tontines = tontineRepository.findByCreePar_IdAndDeletedAtIsNull(uid, pageable);
+      perimetre = TontineSpecifications.creeePar(uid);
     } else if (role == RoleFiltreTontine.COTISE) {
-      tontines = tontineRepository.findByMembreUserId(uid, pageable);
+      perimetre = TontineSpecifications.cotiseePar(uid);
     } else if (isSuperAdmin(caller)) {
-      tontines = tontineRepository.findByDeletedAtIsNull(pageable);
+      perimetre = null;
     } else {
-      tontines = tontineRepository.findVisibleByUserId(uid, pageable);
+      perimetre = TontineSpecifications.visiblePar(uid);
     }
+
+    Page<Tontine> tontines =
+        tontineRepository.findAll(
+            Specification.allOf(
+                TontineSpecifications.nonSupprimee(),
+                perimetre,
+                TontineSpecifications.statut(statut),
+                TontineSpecifications.recherche(q)),
+            pageable);
 
     // Memberships de l'appelant sur la page courante : une seule requête
     List<UUID> tontineIds = tontines.getContent().stream().map(Tontine::getId).toList();

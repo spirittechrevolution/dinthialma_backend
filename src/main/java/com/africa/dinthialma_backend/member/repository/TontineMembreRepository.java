@@ -8,15 +8,23 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /** Accès base pour les cotisants (membres) d'une tontine. */
 @Repository
-public interface TontineMembreRepository extends JpaRepository<TontineMembre, UUID> {
+public interface TontineMembreRepository
+    extends JpaRepository<TontineMembre, UUID>, JpaSpecificationExecutor<TontineMembre> {
+
+  /** Liste filtrée (cf. {@link TontineMembreSpecifications}) avec l'utilisateur chargé. */
+  @Override
+  @EntityGraph(attributePaths = {"user"})
+  Page<TontineMembre> findAll(Specification<TontineMembre> spec, Pageable pageable);
 
   /**
    * Membres non supprimés d'une tontine triés d'abord par ordre_jackpot, puis par date d'adhésion.

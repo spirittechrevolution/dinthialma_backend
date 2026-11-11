@@ -2,6 +2,7 @@ package com.africa.dinthialma_backend.tontine.service.interfaces;
 
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.tontine.codeList.RoleFiltreTontine;
+import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.dto.CreateTontineRequest;
 import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.dto.UpdateTontineRequest;
@@ -41,7 +42,8 @@ public interface TontineService {
    *
    * @param role filtre optionnel : GERE (créées) ou COTISE (où il cotise), y compris SUPER_ADMIN
    */
-  Page<TontineResponse> listTontines(String keycloakId, RoleFiltreTontine role, Pageable pageable)
+  Page<TontineResponse> listTontines(
+      String keycloakId, RoleFiltreTontine role, TontineStatut statut, String q, Pageable pageable)
       throws CustomException;
 
   /**

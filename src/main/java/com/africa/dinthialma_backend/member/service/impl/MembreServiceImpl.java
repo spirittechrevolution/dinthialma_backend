@@ -22,11 +22,13 @@ import com.africa.dinthialma_backend.member.dto.MembreResponse;
 import com.africa.dinthialma_backend.member.dto.UpdateMembreStatutRequest;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
+import com.africa.dinthialma_backend.member.repository.TontineMembreSpecifications;
 import com.africa.dinthialma_backend.member.service.interfaces.MembreService;
 import com.africa.dinthialma_backend.notification.codeList.NotificationType;
 import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
+import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -35,6 +37,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +49,7 @@ public class MembreServiceImpl implements MembreService {
 
   private final TontineMembreRepository membreRepository;
   private final TontineRepository tontineRepository;
+  private final CycleTontineRepository cycleRepository;
   private final UserRepository userRepository;
   private final UserRoleAssignmentRepository roleAssignmentRepository;
   private final KeycloakAuthService keycloakAuthService;
@@ -181,15 +185,33 @@ public class MembreServiceImpl implements MembreService {
 
   @Override
   @Transactional(readOnly = true)
-  public Page<MembreResponse> listMembres(String keycloakId, UUID tontineId, Pageable pageable)
+  public Page<MembreResponse> listMembres(
+      String keycloakId,
+      UUID tontineId,
+      MembreStatut statut,
+      String q,
+      UUID cycleId,
+      Boolean aPaye,
+      Pageable pageable)
       throws CustomException {
 
     User caller = findUserByKeycloakId(keycloakId);
     Tontine tontine = findTontineById(tontineId);
     assertCanAccess(caller, tontine);
 
+    if (cycleId != null
+        && cycleRepository.findByIdAndTontine_IdAndDeletedAtIsNull(cycleId, tontineId).isEmpty()) {
+      throw new NotFoundException(ResponseMessageConstants.CYCLE_NOT_FOUND);
+    }
+
     return membreRepository
-        .findByTontine_IdAndDeletedAtIsNull(tontineId, pageable)
+        .findAll(
+            Specification.allOf(
+                TontineMembreSpecifications.deTontine(tontineId),
+                TontineMembreSpecifications.statut(statut),
+                TontineMembreSpecifications.recherche(q),
+                TontineMembreSpecifications.paiementSurCycle(cycleId, aPaye)),
+            pageable)
         .map(MembreResponse::from);
   }
 
