@@ -9,6 +9,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 /** Gestionnaire global des exceptions – toutes les erreurs sont normalisées en CustomResponse. */
 @RestControllerAdvice
@@ -52,6 +53,19 @@ public class ApiExceptionHandler {
                 Constants.Message.ERROR_BODY,
                 HttpStatus.BAD_REQUEST.value(),
                 "Données invalides : " + errors,
+                null));
+  }
+
+  /** Paramètre de requête mal typé (ex : valeur d'enum inconnue, UUID invalide) → 400. */
+  @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+  public ResponseEntity<CustomResponse> handleTypeMismatchException(
+      MethodArgumentTypeMismatchException ex) {
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        .body(
+            new CustomResponse(
+                Constants.Message.ERROR_BODY,
+                HttpStatus.BAD_REQUEST.value(),
+                "Paramètre invalide : " + ex.getName(),
                 null));
   }
 
