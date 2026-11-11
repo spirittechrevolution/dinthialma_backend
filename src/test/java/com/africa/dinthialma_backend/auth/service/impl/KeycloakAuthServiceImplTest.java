@@ -238,7 +238,7 @@ class KeycloakAuthServiceImplTest {
       assertThat(u.getEmail()).isEqualTo("awa@test.sn");
       assertThat(u.isEnabled()).isTrue();
       assertThat(u.getAttributes()).containsEntry("phone", List.of("221770000001"));
-      CredentialRepresentation c = u.getCredentials().get(0);
+      CredentialRepresentation c = u.getCredentials().getFirst();
       assertThat(c.getValue()).isEqualTo("Secret@2026");
       assertThat(c.isTemporary()).isFalse();
     }
