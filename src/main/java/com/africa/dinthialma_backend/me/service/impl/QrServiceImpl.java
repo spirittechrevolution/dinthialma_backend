@@ -15,6 +15,7 @@ import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
+import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.List;
@@ -30,8 +31,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class QrServiceImpl implements QrService {
 
-  /** Préfixe des QR membres ; « t_ » sera réservé aux QR d'invitation de tontine (B16). */
+  /** Préfixe des QR membres. */
   static final String PREFIXE_MEMBRE = "m_";
+
+  /** Préfixe des QR d'invitation de tontine (B16) : « t_<code> ». */
+  static final String PREFIXE_TONTINE = "t_";
 
   private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -39,6 +43,7 @@ public class QrServiceImpl implements QrService {
   private final TontineMembreRepository membreRepository;
   private final CycleTontineRepository cycleRepository;
   private final CotisationRepository cotisationRepository;
+  private final TontineRepository tontineRepository;
 
   @Value("${dinthialma.app.url:https://www.dinthialma.com}")
   private String appUrl;
@@ -67,6 +72,17 @@ public class QrServiceImpl implements QrService {
   public QrResolutionResponse resoudre(String keycloakId, String token) throws CustomException {
     User caller = findUserByKeycloakId(keycloakId);
 
+    if (token != null && token.startsWith(PREFIXE_TONTINE)) {
+      Tontine t =
+          tontineRepository
+              .findByCodeInvitationAndDeletedAtIsNull(token.substring(PREFIXE_TONTINE.length()))
+              .orElseThrow(() -> new NotFoundException(ResponseMessageConstants.QR_NOT_FOUND));
+      return QrResolutionResponse.builder()
+          .type("TONTINE")
+          .invitationCode(t.getCodeInvitation())
+          .dansMesTontines(List.of())
+          .build();
+    }
     if (token == null || !token.startsWith(PREFIXE_MEMBRE)) {
       throw new NotFoundException(ResponseMessageConstants.QR_NOT_FOUND);
     }

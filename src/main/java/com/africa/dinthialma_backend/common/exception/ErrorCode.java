@@ -74,8 +74,19 @@ public enum ErrorCode {
   JACKPOT_POSITION_TAKEN,
   /** Numéro inconnu : prénom et nom obligatoires pour créer le compte pré-inscrit. */
   MEMBER_NAME_REQUIRED,
-  /** Réservé : le nombre maximal de membres n'est pas encore contrôlé à l'ajout. */
+  /**
+   * Tontine ROTATIVE ayant atteint son effectif (nombreMembres) : émis à la demande et à
+   * l'acceptation d'une adhésion. L'ajout manuel par le gestionnaire n'est pas bloqué.
+   */
   TONTINE_FULL,
+
+  // ─── Invitations / demandes d'adhésion ──────────────────────────────────
+  /** Tontine SUSPENDUE ou TERMINEE : invitations et demandes impossibles. */
+  TONTINE_NOT_OPEN,
+  /** Une demande EN_ATTENTE existe déjà pour cette personne et cette tontine. */
+  DEMANDE_DEJA_EN_ATTENTE,
+  /** Action réservée à une demande EN_ATTENTE. */
+  DEMANDE_NOT_PENDING,
 
   // ─── Cotisations ────────────────────────────────────────────────────────
   /** Une cotisation existe déjà pour ce membre sur ce tour. */

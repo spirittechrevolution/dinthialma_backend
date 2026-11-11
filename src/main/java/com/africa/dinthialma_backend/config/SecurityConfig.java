@@ -61,6 +61,8 @@ public class SecurityConfig {
     "/v1/code-list/type/**",
     // Configuration publique (contact support, version minimale de l'app)
     "/v1/public/config",
+    // Aperçu public d'une invitation de tontine (page d'invitation, QR « t_ »)
+    "/v1/public/invitations/**",
   };
 
   private final CustomAccessDenied customAccessDenied;

@@ -18,9 +18,15 @@ import lombok.Getter;
 public class QrResolutionResponse {
 
   @Schema(
-      description = "Nature du QR (TONTINE réservé aux invitations, à venir)",
-      allowableValues = {"MEMBRE"})
+      description =
+          "MEMBRE = QR d'une personne ; TONTINE = QR d'invitation (voir `invitationCode`)",
+      allowableValues = {"MEMBRE", "TONTINE"})
   private String type;
+
+  @Schema(
+      description = "TONTINE : code d'invitation, à passer à GET /v1/public/invitations/{code}",
+      nullable = true)
+  private String invitationCode;
 
   @Schema(description = "Personne identifiée par le QR")
   private Personne user;

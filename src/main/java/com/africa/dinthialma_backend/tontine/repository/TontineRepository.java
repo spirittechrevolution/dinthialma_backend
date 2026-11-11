@@ -40,6 +40,11 @@ public interface TontineRepository
   /** Toutes les tontines non supprimées paginées (usage SUPER_ADMIN). */
   Page<Tontine> findByDeletedAtIsNull(Pageable pageable);
 
+  /** Tontine non supprimée par code d'invitation (B16). */
+  Optional<Tontine> findByCodeInvitationAndDeletedAtIsNull(String codeInvitation);
+
+  boolean existsByCodeInvitation(String codeInvitation);
+
   /** Tontine non supprimée par id. */
   Optional<Tontine> findByIdAndDeletedAtIsNull(UUID id);
 

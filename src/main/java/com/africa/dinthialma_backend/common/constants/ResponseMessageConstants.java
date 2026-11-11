@@ -126,6 +126,16 @@ public final class ResponseMessageConstants {
   public static final String ME_PREFERENCES_SUCCESS = "Préférences récupérées avec succès";
   public static final String SESSION_NOT_FOUND = "Session introuvable";
   public static final String PUBLIC_CONFIG_SUCCESS = "Configuration publique récupérée";
+
+  // Invitations / demandes d'adhésion
+  public static final String INVITATION_SUCCESS = "Invitation récupérée avec succès";
+  public static final String INVITATION_REVOKED = "Invitation révoquée";
+  public static final String INVITATION_NOT_FOUND = "Invitation introuvable ou révoquée";
+  public static final String DEMANDE_CREATED = "Demande d'adhésion envoyée";
+  public static final String DEMANDE_LIST_SUCCESS = "Demandes d'adhésion récupérées avec succès";
+  public static final String DEMANDE_ACCEPTED = "Demande acceptée : le membre a été ajouté";
+  public static final String DEMANDE_REFUSED = "Demande refusée";
+  public static final String DEMANDE_NOT_FOUND = "Demande d'adhésion introuvable";
   public static final String ME_GESTION_COTISATIONS_SUCCESS =
       "Paiements de mes tontines gérées récupérés avec succès";
 

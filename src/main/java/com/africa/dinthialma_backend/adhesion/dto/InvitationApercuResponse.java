@@ -1,0 +1,63 @@
+package com.africa.dinthialma_backend.adhesion.dto;
+
+import com.africa.dinthialma_backend.tontine.codeList.TontineType;
+import io.swagger.v3.oas.annotations.media.Schema;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import lombok.Builder;
+import lombok.Getter;
+
+@Schema(
+    description =
+        "Aperçu public d'une tontine via son code d'invitation. Aucune donnée personnelle des"
+            + " membres ; seul le prénom du gestionnaire est affiché.")
+@Getter
+@Builder
+public class InvitationApercuResponse {
+
+  @Schema(description = "Code d'invitation", example = "7Q2K-M9XD")
+  private String code;
+
+  @Schema(description = "Nom de la tontine", example = "Famille")
+  private String nom;
+
+  @Schema(
+      description = "Type",
+      allowableValues = {"ROTATIVE", "EVENEMENTIELLE"})
+  private TontineType tontineType;
+
+  @Schema(description = "Montant de cotisation (FCFA) – null si montant libre", nullable = true)
+  private BigDecimal montant;
+
+  @Schema(description = "Fréquence", example = "MENSUEL")
+  private String frequence;
+
+  @Schema(description = "true = montant libre (EVENEMENTIELLE)")
+  private boolean montantLibre;
+
+  @Schema(description = "Plancher en montant libre", nullable = true)
+  private BigDecimal montantMinimum;
+
+  @Schema(description = "Nom de l'événement (EVENEMENTIELLE)", nullable = true)
+  private String nomEvenement;
+
+  @Schema(description = "Date d'échéance (EVENEMENTIELLE)", nullable = true)
+  private LocalDate dateEcheance;
+
+  @Schema(description = "Date de démarrage")
+  private LocalDate dateDebut;
+
+  @Schema(
+      description = "Places restantes (ROTATIVE à effectif fixé) – null si sans limite",
+      nullable = true)
+  private Integer placesRestantes;
+
+  @Schema(description = "Prénom du gestionnaire", example = "Moussa")
+  private String gestionnairePrenom;
+
+  @Schema(
+      description =
+          "true si l'on peut encore demander à rejoindre (tontine BROUILLON ou ACTIVE, non"
+              + " complète)")
+  private boolean ouverte;
+}

@@ -128,6 +128,10 @@ public class Tontine extends BaseEntity {
   @Column(name = "montant_minimum", precision = 12, scale = 2)
   private BigDecimal montantMinimum;
 
+  /** Code d'invitation partageable (B16) – null = aucune invitation active. */
+  @Column(name = "code_invitation", length = 20)
+  private String codeInvitation;
+
   /** Soft delete – null = active, non-null = supprimée. */
   @Column(name = "deleted_at")
   private LocalDateTime deletedAt;

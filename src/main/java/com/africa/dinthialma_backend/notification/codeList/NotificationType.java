@@ -40,6 +40,12 @@ public enum NotificationType {
   /** Confirmation de soumission d'une cotisation (destinataire : membre ayant soumis). */
   COTISATION_SOUMISE,
 
+  /** Nouvelle demande d'adhésion via code d'invitation (destinataire : gestionnaire). */
+  DEMANDE_ADHESION,
+
+  /** Demande d'adhésion refusée (destinataire : demandeur). */
+  ADHESION_REFUSEE,
+
   /** Rappel quotidien scheduler – cotisation en attente ou période non cotisée. */
   RAPPEL_COTISATION
 }
