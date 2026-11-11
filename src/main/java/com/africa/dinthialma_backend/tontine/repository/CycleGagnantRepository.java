@@ -27,4 +27,16 @@ public interface CycleGagnantRepository extends JpaRepository<CycleGagnant, UUID
           + "   AND g.cycle.deletedAt IS NULL"
           + "   AND g.cycle.tontine.deletedAt IS NULL")
   BigDecimal sumMontantRecuByUserId(@Param("userId") UUID userId);
+
+  /** Jackpots reçus par un utilisateur, avec cycle et tontine chargés (plus récents d'abord). */
+  @Query(
+      "SELECT g FROM CycleGagnant g"
+          + " JOIN FETCH g.cycle c"
+          + " JOIN FETCH c.tontine t"
+          + " WHERE g.membre.user.id = :userId"
+          + "   AND g.deletedAt IS NULL"
+          + "   AND c.deletedAt IS NULL"
+          + "   AND t.deletedAt IS NULL"
+          + " ORDER BY c.dateFin DESC, c.numeroCycle DESC")
+  List<CycleGagnant> findRecusByUserId(@Param("userId") UUID userId);
 }

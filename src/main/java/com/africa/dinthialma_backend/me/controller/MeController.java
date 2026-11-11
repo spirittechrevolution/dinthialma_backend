@@ -7,6 +7,7 @@ import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.me.dto.MeSummaryResponse;
+import com.africa.dinthialma_backend.me.dto.MesJackpotsResponse;
 import com.africa.dinthialma_backend.me.dto.ValidationGroupeeRequest;
 import com.africa.dinthialma_backend.me.dto.ValidationGroupeeResponse;
 import com.africa.dinthialma_backend.me.service.interfaces.MeService;
@@ -85,6 +86,39 @@ public class MeController {
 
     return ResponseEntity.ok(
         new CustomResponse(SUCCESS, OK, ResponseMessageConstants.ME_SUMMARY_SUCCESS, summary));
+  }
+
+  // ─── Je cotise : mes jackpots ────────────────────────────────────────────
+
+  @GetMapping("/jackpots")
+  @Operation(
+      summary = "Mes jackpots : reçus et à venir",
+      description =
+          "🔒 Rôles : tout utilisateur authentifié.\n\n"
+              + "- `recus` : jackpots reçus (tontines ROTATIVE), avec tour, date de remise et"
+              + " montant net ; `totalRecu` en fait la somme.\n"
+              + "- `aVenir` : une ligne par tontine ROTATIVE ACTIVE où je suis ACTIF sans avoir"
+              + " encore gagné. En rotation fixe (`modeAttribution=ORDRE`) : mon rang parmi les"
+              + " non-gagnants, le tour estimé et sa date de fin prévue (null si ce tour n'est pas"
+              + " encore planifié). En `TIRAGE` ou `CHOIX` : pas d'estimation de tour ni de"
+              + " date.\n\n"
+              + "`montantEstime` = montant × membres ACTIFS ÷ gagnants par tour, avant"
+              + " commissions.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Mes jackpots",
+        content = @Content(schema = @Schema(implementation = MesJackpotsResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+  })
+  public ResponseEntity<CustomResponse> getJackpots(HttpServletRequest httpRequest)
+      throws CustomException {
+
+    String keycloakId = headerParser.extractKeycloakId(httpRequest);
+    MesJackpotsResponse response = meService.getJackpots(keycloakId);
+
+    return ResponseEntity.ok(
+        new CustomResponse(SUCCESS, OK, ResponseMessageConstants.ME_JACKPOTS_SUCCESS, response));
   }
 
   // ─── Je gère : validation groupée ────────────────────────────────────────

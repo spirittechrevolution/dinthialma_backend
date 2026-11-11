@@ -4,6 +4,7 @@ import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.me.dto.MeSummaryResponse;
+import com.africa.dinthialma_backend.me.dto.MesJackpotsResponse;
 import com.africa.dinthialma_backend.me.dto.ValidationGroupeeRequest;
 import com.africa.dinthialma_backend.me.dto.ValidationGroupeeResponse;
 import java.util.List;
@@ -13,6 +14,12 @@ import org.springframework.data.domain.Pageable;
 
 /** Vues transverses de l'utilisateur connecté, toutes tontines confondues ({@code /v1/me}). */
 public interface MeService {
+
+  /**
+   * Mes jackpots (ROTATIVE) : reçus, et estimation du prochain par tontine (rang, tour, date de fin
+   * prévue, montant brut) quand l'ordre est une rotation fixe.
+   */
+  MesJackpotsResponse getJackpots(String keycloakId) throws CustomException;
 
   /**
    * Valide un lot de cotisations EN_ATTENTE des tontines gérées par l'appelant. Chaque cotisation

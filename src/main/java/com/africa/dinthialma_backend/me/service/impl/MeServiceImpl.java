@@ -14,6 +14,7 @@ import com.africa.dinthialma_backend.contribution.repository.CotisationSpecifica
 import com.africa.dinthialma_backend.contribution.service.interfaces.CotisationService;
 import com.africa.dinthialma_backend.me.codeList.StatutCotisationDue;
 import com.africa.dinthialma_backend.me.dto.MeSummaryResponse;
+import com.africa.dinthialma_backend.me.dto.MesJackpotsResponse;
 import com.africa.dinthialma_backend.me.dto.ValidationGroupeeRequest;
 import com.africa.dinthialma_backend.me.dto.ValidationGroupeeResponse;
 import com.africa.dinthialma_backend.me.service.interfaces.MeService;
@@ -22,17 +23,22 @@ import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
+import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.CycleGagnantRepository;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -254,6 +260,123 @@ public class MeServiceImpl implements MeService {
             CotisationSpecifications.recherche(q));
 
     return cotisationRepository.findAll(spec, pageable).map(CotisationResponse::from);
+  }
+
+  // ─── Mes jackpots ────────────────────────────────────────────────────────
+
+  @Override
+  public MesJackpotsResponse getJackpots(String keycloakId) throws CustomException {
+    User caller = findUserByKeycloakId(keycloakId);
+
+    List<MesJackpotsResponse.JackpotRecu> recus =
+        gagnantRepository.findRecusByUserId(caller.getId()).stream()
+            .map(
+                g -> {
+                  CycleTontine c = g.getCycle();
+                  return MesJackpotsResponse.JackpotRecu.builder()
+                      .tontineId(c.getTontine().getId())
+                      .tontineNom(c.getTontine().getNom())
+                      .cycleId(c.getId())
+                      .numeroCycle(c.getNumeroCycle())
+                      .dateRemise(c.getDateRemise() != null ? c.getDateRemise() : c.getDateFin())
+                      .montantRecu(g.getMontantRecu())
+                      .build();
+                })
+            .toList();
+    BigDecimal totalRecu =
+        recus.stream()
+            .map(MesJackpotsResponse.JackpotRecu::getMontantRecu)
+            .filter(Objects::nonNull)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+    List<MesJackpotsResponse.JackpotAVenir> aVenir = new ArrayList<>();
+    for (TontineMembre m :
+        membreRepository
+            .findByUser_IdAndDeletedAtIsNullAndTontine_DeletedAtIsNullOrderByCreatedAtDesc(
+                caller.getId())) {
+      Tontine t = m.getTontine();
+      if (t.getTontineType() != TontineType.ROTATIVE
+          || t.getStatut() != TontineStatut.ACTIVE
+          || m.getStatut() != MembreStatut.ACTIF
+          || m.isARecuJackpot()) {
+        continue;
+      }
+      aVenir.add(estimerProchainJackpot(t, m));
+    }
+
+    return MesJackpotsResponse.builder().totalRecu(totalRecu).recus(recus).aVenir(aVenir).build();
+  }
+
+  /**
+   * Estimation alignée sur la désignation à la clôture (CycleServiceImpl.resolveGagnants) : en
+   * ROTATION, les {@code nombreGagnants} premiers membres ACTIFS non gagnants par ordreJackpot
+   * (puis date d'adhésion) gagnent le tour clôturé. ALEATOIRE et MANUEL : pas d'estimation.
+   */
+  private MesJackpotsResponse.JackpotAVenir estimerProchainJackpot(Tontine t, TontineMembre moi) {
+    List<TontineMembre> actifs =
+        membreRepository.findByTontine_IdAndStatutAndDeletedAtIsNull(t.getId(), MembreStatut.ACTIF);
+    int gagnantsParTour = Math.max(1, t.getNombreGagnants());
+    BigDecimal montantEstime =
+        t.getMontant() == null
+            ? null
+            : t.getMontant()
+                .multiply(BigDecimal.valueOf(actifs.size()))
+                .divide(BigDecimal.valueOf(gagnantsParTour), 0, RoundingMode.DOWN);
+
+    MesJackpotsResponse.JackpotAVenir.JackpotAVenirBuilder ligne =
+        MesJackpotsResponse.JackpotAVenir.builder()
+            .tontineId(t.getId())
+            .tontineNom(t.getNom())
+            .monMembreId(moi.getId())
+            .montantEstime(montantEstime);
+
+    if (!"ROTATION".equals(t.getOrdreBeneficiaire())) {
+      return ligne
+          .modeAttribution("ALEATOIRE".equals(t.getOrdreBeneficiaire()) ? "TIRAGE" : "CHOIX")
+          .build();
+    }
+
+    List<TontineMembre> eligibles =
+        actifs.stream()
+            .filter(x -> !x.isARecuJackpot())
+            .sorted(
+                Comparator.comparingInt(
+                        (TontineMembre x) ->
+                            x.getOrdreJackpot() != null ? x.getOrdreJackpot() : Integer.MAX_VALUE)
+                    .thenComparing(TontineMembre::getCreatedAt))
+            .toList();
+    int rang = 1;
+    for (TontineMembre x : eligibles) {
+      if (x.getId().equals(moi.getId())) break;
+      rang++;
+    }
+    int toursAvantMoi = (rang - 1) / gagnantsParTour; // 0 = le tour en cours (ou le prochain)
+
+    // Tour de référence : le tour EN_COURS (ses gagnants sont désignés à sa clôture), sinon le
+    // prochain tour à ouvrir.
+    List<CycleTontine> cycles =
+        cycleRepository.findByTontine_IdAndDeletedAtIsNullOrderByNumeroCycleAsc(t.getId());
+    int numeroReference =
+        cycles.stream()
+            .filter(c -> c.getStatut() == CycleStatut.EN_COURS)
+            .map(CycleTontine::getNumeroCycle)
+            .findFirst()
+            .orElseGet(
+                () -> cycles.stream().mapToInt(CycleTontine::getNumeroCycle).max().orElse(0) + 1);
+    int numeroEstime = numeroReference + toursAvantMoi;
+    LocalDate dateEstimee =
+        cycles.stream()
+            .filter(c -> c.getNumeroCycle() == numeroEstime)
+            .map(CycleTontine::getDateFin)
+            .findFirst()
+            .orElse(null);
+
+    return ligne
+        .modeAttribution("ORDRE")
+        .position(rang)
+        .numeroCycleEstime(numeroEstime)
+        .dateEstimee(dateEstimee)
+        .build();
   }
 
   // ─── Validation groupée ──────────────────────────────────────────────────
