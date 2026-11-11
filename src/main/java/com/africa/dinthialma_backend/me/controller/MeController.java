@@ -6,6 +6,9 @@ import com.africa.dinthialma_backend.common.response.CustomResponse;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
+import com.africa.dinthialma_backend.me.codeList.ModeActivite;
+import com.africa.dinthialma_backend.me.codeList.TypeActivite;
+import com.africa.dinthialma_backend.me.dto.ActiviteResponse;
 import com.africa.dinthialma_backend.me.dto.MeSummaryResponse;
 import com.africa.dinthialma_backend.me.dto.MesJackpotsResponse;
 import com.africa.dinthialma_backend.me.dto.ValidationGroupeeRequest;
@@ -86,6 +89,50 @@ public class MeController {
 
     return ResponseEntity.ok(
         new CustomResponse(SUCCESS, OK, ResponseMessageConstants.ME_SUMMARY_SUCCESS, summary));
+  }
+
+  // ─── Fil d'activité ──────────────────────────────────────────────────────
+
+  @GetMapping("/activite")
+  @Operation(
+      summary = "Fil d'activité (mes mouvements, toutes tontines)",
+      description =
+          "🔒 Rôles : tout utilisateur authentifié.\n\n"
+              + "Fusionne cotisations et jackpots en lignes normalisées, triées par date"
+              + " décroissante. Chaque cotisation apparaît une fois, dans son état courant.\n\n"
+              + "- `mode=COTISE` *(défaut)* : mes cotisations et jackpots ; `mode=GERE` : ceux des"
+              + " tontines que j'ai créées (`membreNom` indique le membre)\n"
+              + "- `tontineId`, `type` (COTISATION_DECLAREE, COTISATION_VALIDEE,"
+              + " COTISATION_ENCAISSEE, COTISATION_EN_RETARD, COTISATION_REFUSEE, JACKPOT_RECU),"
+              + " `statut` (EN_ATTENTE, VALIDE, EN_RETARD, REFUSE) : filtres optionnels\n\n"
+              + "Pagination : `?page=0&size=20` (le tri est imposé : date décroissante).")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Page d'activité",
+        content = @Content(schema = @Schema(implementation = ActiviteResponse.class))),
+    @ApiResponse(responseCode = "400", description = "Paramètre invalide (INVALID_PARAMETER)"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+  })
+  public ResponseEntity<CustomResponse> getActivite(
+      @Parameter(description = "COTISE (défaut) ou GERE") @RequestParam(defaultValue = "COTISE")
+          ModeActivite mode,
+      @Parameter(description = "Restreindre à une tontine") @RequestParam(required = false)
+          UUID tontineId,
+      @Parameter(description = "Filtrer par type d'événement") @RequestParam(required = false)
+          TypeActivite type,
+      @Parameter(description = "Filtrer par statut de cotisation") @RequestParam(required = false)
+          CotisationStatut statut,
+      @PageableDefault(size = 20) Pageable pageable,
+      HttpServletRequest httpRequest)
+      throws CustomException {
+
+    String keycloakId = headerParser.extractKeycloakId(httpRequest);
+    Page<ActiviteResponse> page =
+        meService.getActivite(keycloakId, mode, tontineId, type, statut, pageable);
+
+    return ResponseEntity.ok(
+        new CustomResponse(SUCCESS, OK, ResponseMessageConstants.ME_ACTIVITE_SUCCESS, page));
   }
 
   // ─── Je cotise : mes jackpots ────────────────────────────────────────────

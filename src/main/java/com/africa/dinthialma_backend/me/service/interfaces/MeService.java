@@ -3,6 +3,9 @@ package com.africa.dinthialma_backend.me.service.interfaces;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
+import com.africa.dinthialma_backend.me.codeList.ModeActivite;
+import com.africa.dinthialma_backend.me.codeList.TypeActivite;
+import com.africa.dinthialma_backend.me.dto.ActiviteResponse;
 import com.africa.dinthialma_backend.me.dto.MeSummaryResponse;
 import com.africa.dinthialma_backend.me.dto.MesJackpotsResponse;
 import com.africa.dinthialma_backend.me.dto.ValidationGroupeeRequest;
@@ -14,6 +17,19 @@ import org.springframework.data.domain.Pageable;
 
 /** Vues transverses de l'utilisateur connecté, toutes tontines confondues ({@code /v1/me}). */
 public interface MeService {
+
+  /**
+   * Fil d'activité paginé (date décroissante) : cotisations et jackpots, soit les miens ({@code
+   * COTISE}), soit ceux des tontines que je gère ({@code GERE}).
+   */
+  Page<ActiviteResponse> getActivite(
+      String keycloakId,
+      ModeActivite mode,
+      UUID tontineId,
+      TypeActivite type,
+      CotisationStatut statut,
+      Pageable pageable)
+      throws CustomException;
 
   /**
    * Mes jackpots (ROTATIVE) : reçus, et estimation du prochain par tontine (rang, tour, date de fin

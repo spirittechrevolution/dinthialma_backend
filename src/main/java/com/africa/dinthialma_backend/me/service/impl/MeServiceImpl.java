@@ -12,11 +12,15 @@ import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
 import com.africa.dinthialma_backend.contribution.repository.CotisationSpecifications;
 import com.africa.dinthialma_backend.contribution.service.interfaces.CotisationService;
+import com.africa.dinthialma_backend.me.codeList.ModeActivite;
 import com.africa.dinthialma_backend.me.codeList.StatutCotisationDue;
+import com.africa.dinthialma_backend.me.codeList.TypeActivite;
+import com.africa.dinthialma_backend.me.dto.ActiviteResponse;
 import com.africa.dinthialma_backend.me.dto.MeSummaryResponse;
 import com.africa.dinthialma_backend.me.dto.MesJackpotsResponse;
 import com.africa.dinthialma_backend.me.dto.ValidationGroupeeRequest;
 import com.africa.dinthialma_backend.me.dto.ValidationGroupeeResponse;
+import com.africa.dinthialma_backend.me.repository.ActiviteRepository;
 import com.africa.dinthialma_backend.me.service.interfaces.MeService;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
@@ -44,6 +48,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -62,6 +67,7 @@ public class MeServiceImpl implements MeService {
   private final CycleTontineRepository cycleRepository;
   private final CycleGagnantRepository gagnantRepository;
   private final CotisationService cotisationService;
+  private final ActiviteRepository activiteRepository;
 
   // ─── Résumé « Je cotise » ────────────────────────────────────────────────
 
@@ -377,6 +383,31 @@ public class MeServiceImpl implements MeService {
         .numeroCycleEstime(numeroEstime)
         .dateEstimee(dateEstimee)
         .build();
+  }
+
+  // ─── Fil d'activité ──────────────────────────────────────────────────────
+
+  @Override
+  public Page<ActiviteResponse> getActivite(
+      String keycloakId,
+      ModeActivite mode,
+      UUID tontineId,
+      TypeActivite type,
+      CotisationStatut statut,
+      Pageable pageable)
+      throws CustomException {
+    User caller = findUserByKeycloakId(keycloakId);
+    // Tri imposé par la requête (date décroissante) : on ne transmet que page et taille.
+    Pageable page = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+    return activiteRepository
+        .findActivite(
+            caller.getId(),
+            mode == ModeActivite.GERE,
+            tontineId,
+            type != null ? type.name() : null,
+            statut != null ? statut.name() : null,
+            page)
+        .map(ActiviteResponse::from);
   }
 
   // ─── Validation groupée ──────────────────────────────────────────────────

@@ -117,6 +117,7 @@ public final class ResponseMessageConstants {
   public static final String ME_VALIDATION_GROUPEE_SUCCESS = "Validation groupée traitée";
   public static final String ME_JACKPOTS_SUCCESS = "Mes jackpots récupérés avec succès";
   public static final String ME_QR_SUCCESS = "QR membre récupéré avec succès";
+  public static final String ME_ACTIVITE_SUCCESS = "Fil d'activité récupéré avec succès";
   public static final String QR_RESOLVE_SUCCESS = "QR résolu avec succès";
   public static final String QR_NOT_FOUND = "QR inconnu ou révoqué";
   public static final String ME_GESTION_COTISATIONS_SUCCESS =
