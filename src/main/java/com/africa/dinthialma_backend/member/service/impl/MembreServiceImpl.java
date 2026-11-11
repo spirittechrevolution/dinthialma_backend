@@ -21,6 +21,7 @@ import com.africa.dinthialma_backend.member.dto.AddMembreRequest;
 import com.africa.dinthialma_backend.member.dto.MembreResponse;
 import com.africa.dinthialma_backend.member.dto.UpdateMembreStatutRequest;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
+import com.africa.dinthialma_backend.member.mapper.MembreMapper;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.member.repository.TontineMembreSpecifications;
 import com.africa.dinthialma_backend.member.service.interfaces.MembreService;
@@ -49,6 +50,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class MembreServiceImpl implements MembreService {
 
   private final TontineMembreRepository membreRepository;
+  private final MembreMapper membreMapper;
   private final TontineRepository tontineRepository;
   private final CycleTontineRepository cycleRepository;
   private final UserRepository userRepository;
@@ -151,7 +153,7 @@ public class MembreServiceImpl implements MembreService {
         tontineId,
         NotificationLiens.membre(saved.getId()));
 
-    return MembreResponse.from(saved);
+    return membreMapper.toResponse(saved);
   }
 
   // ─── Retrait d'un membre ─────────────────────────────────────────────────
@@ -215,7 +217,7 @@ public class MembreServiceImpl implements MembreService {
                 TontineMembreSpecifications.recherche(q),
                 TontineMembreSpecifications.paiementSurCycle(cycleId, aPaye)),
             pageable)
-        .map(MembreResponse::from);
+        .map(membreMapper::toResponse);
   }
 
   // ─── Modification du statut ──────────────────────────────────────────────
@@ -264,7 +266,7 @@ public class MembreServiceImpl implements MembreService {
     }
 
     log.info("Statut membre modifié – membreId={} statut={}", membreId, request.getStatut());
-    return MembreResponse.from(saved);
+    return membreMapper.toResponse(saved);
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────

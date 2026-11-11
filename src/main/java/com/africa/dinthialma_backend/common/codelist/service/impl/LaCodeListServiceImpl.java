@@ -3,6 +3,7 @@ package com.africa.dinthialma_backend.common.codelist.service.impl;
 import com.africa.dinthialma_backend.auth.codeList.UserRole;
 import com.africa.dinthialma_backend.common.codelist.dto.LaCodeListDto;
 import com.africa.dinthialma_backend.common.codelist.entity.LaCodeList;
+import com.africa.dinthialma_backend.common.codelist.mapper.LaCodeListMapper;
 import com.africa.dinthialma_backend.common.codelist.repository.LaCodeListRepository;
 import com.africa.dinthialma_backend.common.codelist.service.interfaces.LaCodeListService;
 import com.africa.dinthialma_backend.common.exception.BadRequestException;
@@ -29,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class LaCodeListServiceImpl implements LaCodeListService {
 
   private final LaCodeListRepository codeListRepository;
+  private final LaCodeListMapper laCodeListMapper;
   private final AccessControl accessControl;
 
   // ─── Lecture ─────────────────────────────────────────────────────────────
@@ -58,13 +60,13 @@ public class LaCodeListServiceImpl implements LaCodeListService {
   @Override
   @Transactional(readOnly = true)
   public Page<LaCodeListDto> findAll(Pageable pageable) {
-    return codeListRepository.findByDeletedAtIsNull(pageable).map(LaCodeListDto::from);
+    return codeListRepository.findByDeletedAtIsNull(pageable).map(laCodeListMapper::toDto);
   }
 
   @Override
   @Transactional(readOnly = true)
   public LaCodeListDto findById(UUID id) throws CustomException {
-    return LaCodeListDto.from(trouverActif(id));
+    return laCodeListMapper.toDto(trouverActif(id));
   }
 
   // ─── Écriture ────────────────────────────────────────────────────────────
@@ -73,7 +75,7 @@ public class LaCodeListServiceImpl implements LaCodeListService {
   @Transactional
   public LaCodeListDto create(String keycloakId, LaCodeListDto dto) throws CustomException {
     accessControl.exigerUnRole(keycloakId, UserRole.ADMIN, UserRole.SUPER_ADMIN);
-    LaCodeList codeList = dto.toEntity();
+    LaCodeList codeList = laCodeListMapper.toEntity(dto);
     log.info("Création code list type={} value={}", codeList.getType(), codeList.getValue());
 
     // Un couple type/value supprimé (soft delete) est restauré
@@ -87,13 +89,13 @@ public class LaCodeListServiceImpl implements LaCodeListService {
       restauree.setDescription(codeList.getDescription());
       restauree.setSystemAssign(codeList.isSystemAssign());
       log.info("Code list restauré – {} / {}", restauree.getType(), restauree.getValue());
-      return LaCodeListDto.from(codeListRepository.save(restauree));
+      return laCodeListMapper.toDto(codeListRepository.save(restauree));
     }
     if (codeListRepository.existsByTypeAndValue(codeList.getType(), codeList.getValue())) {
       throw doublon(codeList);
     }
     try {
-      return LaCodeListDto.from(codeListRepository.save(codeList));
+      return laCodeListMapper.toDto(codeListRepository.save(codeList));
     } catch (DataIntegrityViolationException ex) {
       log.error("Conflit d'unicité lors de la création du code list : {}", ex.getMessage());
       throw new ConflictException("Un code list avec ce type et cette valeur existe déjà");
@@ -107,7 +109,7 @@ public class LaCodeListServiceImpl implements LaCodeListService {
     accessControl.exigerUnRole(keycloakId, UserRole.ADMIN, UserRole.SUPER_ADMIN);
     log.info("Mise à jour code list id : {}", id);
     LaCodeList existing = trouverActif(id);
-    LaCodeList modifs = dto.toEntity();
+    LaCodeList modifs = laCodeListMapper.toEntity(dto);
 
     boolean coupleModifie =
         !existing.getType().equals(modifs.getType())
@@ -122,7 +124,7 @@ public class LaCodeListServiceImpl implements LaCodeListService {
     existing.setDescription(modifs.getDescription());
     existing.setSystemAssign(modifs.isSystemAssign());
     try {
-      return LaCodeListDto.from(codeListRepository.save(existing));
+      return laCodeListMapper.toDto(codeListRepository.save(existing));
     } catch (DataIntegrityViolationException ex) {
       log.error("Conflit d'unicité lors de la mise à jour du code list : {}", ex.getMessage());
       throw new ConflictException("Un code list avec ce type et cette valeur existe déjà");
@@ -151,7 +153,7 @@ public class LaCodeListServiceImpl implements LaCodeListService {
 
   private List<LaCodeListDto> actifsParType(String type) {
     return codeListRepository.findAllByTypeAndDeletedAtIsNull(type).stream()
-        .map(LaCodeListDto::from)
+        .map(laCodeListMapper::toDto)
         .toList();
   }
 

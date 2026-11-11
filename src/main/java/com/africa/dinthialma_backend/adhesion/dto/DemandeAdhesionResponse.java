@@ -1,7 +1,6 @@
 package com.africa.dinthialma_backend.adhesion.dto;
 
 import com.africa.dinthialma_backend.adhesion.codeList.StatutDemande;
-import com.africa.dinthialma_backend.adhesion.entity.DemandeAdhesion;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -55,26 +54,4 @@ public class DemandeAdhesionResponse {
 
   @Schema(description = "Date d'acceptation ou de refus", nullable = true)
   private LocalDateTime dateTraitement;
-
-  /**
-   * @param avecTelephone true pour la vue gestionnaire (contacter le demandeur)
-   */
-  public static DemandeAdhesionResponse from(DemandeAdhesion d, boolean avecTelephone) {
-    var u = d.getUser();
-    return DemandeAdhesionResponse.builder()
-        .id(d.getId())
-        .tontineId(d.getTontine().getId())
-        .tontineNom(d.getTontine().getNom())
-        .statut(d.getStatut())
-        .userId(u.getId())
-        .firstName(u.getFirstName())
-        .lastName(u.getLastName())
-        .phone(avecTelephone ? u.getPhone() : null)
-        .message(d.getMessage())
-        .motifRefus(d.getMotifRefus())
-        .membreId(d.getMembre() != null ? d.getMembre().getId() : null)
-        .createdAt(d.getCreatedAt())
-        .dateTraitement(d.getDateTraitement())
-        .build();
-  }
 }

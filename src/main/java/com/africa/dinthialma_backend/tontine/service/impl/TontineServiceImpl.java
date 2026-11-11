@@ -25,6 +25,7 @@ import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.dto.UpdateTontineRequest;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
+import com.africa.dinthialma_backend.tontine.mapper.TontineMapper;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineSpecifications;
@@ -54,6 +55,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class TontineServiceImpl implements TontineService {
 
   private final TontineRepository tontineRepository;
+  private final TontineMapper tontineMapper;
   private final CycleTontineRepository cycleRepository;
   private final TontineMembreRepository membreRepository;
   private final UserRepository userRepository;
@@ -101,7 +103,7 @@ public class TontineServiceImpl implements TontineService {
     assignRoleIfAbsent(caller, UserRole.ADMIN);
     auditService.logCreate(caller, "tontines", saved.getId());
     log.info("Tontine créée – id={} type={} par userId={}", saved.getId(), type, caller.getId());
-    return TontineResponse.from(saved, 0, caller.getId(), null);
+    return tontineMapper.toResponse(saved, 0, caller.getId(), null);
   }
 
   // ─── Lecture ─────────────────────────────────────────────────────────────
@@ -158,7 +160,7 @@ public class TontineServiceImpl implements TontineService {
     return tontines.map(
         t -> {
           int count = (int) membreRepository.countByTontine_IdAndDeletedAtIsNull(t.getId());
-          return TontineResponse.from(t, count, uid, mesMemberships.get(t.getId()));
+          return tontineMapper.toResponse(t, count, uid, mesMemberships.get(t.getId()));
         });
   }
 
@@ -530,7 +532,7 @@ public class TontineServiceImpl implements TontineService {
         membreRepository
             .findByTontine_IdAndUser_IdAndDeletedAtIsNull(tontine.getId(), caller.getId())
             .orElse(null);
-    return TontineResponse.from(tontine, nombreMembres, caller.getId(), monMembership);
+    return tontineMapper.toResponse(tontine, nombreMembres, caller.getId(), monMembership);
   }
 
   private boolean isSuperAdmin(User user) {

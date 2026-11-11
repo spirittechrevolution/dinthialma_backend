@@ -1,7 +1,6 @@
 package com.africa.dinthialma_backend.notification.dto;
 
 import com.africa.dinthialma_backend.notification.codeList.NotificationType;
-import com.africa.dinthialma_backend.notification.entity.UserNotification;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
@@ -48,19 +47,4 @@ public class NotificationResponse {
 
   @Schema(description = "Date de création")
   private LocalDateTime createdAt;
-
-  public static NotificationResponse from(UserNotification n) {
-    return NotificationResponse.builder()
-        .id(n.getId())
-        .type(n.getType())
-        .title(n.getTitle())
-        .body(n.getBody())
-        .isRead(n.isRead())
-        .tontineId(n.getTontineId())
-        .cycleId(n.getCycleId())
-        .cotisationId(n.getCotisationId())
-        .membreId(n.getMembreId())
-        .createdAt(n.getCreatedAt())
-        .build();
-  }
 }

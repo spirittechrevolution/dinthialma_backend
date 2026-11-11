@@ -1,7 +1,6 @@
 package com.africa.dinthialma_backend.contribution.dto;
 
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
-import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -75,78 +74,6 @@ public class CotisationResponse {
 
   @Schema(description = "Date de dernière modification")
   private LocalDateTime updatedAt;
-
-  public static CotisationResponse from(Cotisation cotisation) {
-    MembreInfo membreInfo = null;
-    if (cotisation.getMembre() != null && cotisation.getMembre().getUser() != null) {
-      var m = cotisation.getMembre();
-      var u = m.getUser();
-      membreInfo =
-          MembreInfo.builder()
-              .membreId(m.getId())
-              .userId(u.getId())
-              .firstName(u.getFirstName())
-              .lastName(u.getLastName())
-              .phone(u.getPhone())
-              .build();
-    }
-
-    SaisiePar saisieParInfo = null;
-    if (cotisation.getEnregistrePar() != null) {
-      var s = cotisation.getEnregistrePar();
-      saisieParInfo =
-          SaisiePar.builder()
-              .id(s.getId())
-              .firstName(s.getFirstName())
-              .lastName(s.getLastName())
-              .phone(s.getPhone())
-              .build();
-    }
-
-    ValideurInfo valideurInfo = null;
-    if (cotisation.getValidePar() != null) {
-      var v = cotisation.getValidePar();
-      valideurInfo =
-          ValideurInfo.builder()
-              .id(v.getId())
-              .firstName(v.getFirstName())
-              .lastName(v.getLastName())
-              .build();
-    }
-
-    ValideurInfo refuseurInfo = null;
-    if (cotisation.getRefusePar() != null) {
-      var r = cotisation.getRefusePar();
-      refuseurInfo =
-          ValideurInfo.builder()
-              .id(r.getId())
-              .firstName(r.getFirstName())
-              .lastName(r.getLastName())
-              .build();
-    }
-
-    return CotisationResponse.builder()
-        .id(cotisation.getId())
-        .tontineId(cotisation.getTontine() != null ? cotisation.getTontine().getId() : null)
-        .tontineNom(cotisation.getTontine() != null ? cotisation.getTontine().getNom() : null)
-        .cycleId(cotisation.getCycle() != null ? cotisation.getCycle().getId() : null)
-        .numeroCycle(cotisation.getCycle() != null ? cotisation.getCycle().getNumeroCycle() : null)
-        .membre(membreInfo)
-        .montant(cotisation.getMontant())
-        .methodePaiement(cotisation.getMethodePaiement())
-        .referenceTransaction(cotisation.getReferenceTransaction())
-        .statut(cotisation.getStatut())
-        .note(cotisation.getNote())
-        .enregistrePar(saisieParInfo)
-        .dateValidation(cotisation.getDateValidation())
-        .validePar(valideurInfo)
-        .motifRefus(cotisation.getMotifRefus())
-        .refusePar(refuseurInfo)
-        .dateRefus(cotisation.getDateRefus())
-        .createdAt(cotisation.getCreatedAt())
-        .updatedAt(cotisation.getUpdatedAt())
-        .build();
-  }
 
   @Schema(description = "Informations résumées du cotisant")
   @Getter

@@ -1,11 +1,9 @@
 package com.africa.dinthialma_backend.auth.dto;
 
-import com.africa.dinthialma_backend.auth.entity.User;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
@@ -50,32 +48,4 @@ public class UserProfileResponse {
 
   @Schema(description = "Date de création du compte")
   private LocalDateTime createdAt;
-
-  public static UserProfileResponse from(User user) {
-    boolean pinExpired = false;
-    if (user.getPinCreatedAt() != null) {
-      pinExpired =
-          user.getPinCreatedAt()
-              .plusDays(com.africa.dinthialma_backend.common.constants.Constants.Pin.EXPIRY_DAYS)
-              .isBefore(LocalDateTime.now());
-    }
-
-    Set<String> roleNames =
-        user.getRoles().stream()
-            .map(r -> r.getRole().getKeycloakRole())
-            .collect(Collectors.toSet());
-
-    return new UserProfileResponse(
-        user.getId(),
-        user.getFirstName(),
-        user.getLastName(),
-        user.getPhone(),
-        user.getEmail(),
-        user.getAvatarUrl(),
-        user.isActive(),
-        user.getPinHash() != null,
-        pinExpired,
-        roleNames,
-        user.getCreatedAt());
-  }
 }

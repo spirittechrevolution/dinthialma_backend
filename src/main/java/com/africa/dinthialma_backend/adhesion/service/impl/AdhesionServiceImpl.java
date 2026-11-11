@@ -6,6 +6,7 @@ import com.africa.dinthialma_backend.adhesion.dto.DemandeRequests;
 import com.africa.dinthialma_backend.adhesion.dto.InvitationApercuResponse;
 import com.africa.dinthialma_backend.adhesion.dto.InvitationResponse;
 import com.africa.dinthialma_backend.adhesion.entity.DemandeAdhesion;
+import com.africa.dinthialma_backend.adhesion.mapper.DemandeAdhesionMapper;
 import com.africa.dinthialma_backend.adhesion.repository.DemandeAdhesionRepository;
 import com.africa.dinthialma_backend.adhesion.service.interfaces.AdhesionService;
 import com.africa.dinthialma_backend.auth.codeList.UserRole;
@@ -55,6 +56,7 @@ public class AdhesionServiceImpl implements AdhesionService {
   private static final SecureRandom RANDOM = new SecureRandom();
 
   private final TontineRepository tontineRepository;
+  private final DemandeAdhesionMapper demandeAdhesionMapper;
   private final TontineMembreRepository membreRepository;
   private final DemandeAdhesionRepository demandeRepository;
   private final UserRepository userRepository;
@@ -165,7 +167,7 @@ public class AdhesionServiceImpl implements AdhesionService {
         tontine.getId(),
         NotificationLiens.AUCUN);
     log.info("Demande d'adhésion – tontineId={} userId={}", tontine.getId(), caller.getId());
-    return DemandeAdhesionResponse.from(demande, false);
+    return demandeAdhesionMapper.toVueDemandeur(demande);
   }
 
   @Override
@@ -176,7 +178,7 @@ public class AdhesionServiceImpl implements AdhesionService {
     User caller = findUser(keycloakId);
     return demandeRepository
         .findRecues(caller.getId(), statut, tontineId, pageable)
-        .map(d -> DemandeAdhesionResponse.from(d, true));
+        .map(d -> demandeAdhesionMapper.toVueGestionnaire(d));
   }
 
   @Override
@@ -186,7 +188,7 @@ public class AdhesionServiceImpl implements AdhesionService {
     User caller = findUser(keycloakId);
     return demandeRepository
         .findByUser_IdAndDeletedAtIsNull(caller.getId(), pageable)
-        .map(d -> DemandeAdhesionResponse.from(d, false));
+        .map(d -> demandeAdhesionMapper.toVueDemandeur(d));
   }
 
   @Override
@@ -210,7 +212,7 @@ public class AdhesionServiceImpl implements AdhesionService {
     demande.setDateTraitement(LocalDateTime.now());
     demande.setMembre(membreRepository.getReferenceById(membre.getId()));
     log.info("Demande acceptée – demandeId={} membreId={}", demandeId, membre.getId());
-    return DemandeAdhesionResponse.from(demandeRepository.save(demande), true);
+    return demandeAdhesionMapper.toVueGestionnaire(demandeRepository.save(demande));
   }
 
   @Override
@@ -242,7 +244,7 @@ public class AdhesionServiceImpl implements AdhesionService {
         tontineId,
         NotificationLiens.AUCUN);
     log.info("Demande refusée – demandeId={}", demandeId);
-    return DemandeAdhesionResponse.from(demande, true);
+    return demandeAdhesionMapper.toVueGestionnaire(demande);
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────

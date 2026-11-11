@@ -7,6 +7,7 @@ import com.africa.dinthialma_backend.auth.dto.UpdateProfileRequest;
 import com.africa.dinthialma_backend.auth.dto.UserProfileResponse;
 import com.africa.dinthialma_backend.auth.entity.PhoneChangeRequestEntity;
 import com.africa.dinthialma_backend.auth.entity.User;
+import com.africa.dinthialma_backend.auth.mapper.UserMapper;
 import com.africa.dinthialma_backend.auth.repository.PhoneChangeRequestRepository;
 import com.africa.dinthialma_backend.auth.repository.UserRepository;
 import com.africa.dinthialma_backend.auth.service.interfaces.UserProfileService;
@@ -49,6 +50,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserProfileServiceImpl implements UserProfileService {
 
   private final UserRepository userRepository;
+  private final UserMapper userMapper;
   private final PhoneChangeRequestRepository phoneChangeRequestRepository;
   private final UserSessionService userSessionService;
   private final WhatsappService whatsappService;
@@ -61,7 +63,7 @@ public class UserProfileServiceImpl implements UserProfileService {
   public UserProfileResponse getProfile(String keycloakId) throws CustomException {
     User user = findByKeycloakId(keycloakId);
     log.debug("[Profile] Lecture profil – userId={}", user.getId());
-    return UserProfileResponse.from(user);
+    return userMapper.toProfile(user);
   }
 
   @Override
@@ -92,7 +94,7 @@ public class UserProfileServiceImpl implements UserProfileService {
     User saved = userRepository.save(user);
 
     log.info("[Profile] Profil mis à jour – userId={}", saved.getId());
-    return UserProfileResponse.from(saved);
+    return userMapper.toProfile(saved);
   }
 
   // ─── Changement de numéro ────────────────────────────────────────────

@@ -1,7 +1,6 @@
 package com.africa.dinthialma_backend.auth.dto;
 
 import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
-import com.africa.dinthialma_backend.auth.entity.User;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.UUID;
 import lombok.Builder;
@@ -28,15 +27,4 @@ public class UserSearchResponse {
       description = "Statut d'activation du compte",
       allowableValues = {"ACTIVE", "PRE_ENROLLED"})
   private AccountStatus accountStatus;
-
-  public static UserSearchResponse from(User user) {
-    return UserSearchResponse.builder()
-        .id(user.getId())
-        .firstName(user.getFirstName())
-        .lastName(user.getLastName())
-        .phone(user.getPhone())
-        .accountStatus(
-            user.getAccountStatus() != null ? user.getAccountStatus() : AccountStatus.ACTIVE)
-        .build();
-  }
 }

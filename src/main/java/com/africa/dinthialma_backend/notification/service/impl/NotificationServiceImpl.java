@@ -9,6 +9,7 @@ import com.africa.dinthialma_backend.notification.codeList.NotificationType;
 import com.africa.dinthialma_backend.notification.dto.NotificationLiens;
 import com.africa.dinthialma_backend.notification.dto.NotificationResponse;
 import com.africa.dinthialma_backend.notification.entity.UserNotification;
+import com.africa.dinthialma_backend.notification.mapper.NotificationMapper;
 import com.africa.dinthialma_backend.notification.repository.NotificationRepository;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import java.util.UUID;
@@ -27,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class NotificationServiceImpl implements NotificationService {
 
   private final NotificationRepository notificationRepository;
+  private final NotificationMapper notificationMapper;
   private final UserRepository userRepository;
 
   @Override
@@ -74,7 +76,7 @@ public class NotificationServiceImpl implements NotificationService {
     User user = findUser(keycloakId);
     return notificationRepository
         .findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(user.getId(), pageable)
-        .map(NotificationResponse::from);
+        .map(notificationMapper::toResponse);
   }
 
   @Override

@@ -35,6 +35,7 @@ import com.africa.dinthialma_backend.tontine.entity.CycleGagnant;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.entity.TontineCommission;
+import com.africa.dinthialma_backend.tontine.mapper.CycleMapper;
 import com.africa.dinthialma_backend.tontine.repository.CycleGagnantRepository;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineCommissionRepository;
@@ -67,6 +68,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class CycleServiceImpl implements CycleService {
 
   private final CycleTontineRepository cycleRepository;
+  private final CycleMapper cycleMapper;
   private final CycleGagnantRepository cycleGagnantRepository;
   private final TontineRepository tontineRepository;
   private final TontineMembreRepository membreRepository;
@@ -91,7 +93,7 @@ public class CycleServiceImpl implements CycleService {
 
     return cycleRepository
         .findByTontine_IdAndDeletedAtIsNull(tontineId, pageable)
-        .map(CycleResponse::from);
+        .map(cycleMapper::toResponse);
   }
 
   @Override
@@ -104,7 +106,7 @@ public class CycleServiceImpl implements CycleService {
 
     return cycleRepository
         .findTerminesAvecGagnants(tontineId, CycleStatut.TERMINE, pageable)
-        .map(BeneficiaireHistoriqueResponse::from);
+        .map(cycleMapper::toHistorique);
   }
 
   @Override
@@ -116,7 +118,7 @@ public class CycleServiceImpl implements CycleService {
     assertCanAccess(caller, tontine);
 
     CycleTontine cycle = findCycleById(tontineId, cycleId);
-    return CycleResponse.from(cycle);
+    return cycleMapper.toResponse(cycle);
   }
 
   // ─── Ouverture manuelle ──────────────────────────────────────────────────
@@ -188,7 +190,7 @@ public class CycleServiceImpl implements CycleService {
                     tontineId,
                     NotificationLiens.cycle(saved.getId(), m.getId())));
 
-    return CycleResponse.from(saved);
+    return cycleMapper.toResponse(saved);
   }
 
   // ─── Clôture ─────────────────────────────────────────────────────────────
@@ -343,7 +345,7 @@ public class CycleServiceImpl implements CycleService {
         jackpot,
         totalCommission,
         jackpot.subtract(totalCommission));
-    return CycleResponse.from(cycle);
+    return cycleMapper.toResponse(cycle);
   }
 
   // ─── Clôture EVENEMENTIELLE ──────────────────────────────────────────────
@@ -463,7 +465,7 @@ public class CycleServiceImpl implements CycleService {
           cycle.getNumeroCycle());
     }
 
-    return CycleResponse.from(cycle, distribution);
+    return cycleMapper.toResponse(cycle, distribution);
   }
 
   /**
@@ -693,7 +695,7 @@ public class CycleServiceImpl implements CycleService {
       log.warn("Notif WA admin (jackpot manuel) non envoyée : {}", e.getMessage());
     }
 
-    return CycleResponse.from(cycle);
+    return cycleMapper.toResponse(cycle);
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────

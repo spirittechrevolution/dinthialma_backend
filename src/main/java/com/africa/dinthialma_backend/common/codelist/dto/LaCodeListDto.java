@@ -1,6 +1,5 @@
 package com.africa.dinthialma_backend.common.codelist.dto;
 
-import com.africa.dinthialma_backend.common.codelist.entity.LaCodeList;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
@@ -63,36 +62,6 @@ public class LaCodeListDto {
 
   // ── Conversion entité → DTO ───────────────────────────────────────
 
-  public static LaCodeListDto from(LaCodeList entity) {
-    return LaCodeListDto.builder()
-        .id(entity.getId())
-        .type(entity.getType())
-        .value(entity.getValue())
-        .description(entity.getDescription())
-        .isSystemAssign(entity.isSystemAssign())
-        .build();
-  }
-
   // ── Conversion DTO → entité ───────────────────────────────────────
 
-  public LaCodeList toEntity() {
-    return LaCodeList.builder()
-        .type(this.type)
-        .value(this.value)
-        .description(this.description)
-        .isSystemAssign(this.isSystemAssign)
-        .build();
-  }
-
-  /** Conversion DTO → entité avec id (pour les mises à jour). */
-  public LaCodeList toEntity(UUID id) {
-    LaCodeList entity = toEntity();
-    // L'id est set via le builder parent BaseEntity
-    return LaCodeList.builder()
-        .type(this.type)
-        .value(this.value)
-        .description(this.description)
-        .isSystemAssign(this.isSystemAssign)
-        .build();
-  }
 }

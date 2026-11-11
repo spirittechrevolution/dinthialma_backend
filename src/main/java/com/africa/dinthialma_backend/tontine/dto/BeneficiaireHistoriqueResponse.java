@@ -1,6 +1,5 @@
 package com.africa.dinthialma_backend.tontine.dto;
 
-import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -40,43 +39,6 @@ public class BeneficiaireHistoriqueResponse {
 
   @Schema(description = "Liste des gagnants du cycle")
   private List<GagnantInfo> gagnants;
-
-  public static BeneficiaireHistoriqueResponse from(CycleTontine cycle) {
-    List<GagnantInfo> infos =
-        cycle.getGagnants().stream()
-            .filter(g -> g.getDeletedAt() == null)
-            .map(
-                g -> {
-                  var user = g.getMembre().getUser();
-                  return GagnantInfo.builder()
-                      .membreId(g.getMembre().getId())
-                      .userId(user.getId())
-                      .firstName(user.getFirstName())
-                      .lastName(user.getLastName())
-                      .phone(user.getPhone())
-                      .ordreJackpot(g.getMembre().getOrdreJackpot())
-                      .montantRecu(g.getMontantRecu())
-                      .dateJackpot(g.getMembre().getDateJackpot())
-                      .build();
-                })
-            .toList();
-
-    BigDecimal montantParGagnant =
-        (!infos.isEmpty() && infos.get(0).getMontantRecu() != null)
-            ? infos.get(0).getMontantRecu()
-            : null;
-
-    return BeneficiaireHistoriqueResponse.builder()
-        .cycleId(cycle.getId())
-        .numeroCycle(cycle.getNumeroCycle())
-        .dateRemise(cycle.getDateRemise())
-        .montantJackpot(cycle.getMontantJackpot())
-        .montantCommission(cycle.getMontantCommission())
-        .montantNet(cycle.getMontantNet())
-        .montantParGagnant(montantParGagnant)
-        .gagnants(infos)
-        .build();
-  }
 
   @Schema(description = "Informations d'un gagnant")
   @Getter

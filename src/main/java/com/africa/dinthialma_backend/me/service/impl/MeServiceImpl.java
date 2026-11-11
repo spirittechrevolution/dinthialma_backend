@@ -12,6 +12,7 @@ import com.africa.dinthialma_backend.common.util.FichierExport;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
+import com.africa.dinthialma_backend.contribution.mapper.CotisationMapper;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
 import com.africa.dinthialma_backend.contribution.repository.CotisationSpecifications;
 import com.africa.dinthialma_backend.contribution.service.interfaces.CotisationService;
@@ -23,6 +24,7 @@ import com.africa.dinthialma_backend.me.dto.MeSummaryResponse;
 import com.africa.dinthialma_backend.me.dto.MesJackpotsResponse;
 import com.africa.dinthialma_backend.me.dto.ValidationGroupeeRequest;
 import com.africa.dinthialma_backend.me.dto.ValidationGroupeeResponse;
+import com.africa.dinthialma_backend.me.mapper.ActiviteMapper;
 import com.africa.dinthialma_backend.me.repository.ActiviteRepository;
 import com.africa.dinthialma_backend.me.service.interfaces.MeService;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
@@ -66,6 +68,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class MeServiceImpl implements MeService {
 
   private final UserRepository userRepository;
+  private final CotisationMapper cotisationMapper;
+  private final ActiviteMapper activiteMapper;
   private final CotisationRepository cotisationRepository;
   private final TontineMembreRepository membreRepository;
   private final CycleTontineRepository cycleRepository;
@@ -269,7 +273,7 @@ public class MeServiceImpl implements MeService {
             CotisationSpecifications.statutParmi(statuts),
             CotisationSpecifications.recherche(q));
 
-    return cotisationRepository.findAll(spec, pageable).map(CotisationResponse::from);
+    return cotisationRepository.findAll(spec, pageable).map(cotisationMapper::toResponse);
   }
 
   // ─── Mes jackpots ────────────────────────────────────────────────────────
@@ -411,7 +415,7 @@ public class MeServiceImpl implements MeService {
             type != null ? type.name() : null,
             statut != null ? statut.name() : null,
             page)
-        .map(ActiviteResponse::from);
+        .map(activiteMapper::toResponse);
   }
 
   @Override

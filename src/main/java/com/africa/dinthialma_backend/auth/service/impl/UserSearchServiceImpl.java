@@ -1,6 +1,7 @@
 package com.africa.dinthialma_backend.auth.service.impl;
 
 import com.africa.dinthialma_backend.auth.dto.UserSearchResponse;
+import com.africa.dinthialma_backend.auth.mapper.UserMapper;
 import com.africa.dinthialma_backend.auth.repository.UserRepository;
 import com.africa.dinthialma_backend.auth.service.interfaces.UserSearchService;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
@@ -16,13 +17,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserSearchServiceImpl implements UserSearchService {
 
   private final UserRepository userRepository;
+  private final UserMapper userMapper;
 
   @Override
   @Transactional(readOnly = true)
   public UserSearchResponse searchByPhone(String phone) throws CustomException {
     return userRepository
         .findByPhoneAndDeletedAtIsNull(PhoneUtils.normalize(phone))
-        .map(UserSearchResponse::from)
+        .map(userMapper::toSearch)
         .orElseThrow(() -> new NotFoundException(ResponseMessageConstants.USER_SEARCH_NOT_FOUND));
   }
 }

@@ -1,6 +1,5 @@
 package com.africa.dinthialma_backend.me.dto;
 
-import com.africa.dinthialma_backend.me.repository.ActiviteRepository.ActiviteRow;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -69,29 +68,4 @@ public class ActiviteResponse {
 
   @Schema(description = "Libellé prêt à afficher", example = "Cotisation Famille · tour 5")
   private String libelle;
-
-  public static ActiviteResponse from(ActiviteRow r) {
-    String nom =
-        ((r.getMembrePrenom() != null ? r.getMembrePrenom() : "")
-                + " "
-                + (r.getMembreNom() != null ? r.getMembreNom() : ""))
-            .trim();
-    String prefixe = "JACKPOT_RECU".equals(r.getType()) ? "Jackpot " : "Cotisation ";
-    return ActiviteResponse.builder()
-        .id(r.getId())
-        .type(r.getType())
-        .date(r.getDateEvenement())
-        .montant(r.getMontant())
-        .sens(r.getSens())
-        .statut(r.getStatut())
-        .tontineId(r.getTontineId())
-        .tontineNom(r.getTontineNom())
-        .cycleId(r.getCycleId())
-        .numeroCycle(r.getNumeroCycle())
-        .cotisationId(r.getCotisationId())
-        .membreId(r.getMembreId())
-        .membreNom(nom.isEmpty() ? null : nom)
-        .libelle(prefixe + r.getTontineNom() + " · tour " + r.getNumeroCycle())
-        .build();
-  }
 }
