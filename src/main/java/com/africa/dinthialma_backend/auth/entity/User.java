@@ -112,6 +112,10 @@ public class User extends BaseEntity {
   @Column(name = "account_status")
   private AccountStatus accountStatus;
 
+  /** Jeton opaque du QR membre (B15) – null tant que l'utilisateur n'a pas affiché son QR. */
+  @Column(name = "qr_token", length = 64)
+  private String qrToken;
+
   /** Soft delete – null = actif, non-null = compte désactivé. */
   @Column(name = "deleted_at")
   private LocalDateTime deletedAt;

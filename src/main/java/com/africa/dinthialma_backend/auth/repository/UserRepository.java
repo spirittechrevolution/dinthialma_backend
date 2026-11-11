@@ -29,6 +29,11 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
 
   Optional<User> findByIdAndDeletedAtIsNull(UUID id);
 
+  /** Résolution d'un QR membre (B15). */
+  Optional<User> findByQrTokenAndDeletedAtIsNull(String qrToken);
+
+  boolean existsByQrToken(String qrToken);
+
   boolean existsByPhone(String phone);
 
   boolean existsByEmail(String email);
