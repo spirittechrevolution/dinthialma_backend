@@ -4,6 +4,7 @@ import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
+import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.CycleRecapCotisationResponse;
@@ -21,6 +22,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -79,7 +81,12 @@ public class CotisationController {
               + "- **MEMBER** : voit uniquement ses propres cotisations.\n\n"
               + "Paramètres optionnels :\n"
               + "- `cycleId` : filtre par cycle\n"
-              + "- `membreId` : filtre par membre (admin/SUPER_ADMIN uniquement, ignoré pour MEMBER)\n\n"
+              + "- `membreId` : filtre par membre (admin/SUPER_ADMIN uniquement, ignoré pour MEMBER)\n"
+              + "- `statut` : un ou plusieurs statuts (`?statut=EN_ATTENTE&statut=EN_RETARD`),"
+              + " absent = tous\n"
+              + "- `q` : recherche sur le prénom, le nom, le téléphone du cotisant ou la référence"
+              + " de transaction\n\n"
+              + "Un `cycleId` qui n'appartient pas à la tontine renvoie une page vide.\n\n"
               + "Pagination : `?page=0&size=20&sort=createdAt,desc&cycleId=<uuid>&membreId=<uuid>`")
   @ApiResponses({
     @ApiResponse(
@@ -107,6 +114,12 @@ public class CotisationController {
               example = "770e8400-e29b-41d4-a716-446655440000")
           @RequestParam(required = false)
           UUID membreId,
+      @Parameter(description = "Filtrer par statut (multi-valeurs, optionnel)")
+          @RequestParam(required = false)
+          List<CotisationStatut> statut,
+      @Parameter(description = "Recherche : nom, téléphone du cotisant ou référence de transaction")
+          @RequestParam(required = false)
+          String q,
       @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
           Pageable pageable,
       HttpServletRequest httpRequest)
@@ -114,7 +127,8 @@ public class CotisationController {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
     Page<CotisationResponse> cotisations =
-        cotisationService.listCotisations(keycloakId, tontineId, cycleId, membreId, pageable);
+        cotisationService.listCotisations(
+            keycloakId, tontineId, cycleId, membreId, statut, q, pageable);
 
     return ResponseEntity.ok(
         new CustomResponse(

@@ -21,6 +21,7 @@ import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.UpdateCotisationRequest;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
+import com.africa.dinthialma_backend.contribution.repository.CotisationSpecifications;
 import com.africa.dinthialma_backend.contribution.service.interfaces.CotisationService;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
@@ -44,6 +45,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -423,7 +425,13 @@ public class CotisationServiceImpl implements CotisationService {
   @Override
   @Transactional(readOnly = true)
   public Page<CotisationResponse> listCotisations(
-      String keycloakId, UUID tontineId, UUID cycleId, UUID membreId, Pageable pageable)
+      String keycloakId,
+      UUID tontineId,
+      UUID cycleId,
+      UUID membreId,
+      List<CotisationStatut> statuts,
+      String q,
+      Pageable pageable)
       throws CustomException {
 
     User caller = findUserByKeycloakId(keycloakId);
@@ -432,42 +440,28 @@ public class CotisationServiceImpl implements CotisationService {
     boolean isAdminOrSuper =
         isSuperAdmin(caller) || tontine.getCreePar().getId().equals(caller.getId());
 
-    if (isAdminOrSuper) {
-      if (cycleId != null && membreId != null) {
-        return cotisationRepository
-            .findByCycle_IdAndMembre_IdAndDeletedAtIsNull(cycleId, membreId, pageable)
-            .map(CotisationResponse::from);
-      }
-      if (cycleId != null) {
-        return cotisationRepository
-            .findByCycle_IdAndDeletedAtIsNull(cycleId, pageable)
-            .map(CotisationResponse::from);
-      }
-      if (membreId != null) {
-        return cotisationRepository
-            .findByTontine_IdAndMembre_IdAndDeletedAtIsNull(tontineId, membreId, pageable)
-            .map(CotisationResponse::from);
-      }
-      return cotisationRepository
-          .findByTontine_IdAndDeletedAtIsNull(tontineId, pageable)
-          .map(CotisationResponse::from);
+    // Un membre ne voit que ses propres cotisations : le filtre membreId est forcé sur lui
+    UUID membreFiltre = membreId;
+    if (!isAdminOrSuper) {
+      TontineMembre membreCaller =
+          membreRepository
+              .findByTontine_IdAndUser_IdAndDeletedAtIsNull(tontineId, caller.getId())
+              .orElseThrow(
+                  () -> new ForbiddenException(ResponseMessageConstants.TONTINE_ACCESS_DENIED));
+      membreFiltre = membreCaller.getId();
     }
 
-    // Un membre ne voit que ses propres cotisations (filtre en base)
-    TontineMembre membreCaller =
-        membreRepository
-            .findByTontine_IdAndUser_IdAndDeletedAtIsNull(tontineId, caller.getId())
-            .orElseThrow(
-                () -> new ForbiddenException(ResponseMessageConstants.TONTINE_ACCESS_DENIED));
+    // Le filtre tontine est toujours appliqué : un cycleId d'une autre tontine ne renvoie rien
+    Specification<Cotisation> spec =
+        Specification.allOf(
+            CotisationSpecifications.nonSupprimee(),
+            CotisationSpecifications.deTontine(tontineId),
+            CotisationSpecifications.deCycle(cycleId),
+            CotisationSpecifications.deMembre(membreFiltre),
+            CotisationSpecifications.statutParmi(statuts),
+            CotisationSpecifications.recherche(q));
 
-    if (cycleId != null) {
-      return cotisationRepository
-          .findByCycle_IdAndMembre_IdAndDeletedAtIsNull(cycleId, membreCaller.getId(), pageable)
-          .map(CotisationResponse::from);
-    }
-    return cotisationRepository
-        .findByTontine_IdAndMembre_IdAndDeletedAtIsNull(tontineId, membreCaller.getId(), pageable)
-        .map(CotisationResponse::from);
+    return cotisationRepository.findAll(spec, pageable).map(CotisationResponse::from);
   }
 
   // ─── Récupération unique ──────────────────────────────────────────────────

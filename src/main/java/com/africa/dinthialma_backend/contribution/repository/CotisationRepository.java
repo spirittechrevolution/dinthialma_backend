@@ -10,14 +10,26 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /** Accès base pour les cotisations. */
 @Repository
-public interface CotisationRepository extends JpaRepository<Cotisation, UUID> {
+public interface CotisationRepository
+    extends JpaRepository<Cotisation, UUID>, JpaSpecificationExecutor<Cotisation> {
+
+  /**
+   * Liste filtrée (cf. {@link CotisationSpecifications}) avec chargement anticipé de la tontine, du
+   * cycle et du cotisant pour éviter les requêtes N+1 lors du mapping en DTO.
+   */
+  @Override
+  @EntityGraph(attributePaths = {"tontine", "cycle", "membre", "membre.user"})
+  Page<Cotisation> findAll(Specification<Cotisation> spec, Pageable pageable);
 
   /** Cotisations d'un cycle. */
   List<Cotisation> findByCycle_IdAndDeletedAtIsNull(UUID cycleId);

@@ -1,12 +1,14 @@
 package com.africa.dinthialma_backend.contribution.service.interfaces;
 
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.CycleRecapCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.MembreTotalCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.UpdateCotisationRequest;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -64,9 +66,17 @@ public interface CotisationService {
    * @param tontineId identifiant de la tontine
    * @param cycleId filtre optionnel (null = tous les cycles)
    * @param membreId filtre optionnel admin (null = tous les membres)
+   * @param statuts filtre optionnel multi-valeurs (null ou vide = tous les statuts)
+   * @param q recherche libre : prénom, nom, téléphone du cotisant ou référence de transaction
    */
   Page<CotisationResponse> listCotisations(
-      String keycloakId, UUID tontineId, UUID cycleId, UUID membreId, Pageable pageable)
+      String keycloakId,
+      UUID tontineId,
+      UUID cycleId,
+      UUID membreId,
+      List<CotisationStatut> statuts,
+      String q,
+      Pageable pageable)
       throws CustomException;
 
   /**
