@@ -18,6 +18,7 @@ import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.notification.codeList.NotificationType;
+import com.africa.dinthialma_backend.notification.dto.NotificationLiens;
 import com.africa.dinthialma_backend.notification.service.SchedulerService;
 import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
@@ -184,7 +185,8 @@ public class CycleServiceImpl implements CycleService {
                         + " de la tontine "
                         + tontine.getNom()
                         + " est ouvert. Vous pouvez enregistrer votre cotisation.",
-                    tontineId));
+                    tontineId,
+                    NotificationLiens.cycle(saved.getId(), m.getId())));
 
     return CycleResponse.from(saved);
   }
@@ -298,13 +300,15 @@ public class CycleServiceImpl implements CycleService {
             NotificationType.JACKPOT_DISTRIBUE,
             "Jackpot distribué 🎉",
             "Félicitations ! Vous recevez " + montantStr + " · " + tontine.getNom(),
-            tontineId);
+            tontineId,
+            NotificationLiens.cycle(cycle.getId(), g.getMembre().getId()));
         notificationService.notify(
             tontine.getCreePar().getId(),
             NotificationType.JACKPOT_DISTRIBUE,
             "Jackpot distribué",
             winnerName + " a reçu " + montantStr + " · " + tontine.getNom(),
-            tontineId);
+            tontineId,
+            NotificationLiens.cycle(cycle.getId(), g.getMembre().getId()));
       }
     }
 
@@ -324,7 +328,8 @@ public class CycleServiceImpl implements CycleService {
                       + c.getMembre().getUser().getLastName()
                       + " n'a pas cotisé · "
                       + tontine.getNom(),
-                  tontineId);
+                  tontineId,
+                  NotificationLiens.cotisation(c));
             });
 
     if (tontine.getModeCycle() == ModeCycle.AUTOMATIQUE) {
@@ -422,7 +427,8 @@ public class CycleServiceImpl implements CycleService {
                 + dist.getMontantNet().toPlainString()
                 + " FCFA · "
                 + tontine.getNom(),
-            tontineId);
+            tontineId,
+            NotificationLiens.cycle(cycle.getId(), dist.getMembreId()));
       }
       BigDecimal cagnotteFinale =
           distribution.stream()
@@ -437,7 +443,8 @@ public class CycleServiceImpl implements CycleService {
               + "* est clôturée. Cagnotte totale : "
               + cagnotteFinale.toPlainString()
               + " FCFA",
-          tontineId);
+          tontineId,
+          NotificationLiens.cycle(cycle.getId(), null));
 
       log.info(
           "Clôture finale EVENEMENTIELLE – tontineId={} membres={} cagnotte={}",

@@ -18,7 +18,7 @@ public class NotificationResponse {
   @Schema(description = "UUID de la notification")
   private UUID id;
 
-  @Schema(description = "Type d'événement (12 valeurs, cf. NotificationType)")
+  @Schema(description = "Type d'événement (13 valeurs, cf. NotificationType)")
   private NotificationType type;
 
   @Schema(description = "Titre court", example = "Cotisation validée")
@@ -35,6 +35,17 @@ public class NotificationResponse {
   @Schema(description = "Tontine concernée – null si aucune", nullable = true)
   private UUID tontineId;
 
+  @Schema(description = "Cycle (tour) concerné – null si aucun", nullable = true)
+  private UUID cycleId;
+
+  @Schema(description = "Cotisation concernée (reçu) – null si aucune", nullable = true)
+  private UUID cotisationId;
+
+  @Schema(
+      description = "Membership concerné (tontine_membres.id, fiche membre) – null si aucun",
+      nullable = true)
+  private UUID membreId;
+
   @Schema(description = "Date de création")
   private LocalDateTime createdAt;
 
@@ -46,6 +57,9 @@ public class NotificationResponse {
         .body(n.getBody())
         .isRead(n.isRead())
         .tontineId(n.getTontineId())
+        .cycleId(n.getCycleId())
+        .cotisationId(n.getCotisationId())
+        .membreId(n.getMembreId())
         .createdAt(n.getCreatedAt())
         .build();
   }

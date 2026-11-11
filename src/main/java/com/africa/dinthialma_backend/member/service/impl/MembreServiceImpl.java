@@ -25,6 +25,7 @@ import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.member.repository.TontineMembreSpecifications;
 import com.africa.dinthialma_backend.member.service.interfaces.MembreService;
 import com.africa.dinthialma_backend.notification.codeList.NotificationType;
+import com.africa.dinthialma_backend.notification.dto.NotificationLiens;
 import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
@@ -147,7 +148,8 @@ public class MembreServiceImpl implements MembreService {
         NotificationType.INVITATION_TONTINE,
         "Invitation tontine",
         inviteBody,
-        tontineId);
+        tontineId,
+        NotificationLiens.membre(saved.getId()));
 
     return MembreResponse.from(saved);
   }
@@ -176,7 +178,8 @@ public class MembreServiceImpl implements MembreService {
         NotificationType.STATUT_MEMBRE,
         "Retiré de la tontine",
         "Vous avez été retiré(e) de la tontine " + tontine.getNom() + ".",
-        tontineId);
+        tontineId,
+        NotificationLiens.membre(membre.getId()));
 
     log.info("Membre retiré – tontineId={} membreId={}", tontineId, membreId);
   }
@@ -256,7 +259,8 @@ public class MembreServiceImpl implements MembreService {
           NotificationType.STATUT_MEMBRE,
           "Statut mis à jour",
           statutBody,
-          tontineId);
+          tontineId,
+          NotificationLiens.membre(saved.getId()));
     }
 
     log.info("Statut membre modifié – membreId={} statut={}", membreId, request.getStatut());

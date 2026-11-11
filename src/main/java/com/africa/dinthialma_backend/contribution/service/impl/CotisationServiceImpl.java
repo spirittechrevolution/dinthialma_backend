@@ -29,6 +29,7 @@ import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.notification.codeList.NotificationType;
+import com.africa.dinthialma_backend.notification.dto.NotificationLiens;
 import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
@@ -149,7 +150,8 @@ public class CotisationServiceImpl implements CotisationService {
         NotificationType.COTISATION_SOUMISE,
         "Cotisation soumise",
         "Votre paiement de " + montantStr + " est en attente de validation · " + tontineName,
-        tontineId);
+        tontineId,
+        NotificationLiens.cotisation(saved));
 
     // Notification in-app admin — paiement reçu
     notificationService.notify(
@@ -163,7 +165,8 @@ public class CotisationServiceImpl implements CotisationService {
             + montantStr
             + " · "
             + tontineName,
-        tontineId);
+        tontineId,
+        NotificationLiens.cotisation(saved));
 
     // Notif admin — nouvelle cotisation à valider
     try {
@@ -262,7 +265,8 @@ public class CotisationServiceImpl implements CotisationService {
           NotificationType.COTISATION_VALIDEE,
           "Cotisation validée",
           "Votre cotisation de " + montantStr + " a été enregistrée · " + tontineName,
-          tontineId);
+          tontineId,
+          NotificationLiens.cotisation(saved));
     }
 
     // Notif membre — message adapté selon le statut du compte
@@ -371,7 +375,8 @@ public class CotisationServiceImpl implements CotisationService {
             + saved.getMontant().toPlainString()
             + " FCFA a été validé · "
             + saved.getTontine().getNom(),
-        tontineId);
+        tontineId,
+        NotificationLiens.cotisation(saved));
 
     String memberPhone = saved.getMembre().getUser().getPhone();
     String memberNom =
@@ -490,7 +495,8 @@ public class CotisationServiceImpl implements CotisationService {
             + " · Motif : "
             + motif
             + ". Vous pouvez déclarer un nouveau paiement.",
-        tontineId);
+        tontineId,
+        NotificationLiens.cotisation(saved));
 
     // WhatsApp membre (non bloquant ; un pré-inscrit n'a pas forcément l'application)
     try {

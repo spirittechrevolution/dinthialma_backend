@@ -6,6 +6,7 @@ import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.notification.codeList.NotificationType;
+import com.africa.dinthialma_backend.notification.dto.NotificationLiens;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
@@ -84,7 +85,8 @@ public class SchedulerService {
                           + " pour "
                           + tontine.getNom()
                           + " est en attente de validation.",
-                      tontine.getId());
+                      tontine.getId(),
+                      NotificationLiens.cotisation(cotisation));
                 });
       }
     }
@@ -136,7 +138,8 @@ public class SchedulerService {
                       + " avant "
                       + nomEvenement
                       + ".",
-                  tontine.getId());
+                  tontine.getId(),
+                  NotificationLiens.cotisation(cot));
             });
 
     List<TontineMembre> membresActifs =
@@ -166,7 +169,8 @@ public class SchedulerService {
                     + ". Vous avez cotisé "
                     + totalStr
                     + " au total.",
-                tontine.getId());
+                tontine.getId(),
+                NotificationLiens.cycle(cycle.getId(), m.getId()));
           });
     } else {
       // Rappel journalier : uniquement les membres qui n'ont pas cotisé dans ce sous-cycle
@@ -191,7 +195,8 @@ public class SchedulerService {
                         + " avant "
                         + nomEvenement
                         + ".",
-                    tontine.getId());
+                    tontine.getId(),
+                    NotificationLiens.cycle(cycle.getId(), m.getId()));
               });
     }
   }
@@ -223,7 +228,8 @@ public class SchedulerService {
                       + " de "
                       + tontine.getNom()
                       + " se termine dans 2 jours",
-                  tontine.getId());
+                  tontine.getId(),
+                  NotificationLiens.cycle(cycle.getId(), null));
             });
 
     // Prochain jackpot ROTATION dans 3 jours → notification in-app futur bénéficiaire
@@ -247,7 +253,8 @@ public class SchedulerService {
                               NotificationType.TOUR_PROCHE,
                               "Votre tour arrive dans 3 jours",
                               "Vous recevrez le jackpot de " + tontine.getNom(),
-                              tontine.getId()));
+                              tontine.getId(),
+                              NotificationLiens.cycle(cycle.getId(), membre.getId())));
             });
   }
 
