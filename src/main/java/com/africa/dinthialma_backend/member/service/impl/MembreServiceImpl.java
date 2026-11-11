@@ -12,6 +12,7 @@ import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.ConflictException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.common.util.PhoneUtils;
@@ -75,7 +76,8 @@ public class MembreServiceImpl implements MembreService {
           || request.getFirstName().isBlank()
           || request.getLastName() == null
           || request.getLastName().isBlank()) {
-        throw new BadRequestException(ResponseMessageConstants.MEMBER_NAME_REQUIRED);
+        throw new BadRequestException(
+            ResponseMessageConstants.MEMBER_NAME_REQUIRED, ErrorCode.MEMBER_NAME_REQUIRED);
       }
       targetUser =
           createPreEnrolledUser(
@@ -85,7 +87,8 @@ public class MembreServiceImpl implements MembreService {
     // Unicité : un utilisateur ne peut cotiser qu'une fois par tontine
     if (membreRepository.existsByTontine_IdAndUser_IdAndDeletedAtIsNull(
         tontineId, targetUser.getId())) {
-      throw new ConflictException(ResponseMessageConstants.MEMBER_ALREADY_EXISTS);
+      throw new ConflictException(
+          ResponseMessageConstants.MEMBER_ALREADY_EXISTS, ErrorCode.MEMBER_ALREADY_IN_TONTINE);
     }
 
     // Résoudre l'ordre jackpot
@@ -94,7 +97,8 @@ public class MembreServiceImpl implements MembreService {
       if (membreRepository.existsByTontine_IdAndOrdreJackpotAndDeletedAtIsNull(
           tontineId, request.getOrdreJackpot())) {
         throw new ConflictException(
-            "La position " + request.getOrdreJackpot() + " est déjà occupée dans cette tontine");
+            "La position " + request.getOrdreJackpot() + " est déjà occupée dans cette tontine",
+            ErrorCode.JACKPOT_POSITION_TAKEN);
       }
       ordreJackpot = request.getOrdreJackpot();
     } else {

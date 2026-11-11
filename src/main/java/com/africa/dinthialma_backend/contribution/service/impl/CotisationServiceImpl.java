@@ -10,6 +10,7 @@ import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.ConflictException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
@@ -85,13 +86,17 @@ public class CotisationServiceImpl implements CotisationService {
     CycleTontine cycle = findCycleById(tontineId, request.getCycleId());
 
     if (cycle.getStatut() != CycleStatut.EN_COURS) {
-      throw new BadRequestException("Les cotisations ne sont acceptées que pour un cycle EN_COURS");
+      throw new BadRequestException(
+          "Les cotisations ne sont acceptées que pour un cycle EN_COURS",
+          ErrorCode.NO_CYCLE_IN_PROGRESS);
     }
 
     // Unicité cycle/membre
     if (cotisationRepository.existsByCycle_IdAndMembre_IdAndDeletedAtIsNull(
         cycle.getId(), membre.getId())) {
-      throw new ConflictException("Vous avez déjà enregistré une cotisation pour ce cycle");
+      throw new ConflictException(
+          "Vous avez déjà enregistré une cotisation pour ce cycle",
+          ErrorCode.COTISATION_ALREADY_EXISTS);
     }
 
     validateMontantCotisation(tontine, request.getMontant());
@@ -205,12 +210,16 @@ public class CotisationServiceImpl implements CotisationService {
     CycleTontine cycle = findCycleById(tontineId, request.getCycleId());
 
     if (cycle.getStatut() != CycleStatut.EN_COURS) {
-      throw new BadRequestException("Les cotisations ne sont acceptées que pour un cycle EN_COURS");
+      throw new BadRequestException(
+          "Les cotisations ne sont acceptées que pour un cycle EN_COURS",
+          ErrorCode.NO_CYCLE_IN_PROGRESS);
     }
 
     if (cotisationRepository.existsByCycle_IdAndMembre_IdAndDeletedAtIsNull(
         cycle.getId(), membre.getId())) {
-      throw new ConflictException("Une cotisation existe déjà pour ce membre sur ce cycle");
+      throw new ConflictException(
+          "Une cotisation existe déjà pour ce membre sur ce cycle",
+          ErrorCode.COTISATION_ALREADY_EXISTS);
     }
 
     validateMontantCotisation(tontine, request.getMontant());
@@ -336,7 +345,8 @@ public class CotisationServiceImpl implements CotisationService {
       throw new BadRequestException(
           "Seule une cotisation EN_ATTENTE peut être validée (statut actuel : "
               + cotisation.getStatut()
-              + ")");
+              + ")",
+          ErrorCode.COTISATION_NOT_PENDING);
     }
 
     cotisation.setStatut(CotisationStatut.VALIDE);
@@ -526,13 +536,15 @@ public class CotisationServiceImpl implements CotisationService {
 
     // EN_RETARD → cycle fermé, modification interdite
     if (cotisation.getStatut() == CotisationStatut.EN_RETARD) {
-      throw new BadRequestException(ResponseMessageConstants.CONTRIBUTION_CANNOT_EDIT);
+      throw new BadRequestException(
+          ResponseMessageConstants.CONTRIBUTION_CANNOT_EDIT, ErrorCode.COTISATION_NOT_EDITABLE);
     }
 
     // VALIDE + cycle TERMINE → jackpot déjà calculé, modification interdite
     if (cotisation.getStatut() == CotisationStatut.VALIDE
         && cotisation.getCycle().getStatut() == CycleStatut.TERMINE) {
-      throw new BadRequestException(ResponseMessageConstants.CONTRIBUTION_CANNOT_EDIT);
+      throw new BadRequestException(
+          ResponseMessageConstants.CONTRIBUTION_CANNOT_EDIT, ErrorCode.COTISATION_NOT_EDITABLE);
     }
 
     if (request.getMontant() != null
@@ -694,14 +706,16 @@ public class CotisationServiceImpl implements CotisationService {
     if (!tontine.isMontantLibre()) {
       if (tontine.getMontant() != null && montant.compareTo(tontine.getMontant()) != 0) {
         throw new BadRequestException(
-            "Le montant doit être exactement " + tontine.getMontant().toPlainString() + " FCFA");
+            "Le montant doit être exactement " + tontine.getMontant().toPlainString() + " FCFA",
+            ErrorCode.AMOUNT_MISMATCH);
       }
     } else if (tontine.getMontantMinimum() != null
         && montant.compareTo(tontine.getMontantMinimum()) < 0) {
       throw new BadRequestException(
           "Le montant minimum de cotisation est "
               + tontine.getMontantMinimum().toPlainString()
-              + " FCFA");
+              + " FCFA",
+          ErrorCode.AMOUNT_BELOW_MINIMUM);
     }
   }
 }

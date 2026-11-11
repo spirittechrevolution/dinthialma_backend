@@ -7,4 +7,8 @@ public class ConflictException extends CustomException {
   public ConflictException(String message) {
     super(HttpStatus.CONFLICT, message);
   }
+
+  public ConflictException(String message, ErrorCode code) {
+    super(HttpStatus.CONFLICT, message, code);
+  }
 }

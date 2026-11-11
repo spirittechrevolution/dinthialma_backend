@@ -1,6 +1,7 @@
 package com.africa.dinthialma_backend.config;
 
 import com.africa.dinthialma_backend.common.constants.Constants;
+import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
@@ -31,6 +32,7 @@ public class CustomAccessDenied implements AccessDeniedHandler {
         new CustomResponse(
             Constants.Message.ERROR_BODY,
             HttpServletResponse.SC_FORBIDDEN,
+            ErrorCode.FORBIDDEN,
             "Accès refusé – vous n'avez pas les permissions nécessaires",
             null);
 

@@ -8,6 +8,7 @@ import com.africa.dinthialma_backend.common.audit.AuditService;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
@@ -145,7 +146,8 @@ public class CycleServiceImpl implements CycleService {
         .findByTontine_IdAndStatutAndDeletedAtIsNull(tontineId, CycleStatut.EN_COURS)
         .isPresent()) {
       throw new BadRequestException(
-          "Un cycle est déjà en cours. Clôturez-le avant d'en ouvrir un nouveau");
+          "Un cycle est déjà en cours. Clôturez-le avant d'en ouvrir un nouveau",
+          ErrorCode.CYCLE_ALREADY_IN_PROGRESS);
     }
 
     int nextNum =

@@ -1,6 +1,7 @@
 package com.africa.dinthialma_backend.config;
 
 import com.africa.dinthialma_backend.common.constants.Constants;
+import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
@@ -31,6 +32,7 @@ public class CustomAuthenticationEntryPoint implements AuthenticationEntryPoint 
         new CustomResponse(
             Constants.Message.ERROR_BODY,
             HttpServletResponse.SC_UNAUTHORIZED,
+            ErrorCode.UNAUTHORIZED,
             "Authentification requise – token JWT manquant ou invalide",
             null);
 
