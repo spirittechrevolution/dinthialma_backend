@@ -75,8 +75,8 @@ public class UserProfileServiceImpl implements UserProfileService {
     // Vérifier unicité email si modifié
     if (request.getEmail() != null
         && !request.getEmail().isBlank()
-        && !request.getEmail().equalsIgnoreCase(user.getEmail())) {
-      if (userRepository.existsByEmail(request.getEmail().toLowerCase())) {
+        && !request.getEmail().trim().equalsIgnoreCase(user.getEmail())) {
+      if (userRepository.existsByEmail(request.getEmail().trim().toLowerCase())) {
         throw new ConflictException(
             "Cette adresse email est déjà utilisée", ErrorCode.EMAIL_ALREADY_USED);
       }
