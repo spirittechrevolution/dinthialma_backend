@@ -44,6 +44,10 @@ public enum ErrorCode {
   PHONE_ALREADY_USED,
   EMAIL_ALREADY_USED,
   PHONE_UNCHANGED,
+  /** Changement de mot de passe : l'ancien mot de passe saisi est incorrect. */
+  CURRENT_PASSWORD_INVALID,
+  /** Le nouveau mot de passe est identique à l'ancien. */
+  PASSWORD_UNCHANGED,
 
   // ─── Code secret (PIN) ──────────────────────────────────────────────────
   PIN_INVALID,

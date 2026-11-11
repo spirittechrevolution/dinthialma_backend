@@ -41,6 +41,20 @@ public class RequestHeaderParser {
   }
 
   /**
+   * Identifiant de la session Keycloak du JWT courant (claim {@code sid}, ou {@code session_state}
+   * sur les anciennes versions). Null si absent.
+   */
+  public String extractSessionId(HttpServletRequest request) {
+    var authentication = SecurityContextHolder.getContext().getAuthentication();
+    if (authentication instanceof JwtAuthenticationToken jwtAuth) {
+      Jwt jwt = jwtAuth.getToken();
+      String sid = jwt.getClaimAsString("sid");
+      return sid != null ? sid : jwt.getClaimAsString("session_state");
+    }
+    return null;
+  }
+
+  /**
    * Extrait directement le Keycloak ID (sub) depuis le JWT.
    *
    * @return sub du JWT (UUID Keycloak de l'utilisateur connecté)
