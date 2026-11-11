@@ -3,6 +3,7 @@ package com.africa.dinthialma_backend.tontine.repository;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -39,6 +40,17 @@ public interface CycleTontineRepository extends JpaRepository<CycleTontine, UUID
   /** Cycle en cours d'une tontine. */
   Optional<CycleTontine> findByTontine_IdAndStatutAndDeletedAtIsNull(
       UUID tontineId, CycleStatut statut);
+
+  /** Cycles d'un statut donné pour un ensemble de tontines (ex : tours EN_COURS). */
+  List<CycleTontine> findByTontine_IdInAndStatutAndDeletedAtIsNull(
+      Collection<UUID> tontineIds, CycleStatut statut);
+
+  /** Nombre de cycles par tontine. Chaque ligne : {@code [tontineId (UUID), nombre (Long)]}. */
+  @Query(
+      "SELECT c.tontine.id, COUNT(c) FROM CycleTontine c"
+          + " WHERE c.tontine.id IN :tontineIds AND c.deletedAt IS NULL"
+          + " GROUP BY c.tontine.id")
+  List<Object[]> countByTontineIds(@Param("tontineIds") Collection<UUID> tontineIds);
 
   /** Tous les cycles d'un statut donné sur toute la plateforme (usage scheduler). */
   List<CycleTontine> findByStatutAndDeletedAtIsNull(CycleStatut statut);

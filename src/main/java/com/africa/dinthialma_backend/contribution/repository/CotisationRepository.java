@@ -161,6 +161,22 @@ public interface CotisationRepository
           + "   AND c.deletedAt IS NULL")
   BigDecimal sumMontantValideToursEnCoursByCreateur(@Param("userId") UUID userId);
 
+  /**
+   * Nombre et somme des cotisations par membership et par statut, pour un ensemble de memberships.
+   * Chaque ligne : {@code [membreId (UUID), statut (CotisationStatut), nombre (Long), montant
+   * (BigDecimal)]}.
+   */
+  @Query(
+      "SELECT c.membre.id, c.statut, COUNT(c), COALESCE(SUM(c.montant), 0) FROM Cotisation c"
+          + " WHERE c.membre.id IN :membreIds"
+          + "   AND c.deletedAt IS NULL"
+          + " GROUP BY c.membre.id, c.statut")
+  List<Object[]> countAndSumByMembreAndStatut(@Param("membreIds") Collection<UUID> membreIds);
+
+  /** Cotisations d'un ensemble de memberships sur un ensemble de cycles (tours en cours). */
+  List<Cotisation> findByCycle_IdInAndMembre_IdInAndDeletedAtIsNull(
+      Collection<UUID> cycleIds, Collection<UUID> membreIds);
+
   /** Cotisations enregistrées depuis une date (pour activité récente). */
   long countByCreatedAtGreaterThanEqualAndDeletedAtIsNull(LocalDateTime since);
 

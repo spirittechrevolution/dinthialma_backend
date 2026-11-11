@@ -6,6 +6,7 @@ import com.africa.dinthialma_backend.common.response.CustomResponse;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
+import com.africa.dinthialma_backend.me.dto.MeSummaryResponse;
 import com.africa.dinthialma_backend.me.service.interfaces.MeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -47,6 +48,39 @@ public class MeController {
 
   private final MeService meService;
   private final RequestHeaderParser headerParser;
+
+  // ─── Je cotise : résumé toutes tontines ──────────────────────────────────
+
+  @GetMapping("/summary")
+  @Operation(
+      summary = "Résumé « Je cotise » toutes tontines",
+      description =
+          "🔒 Rôles : tout utilisateur authentifié.\n\n"
+              + "Agrège en un seul appel, pour chaque tontine où l'appelant est **inscrit comme"
+              + " cotisant** : mon membership (`monMembreId`, statut, ordre, `aRecuJackpot`), mes"
+              + " totaux VALIDÉ / EN_ATTENTE, tours payés / générés, le tour EN_COURS, la"
+              + " cotisation due (`A_PAYER` / `EN_ATTENTE` / `VALIDE`) et le gestionnaire.\n\n"
+              + "Racine : `totalCotiseValide`, `totalEnAttente`, `totalJackpotsRecus`,"
+              + " `nombreCotisationsDues`, `montantDu`.\n\n"
+              + "`cotisationDue` vaut null si la tontine n'est pas ACTIVE, s'il n'y a pas de tour"
+              + " en cours ou si mon membership n'est pas ACTIF. Liste non paginée (triée par date"
+              + " d'adhésion décroissante).")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Résumé cotisant",
+        content = @Content(schema = @Schema(implementation = MeSummaryResponse.class))),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+  })
+  public ResponseEntity<CustomResponse> getSummary(HttpServletRequest httpRequest)
+      throws CustomException {
+
+    String keycloakId = headerParser.extractKeycloakId(httpRequest);
+    MeSummaryResponse summary = meService.getSummary(keycloakId);
+
+    return ResponseEntity.ok(
+        new CustomResponse(SUCCESS, OK, ResponseMessageConstants.ME_SUMMARY_SUCCESS, summary));
+  }
 
   // ─── Je gère : paiements de mes tontines ─────────────────────────────────
 

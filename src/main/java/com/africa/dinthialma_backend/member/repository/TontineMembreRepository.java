@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -45,6 +46,14 @@ public interface TontineMembreRepository extends JpaRepository<TontineMembre, UU
 
   /** Récupère l'enregistrement cotisant d'un utilisateur dans une tontine. */
   Optional<TontineMembre> findByTontine_IdAndUser_IdAndDeletedAtIsNull(UUID tontineId, UUID userId);
+
+  /**
+   * Tous les memberships (non supprimés) d'un utilisateur dans des tontines non supprimées, avec la
+   * tontine et son créateur chargés (résumé « Je cotise »).
+   */
+  @EntityGraph(attributePaths = {"tontine", "tontine.creePar"})
+  List<TontineMembre> findByUser_IdAndDeletedAtIsNullAndTontine_DeletedAtIsNullOrderByCreatedAtDesc(
+      UUID userId);
 
   /** Memberships d'un utilisateur parmi un ensemble de tontines (page « Mes tontines »). */
   List<TontineMembre> findByUser_IdAndTontine_IdInAndDeletedAtIsNull(
