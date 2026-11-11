@@ -1,5 +1,6 @@
 package com.africa.dinthialma_backend.auth.dto;
 
+import com.africa.dinthialma_backend.auth.codeList.ClientType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -43,4 +44,17 @@ public class RegisterCompleteRequest {
   @Schema(description = "Adresse email (optionnelle)", example = "mamadou.diallo@email.com")
   @Email(message = "Format email invalide")
   private String email;
+
+  @Schema(
+      description =
+          "Type de client (WEB ou MOBILE). S'il est fourni, l'utilisateur est connecté"
+              + " automatiquement : la réponse contient access_token, refresh_token et"
+              + " pin_configured. Absent = inscription seule (comportement historique).",
+      example = "MOBILE")
+  private ClientType clientType;
+
+  @Schema(
+      description = "Informations appareil pour la session (optionnel, comme au login)",
+      example = "Samsung A14 – Android 14")
+  private String deviceInfo;
 }

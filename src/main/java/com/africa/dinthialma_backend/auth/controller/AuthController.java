@@ -32,11 +32,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 /** Contrôleur d'authentification – inscription, connexion, déconnexion, reset, PIN. */
+@Slf4j
 @RestController
 @RequestMapping("/v1/auth")
 @RequiredArgsConstructor
@@ -178,7 +180,12 @@ public class AuthController {
               + "**Cas PRE_ENROLLED** : si le numéro appartient à un compte pré-inscrit par un"
               + " gestionnaire de tontine, cette étape **active** le compte existant (keycloakId,"
               + " firstName, lastName mis à jour, statut → ACTIVE, rôles USER + MEMBER attribués)."
-              + " Les memberships tontine déjà créés sont conservés.")
+              + " Les memberships tontine déjà créés sont conservés.\n\n"
+              + "**Connexion automatique** : si `clientType` (WEB/MOBILE) est fourni, la réponse"
+              + " contient aussi `access_token`, `refresh_token`, `expires_in` et"
+              + " `pin_configured` (false), comme `/login` : l'app enchaîne directement sur la"
+              + " création du code secret. Si la connexion échoue, l'inscription reste réussie et"
+              + " ces champs sont absents.")
   @ApiResponses({
     @ApiResponse(
         responseCode = "201",
@@ -190,6 +197,25 @@ public class AuthController {
   public ResponseEntity<CustomResponse> completeRegistration(
       @RequestBody @Valid RegisterCompleteRequest request) throws CustomException {
     RegisterResponse response = registrationService.completeRegistration(request);
+
+    // Connexion automatique (B13) : APRÈS le commit de l'inscription, pour qu'un échec de
+    // connexion ne puisse jamais annuler un compte déjà créé. Non bloquante.
+    if (request.getClientType() != null) {
+      try {
+        LoginRequest login = new LoginRequest();
+        login.setUsername(response.getPhone());
+        login.setPassword(request.getPassword());
+        login.setClientType(request.getClientType());
+        login.setDeviceInfo(request.getDeviceInfo());
+        response.setTokens(loginService.login(login));
+      } catch (Exception e) {
+        log.warn(
+            "[Register] Connexion automatique impossible pour userId={} : {}",
+            response.getUserId(),
+            e.getMessage());
+      }
+    }
+
     return ResponseEntity.status(HttpStatus.CREATED)
         .body(
             new CustomResponse(
