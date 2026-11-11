@@ -1,6 +1,7 @@
 package com.africa.dinthialma_backend.contribution.service.interfaces;
 
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.common.util.FichierExport;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
@@ -99,8 +100,12 @@ public interface CotisationService {
    * Export CSV des cotisations d'une tontine (créateur ou SUPER_ADMIN), triées par tour puis date ;
    * filtres optionnels cycle et statuts. Au plus {@code CsvWriter.MAX_LIGNES} lignes.
    */
-  byte[] exportCotisationsCsv(
-      String keycloakId, UUID tontineId, UUID cycleId, List<CotisationStatut> statuts)
+  FichierExport exportCotisations(
+      String keycloakId,
+      UUID tontineId,
+      String format,
+      UUID cycleId,
+      List<CotisationStatut> statuts)
       throws CustomException;
 
   CotisationResponse getCotisation(String keycloakId, UUID tontineId, UUID cotisationId)

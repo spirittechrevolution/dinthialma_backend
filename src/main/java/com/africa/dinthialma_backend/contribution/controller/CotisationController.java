@@ -492,11 +492,9 @@ public class CotisationController {
       @RequestParam(required = false) List<CotisationStatut> statut,
       HttpServletRequest httpRequest)
       throws CustomException {
-    CsvExport.verifierFormat(format);
-    byte[] csv =
-        cotisationService.exportCotisationsCsv(
-            headerParser.extractKeycloakId(httpRequest), tontineId, cycleId, statut);
-    return CsvExport.reponse(csv, "cotisations-" + tontineId + ".csv");
+    return CsvExport.reponse(
+        cotisationService.exportCotisations(
+            headerParser.extractKeycloakId(httpRequest), tontineId, format, cycleId, statut));
   }
 
   // ─── Récapitulatif total par membre ───────────────────────────────────────

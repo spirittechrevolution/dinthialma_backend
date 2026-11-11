@@ -1,73 +1,49 @@
 package com.africa.dinthialma_backend.common.codelist.service.interfaces;
 
-import com.africa.dinthialma_backend.common.codelist.entity.LaCodeList;
+import com.africa.dinthialma_backend.common.codelist.dto.LaCodeListDto;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+/**
+ * Référentiel de valeurs (listes déroulantes). Toutes les règles d'accès sont portées ici : le
+ * contrôleur ne fait qu'exposer le résultat.
+ */
 public interface LaCodeListService {
 
-  /**
-   * Retourne toutes les valeurs pour un type donné.
-   *
-   * <p>Utilisé par le frontend pour peupler les selects (dropdown). Appel public, pas
-   * d'authentification requise.
-   *
-   * <p>Exemples de types disponibles : {@code FREQUENCE_TONTINE}, {@code METHODE_PAIEMENT}, {@code
-   * STATUT_COTISATION}…
-   *
-   * @param type identifiant du type (ex : {@code "FREQUENCE_TONTINE"})
-   * @return liste des entrées correspondantes, triées dans l'ordre d'insertion
-   */
-  List<LaCodeList> findAllByType(String type);
+  /** Type réservé aux administrateurs, non exposé par l'endpoint public. */
+  String TYPE_RESTREINT = "ROLE_INTERNE";
 
   /**
-   * Retourne une page de code lists tous types confondus.
+   * Valeurs actives d'un type, pour l'endpoint public (sans authentification).
    *
-   * <p>Réservé à l'interface d'administration.
-   *
-   * @param pageable paramètres de pagination et de tri
-   * @return page de code lists
+   * @throws CustomException 403 si le type est restreint ({@link #TYPE_RESTREINT})
    */
-  Page<LaCodeList> findAll(Pageable pageable);
+  List<LaCodeListDto> findPublicByType(String type) throws CustomException;
+
+  /** Valeurs actives d'un type, y compris les types restreints (ADMIN ou SUPER_ADMIN). */
+  List<LaCodeListDto> findByTypeAdmin(String keycloakId, String type) throws CustomException;
+
+  /** Page de valeurs actives, tous types confondus. */
+  Page<LaCodeListDto> findAll(Pageable pageable);
+
+  /** Valeur active par id (404 sinon). */
+  LaCodeListDto findById(UUID id) throws CustomException;
 
   /**
-   * Retourne un code list par son identifiant.
-   *
-   * @param id UUID du code list
-   * @return le code list trouvé
-   * @throws CustomException 404 si aucun code list ne correspond à l'id
+   * Crée une valeur (ADMIN ou SUPER_ADMIN). Le couple type/value doit être unique (409) ; un couple
+   * précédemment supprimé est restauré.
    */
-  LaCodeList findById(UUID id) throws CustomException;
+  LaCodeListDto create(String keycloakId, LaCodeListDto dto) throws CustomException;
+
+  /** Met à jour une valeur (ADMIN ou SUPER_ADMIN) ; 404 si introuvable, 409 si doublon. */
+  LaCodeListDto update(String keycloakId, UUID id, LaCodeListDto dto) throws CustomException;
 
   /**
-   * Crée un nouveau code list.
-   *
-   * <p>Le couple {@code type + value} doit être unique — une violation lève une {@link
-   * CustomException} 409.
-   *
-   * @param codeList entité à persister (sans id)
-   * @return le code list créé avec son id assigné
-   * @throws CustomException 409 si le couple type/value existe déjà
+   * Suppression logique (SUPER_ADMIN). Les valeurs système ({@code is_system_assign}) sont refusées
+   * ({@code CODE_LIST_SYSTEM_VALUE}).
    */
-  LaCodeList createCodeList(LaCodeList codeList) throws CustomException;
-
-  /**
-   * Met à jour un code list existant.
-   *
-   * @param codeList entité avec les nouvelles valeurs (l'id doit correspondre au paramètre {@code
-   *     id})
-   * @param id UUID du code list à mettre à jour
-   * @return le code list mis à jour
-   * @throws CustomException 404 si introuvable · 409 si doublon type/value
-   */
-  LaCodeList updateCodeList(LaCodeList codeList, UUID id) throws CustomException;
-
-  /**
-   * Suppression logique d'une valeur créée manuellement. Les valeurs système ({@code
-   * is_system_assign}) sont refusées ({@code CODE_LIST_SYSTEM_VALUE}).
-   */
-  void deleteCodeList(UUID id) throws CustomException;
+  void delete(String keycloakId, UUID id) throws CustomException;
 }

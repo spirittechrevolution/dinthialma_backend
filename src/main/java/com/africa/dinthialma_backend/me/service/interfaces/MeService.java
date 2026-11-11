@@ -1,6 +1,7 @@
 package com.africa.dinthialma_backend.me.service.interfaces;
 
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.common.util.FichierExport;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.me.codeList.ModeActivite;
@@ -19,8 +20,9 @@ import org.springframework.data.domain.Pageable;
 public interface MeService {
 
   /** Export CSV du fil d'activité (mêmes filtres que {@link #getActivite}, 10 000 lignes max). */
-  byte[] exportActiviteCsv(
+  FichierExport exportActivite(
       String keycloakId,
+      String format,
       ModeActivite mode,
       UUID tontineId,
       TypeActivite type,

@@ -6,7 +6,9 @@ import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
+import com.africa.dinthialma_backend.common.util.CsvExport;
 import com.africa.dinthialma_backend.common.util.CsvWriter;
+import com.africa.dinthialma_backend.common.util.FichierExport;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
@@ -42,6 +44,7 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -412,13 +415,15 @@ public class MeServiceImpl implements MeService {
   }
 
   @Override
-  public byte[] exportActiviteCsv(
+  public FichierExport exportActivite(
       String keycloakId,
+      String format,
       ModeActivite mode,
       UUID tontineId,
       TypeActivite type,
       CotisationStatut statut)
       throws CustomException {
+    CsvExport.verifierFormat(format);
     Page<ActiviteResponse> lignes =
         getActivite(
             keycloakId, mode, tontineId, type, statut, PageRequest.of(0, CsvWriter.MAX_LIGNES));
@@ -436,7 +441,8 @@ public class MeServiceImpl implements MeService {
           a.getSens(),
           a.getStatut());
     }
-    return csv.toBytes();
+    return FichierExport.csv(
+        "activite-" + mode.name().toLowerCase(Locale.ROOT) + ".csv", csv.toBytes());
   }
 
   // ─── Validation groupée ──────────────────────────────────────────────────

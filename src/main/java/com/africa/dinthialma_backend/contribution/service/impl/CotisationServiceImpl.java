@@ -13,7 +13,9 @@ import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
+import com.africa.dinthialma_backend.common.util.CsvExport;
 import com.africa.dinthialma_backend.common.util.CsvWriter;
+import com.africa.dinthialma_backend.common.util.FichierExport;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
@@ -569,9 +571,14 @@ public class CotisationServiceImpl implements CotisationService {
 
   @Override
   @Transactional(readOnly = true)
-  public byte[] exportCotisationsCsv(
-      String keycloakId, UUID tontineId, UUID cycleId, List<CotisationStatut> statuts)
+  public FichierExport exportCotisations(
+      String keycloakId,
+      UUID tontineId,
+      String format,
+      UUID cycleId,
+      List<CotisationStatut> statuts)
       throws CustomException {
+    CsvExport.verifierFormat(format);
     User caller = findUserByKeycloakId(keycloakId);
     Tontine tontine = findTontineById(tontineId);
     assertIsCreatorOrSuperAdmin(caller, tontine);
@@ -619,7 +626,7 @@ public class CotisationServiceImpl implements CotisationService {
           c.getMotifRefus(),
           c.getNote());
     }
-    return csv.toBytes();
+    return FichierExport.csv("cotisations-" + tontineId + ".csv", csv.toBytes());
   }
 
   // ─── Récupération unique ──────────────────────────────────────────────────

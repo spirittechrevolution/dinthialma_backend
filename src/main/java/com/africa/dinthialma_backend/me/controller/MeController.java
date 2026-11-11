@@ -153,11 +153,9 @@ public class MeController {
       @RequestParam(required = false) CotisationStatut statut,
       HttpServletRequest httpRequest)
       throws CustomException {
-    CsvExport.verifierFormat(format);
-    byte[] csv =
-        meService.exportActiviteCsv(
-            headerParser.extractKeycloakId(httpRequest), mode, tontineId, type, statut);
-    return CsvExport.reponse(csv, "activite-" + mode.name().toLowerCase() + ".csv");
+    return CsvExport.reponse(
+        meService.exportActivite(
+            headerParser.extractKeycloakId(httpRequest), format, mode, tontineId, type, statut));
   }
 
   // ─── Je cotise : mes jackpots ────────────────────────────────────────────
