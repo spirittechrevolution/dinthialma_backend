@@ -19,6 +19,7 @@ import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.ConflictException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.util.OtpUtils;
 import com.africa.dinthialma_backend.common.util.PhoneUtils;
 import com.africa.dinthialma_backend.notification.service.WhatsappService;
@@ -67,7 +68,8 @@ public class RegistrationServiceImpl implements RegistrationService {
       // Compte PRE_ENROLLED : autoriser l'inscription pour activer le compte
       if (status == null || status == AccountStatus.ACTIVE) {
         log.warn("Tentative d'inscription avec un téléphone déjà utilisé : {}", phone);
-        throw new ConflictException(ResponseMessageConstants.AUTH_PHONE_ALREADY_USED);
+        throw new ConflictException(
+            ResponseMessageConstants.AUTH_PHONE_ALREADY_USED, ErrorCode.PHONE_ALREADY_USED);
       }
     }
 
@@ -102,16 +104,21 @@ public class RegistrationServiceImpl implements RegistrationService {
         otpVerificationRepository
             .findTopByPhoneAndPurposeAndUsedFalseOrderByCreatedAtDesc(
                 phone, Constants.OtpPurpose.REGISTRATION)
-            .orElseThrow(() -> new BadRequestException(ResponseMessageConstants.AUTH_OTP_INVALID));
+            .orElseThrow(
+                () ->
+                    new BadRequestException(
+                        ResponseMessageConstants.AUTH_OTP_INVALID, ErrorCode.OTP_INVALID));
 
     if (otp.isExpired()) {
       log.warn("OTP expiré pour le numéro : {}", phone);
-      throw new BadRequestException(ResponseMessageConstants.AUTH_OTP_INVALID);
+      throw new BadRequestException(
+          ResponseMessageConstants.AUTH_OTP_INVALID, ErrorCode.OTP_EXPIRED);
     }
 
     if (!otp.getCode().equals(request.getCode())) {
       log.warn("Code OTP incorrect pour le numéro : {}", phone);
-      throw new BadRequestException(ResponseMessageConstants.AUTH_OTP_INVALID);
+      throw new BadRequestException(
+          ResponseMessageConstants.AUTH_OTP_INVALID, ErrorCode.OTP_INVALID);
     }
 
     otp.setVerified(true);
@@ -133,14 +140,18 @@ public class RegistrationServiceImpl implements RegistrationService {
             .findTopByPhoneAndPurposeAndVerifiedTrueAndUsedFalseOrderByCreatedAtDesc(
                 phone, Constants.OtpPurpose.REGISTRATION)
             .orElseThrow(
-                () -> new BadRequestException(ResponseMessageConstants.AUTH_OTP_NOT_VERIFIED));
+                () ->
+                    new BadRequestException(
+                        ResponseMessageConstants.AUTH_OTP_NOT_VERIFIED,
+                        ErrorCode.OTP_NOT_VERIFIED));
 
     Optional<User> existing = userRepository.findByPhone(phone);
     if (existing.isPresent()) {
       User user = existing.get();
       AccountStatus status = user.getAccountStatus();
       if (status == null || status == AccountStatus.ACTIVE) {
-        throw new ConflictException(ResponseMessageConstants.AUTH_PHONE_ALREADY_USED);
+        throw new ConflictException(
+            ResponseMessageConstants.AUTH_PHONE_ALREADY_USED, ErrorCode.PHONE_ALREADY_USED);
       }
       // Compte PRE_ENROLLED : activation
       return activatePreEnrolledUser(user, request, phone, otp);

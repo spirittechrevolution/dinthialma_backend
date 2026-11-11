@@ -30,6 +30,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -317,5 +318,37 @@ public class LaCodeListController {
             Constants.Status.OK,
             ResponseMessageConstants.CODELIST_PUT_SUCCESS,
             LaCodeListDto.from(codeListService.updateCodeList(dto.toEntity(), id))));
+  }
+
+  @DeleteMapping("/{id}")
+  @Operation(
+      summary = "Supprimer une valeur de liste (SUPER_ADMIN)",
+      description =
+          "🛡 **Rôle requis :** `SUPER_ADMIN`.\n\n"
+              + "Suppression logique : la valeur disparaît des listes, les données qui la"
+              + " référencent restent intactes. Les valeurs système (`isSystemAssign=true`) sont"
+              + " refusées (`CODE_LIST_SYSTEM_VALUE`). Recréer ensuite le même couple type/value"
+              + " restaure la valeur.",
+      tags = {"CodeList"},
+      security = @SecurityRequirement(name = "bearerAuth"))
+  @ApiResponses({
+    @ApiResponse(responseCode = "200", description = "Valeur supprimée"),
+    @ApiResponse(responseCode = "400", description = "Valeur système non supprimable"),
+    @ApiResponse(responseCode = "401", description = "Token manquant ou invalide"),
+    @ApiResponse(responseCode = "403", description = "SUPER_ADMIN requis"),
+    @ApiResponse(responseCode = "404", description = "Code list introuvable"),
+  })
+  public ResponseEntity<CustomResponse> delete(
+      @Parameter(description = "UUID de l'entrée à supprimer") @PathVariable UUID id,
+      HttpServletRequest httpRequest)
+      throws CustomException {
+    RoleGuard.requireAnyRole(requestHeaderParser, httpRequest, UserRole.SUPER_ADMIN);
+    codeListService.deleteCodeList(id);
+    return ResponseEntity.ok(
+        new CustomResponse(
+            Constants.Message.SUCCESS_BODY,
+            Constants.Status.OK,
+            ResponseMessageConstants.CODELIST_DELETE_SUCCESS,
+            null));
   }
 }

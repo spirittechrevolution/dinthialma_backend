@@ -16,6 +16,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -53,6 +54,7 @@ public class CycleTontine extends BaseEntity {
 
   /** Gagnants du jackpot pour ce cycle (N membres selon nombreGagnants de la tontine). */
   @OneToMany(mappedBy = "cycle", fetch = FetchType.LAZY)
+  @Builder.Default
   private List<CycleGagnant> gagnants = new ArrayList<>();
 
   /** Date de début du cycle. */

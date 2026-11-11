@@ -46,6 +46,19 @@ public class MyDashboardResponse {
   private long totalCotisationsEnRetard;
 
   @Schema(
+      description = "Somme VALIDÉE sur les tours EN_COURS de toutes les tontines gérées, en FCFA",
+      example = "40000")
+  private BigDecimal totalCollecteToursEnCours;
+
+  @Schema(
+      description =
+          "Somme attendue sur les tours EN_COURS de toutes les tontines gérées (montant par"
+              + " membre × membres ACTIFS), en FCFA. Les tontines à montant libre sans plancher"
+              + " sont exclues.",
+      example = "60000")
+  private BigDecimal totalAttenduToursEnCours;
+
+  @Schema(
       description =
           "Détail paginé par tontine gérée : `{ content: [...], page: { size, number,"
               + " totalElements, totalPages } }`. Pagination :"
@@ -129,6 +142,13 @@ public class MyDashboardResponse {
 
     @Schema(description = "Cycle actuellement EN_COURS – null si aucun")
     private CycleEnCoursInfo cycleEnCours;
+
+    @Schema(
+        description =
+            "ROTATIVE à ordre MANUEL : au moins un tour TERMINÉ attend la désignation de ses"
+                + " gagnants",
+        example = "false")
+    private boolean gagnantsADesigner;
   }
 
   @Schema(description = "Informations résumées du cycle EN_COURS d'une tontine")
@@ -155,5 +175,32 @@ public class MyDashboardResponse {
 
     @Schema(description = "UUID de l'utilisateur bénéficiaire")
     private UUID beneficiaireUserId;
+
+    @Schema(description = "Somme des cotisations VALIDÉES sur ce tour, en FCFA", example = "40000")
+    private BigDecimal montantCollecte;
+
+    @Schema(
+        description = "Somme des cotisations EN_ATTENTE de validation sur ce tour, en FCFA",
+        example = "5000")
+    private BigDecimal montantEnAttente;
+
+    @Schema(
+        description =
+            "Montant attendu sur ce tour (montant par membre × membres ACTIFS), en FCFA – null si"
+                + " montant libre sans plancher",
+        example = "60000",
+        nullable = true)
+    private BigDecimal montantAttendu;
+
+    @Schema(description = "Membres dont la cotisation du tour est VALIDÉE", example = "8")
+    private long membresAyantPaye;
+
+    @Schema(
+        description = "Membres ayant déclaré un paiement EN_ATTENTE de validation",
+        example = "1")
+    private long membresEnAttente;
+
+    @Schema(description = "Membres ACTIFS de la tontine (base du montant attendu)", example = "12")
+    private long membresActifs;
   }
 }

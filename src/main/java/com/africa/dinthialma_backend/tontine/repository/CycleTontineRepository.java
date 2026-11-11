@@ -3,6 +3,7 @@ package com.africa.dinthialma_backend.tontine.repository;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,6 +41,17 @@ public interface CycleTontineRepository extends JpaRepository<CycleTontine, UUID
   Optional<CycleTontine> findByTontine_IdAndStatutAndDeletedAtIsNull(
       UUID tontineId, CycleStatut statut);
 
+  /** Cycles d'un statut donné pour un ensemble de tontines (ex : tours EN_COURS). */
+  List<CycleTontine> findByTontine_IdInAndStatutAndDeletedAtIsNull(
+      Collection<UUID> tontineIds, CycleStatut statut);
+
+  /** Nombre de cycles par tontine. Chaque ligne : {@code [tontineId (UUID), nombre (Long)]}. */
+  @Query(
+      "SELECT c.tontine.id, COUNT(c) FROM CycleTontine c"
+          + " WHERE c.tontine.id IN :tontineIds AND c.deletedAt IS NULL"
+          + " GROUP BY c.tontine.id")
+  List<Object[]> countByTontineIds(@Param("tontineIds") Collection<UUID> tontineIds);
+
   /** Tous les cycles d'un statut donné sur toute la plateforme (usage scheduler). */
   List<CycleTontine> findByStatutAndDeletedAtIsNull(CycleStatut statut);
 
@@ -49,6 +61,14 @@ public interface CycleTontineRepository extends JpaRepository<CycleTontine, UUID
           + " AND c.dateFin = :dateFin AND c.deletedAt IS NULL")
   List<CycleTontine> findByStatutAndDateFinAndDeletedAtIsNull(
       @Param("statut") CycleStatut statut, @Param("dateFin") LocalDate dateFin);
+
+  /** Vrai si la tontine a au moins un cycle TERMINÉ sans gagnant désigné. */
+  @Query(
+      "SELECT COUNT(c) > 0 FROM CycleTontine c WHERE c.tontine.id = :tontineId"
+          + " AND c.statut = com.africa.dinthialma_backend.tontine.codeList.CycleStatut.TERMINE"
+          + " AND c.deletedAt IS NULL"
+          + " AND NOT EXISTS (SELECT g FROM CycleGagnant g WHERE g.cycle = c AND g.deletedAt IS NULL)")
+  boolean existsTermineSansGagnant(@Param("tontineId") UUID tontineId);
 
   /** Cycles TERMINÉ ayant au moins un gagnant désigné, pour l'historique jackpots d'une tontine. */
   @Query(

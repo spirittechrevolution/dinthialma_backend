@@ -7,4 +7,8 @@ public class UnAuthorizedException extends CustomException {
   public UnAuthorizedException(String message) {
     super(HttpStatus.UNAUTHORIZED, message);
   }
+
+  public UnAuthorizedException(String message, ErrorCode code) {
+    super(HttpStatus.UNAUTHORIZED, message, code);
+  }
 }

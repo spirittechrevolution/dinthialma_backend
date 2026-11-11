@@ -10,22 +10,27 @@ import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.ConflictException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
+import com.africa.dinthialma_backend.common.util.CsvWriter;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.CycleRecapCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.MembreTotalCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
+import com.africa.dinthialma_backend.contribution.dto.RefuseCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.UpdateCotisationRequest;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
+import com.africa.dinthialma_backend.contribution.repository.CotisationSpecifications;
 import com.africa.dinthialma_backend.contribution.service.interfaces.CotisationService;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.notification.codeList.NotificationType;
+import com.africa.dinthialma_backend.notification.dto.NotificationLiens;
 import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
@@ -43,7 +48,10 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -83,13 +91,16 @@ public class CotisationServiceImpl implements CotisationService {
     CycleTontine cycle = findCycleById(tontineId, request.getCycleId());
 
     if (cycle.getStatut() != CycleStatut.EN_COURS) {
-      throw new BadRequestException("Les cotisations ne sont acceptées que pour un cycle EN_COURS");
+      throw new BadRequestException(
+          "Les cotisations ne sont acceptées que pour un cycle EN_COURS",
+          ErrorCode.NO_CYCLE_IN_PROGRESS);
     }
 
     // Unicité cycle/membre
-    if (cotisationRepository.existsByCycle_IdAndMembre_IdAndDeletedAtIsNull(
-        cycle.getId(), membre.getId())) {
-      throw new ConflictException("Vous avez déjà enregistré une cotisation pour ce cycle");
+    if (cotisationRepository.existsActiveByCycleAndMembre(cycle.getId(), membre.getId())) {
+      throw new ConflictException(
+          "Vous avez déjà enregistré une cotisation pour ce cycle",
+          ErrorCode.COTISATION_ALREADY_EXISTS);
     }
 
     validateMontantCotisation(tontine, request.getMontant());
@@ -142,7 +153,8 @@ public class CotisationServiceImpl implements CotisationService {
         NotificationType.COTISATION_SOUMISE,
         "Cotisation soumise",
         "Votre paiement de " + montantStr + " est en attente de validation · " + tontineName,
-        tontineId);
+        tontineId,
+        NotificationLiens.cotisation(saved));
 
     // Notification in-app admin — paiement reçu
     notificationService.notify(
@@ -156,7 +168,8 @@ public class CotisationServiceImpl implements CotisationService {
             + montantStr
             + " · "
             + tontineName,
-        tontineId);
+        tontineId,
+        NotificationLiens.cotisation(saved));
 
     // Notif admin — nouvelle cotisation à valider
     try {
@@ -203,12 +216,15 @@ public class CotisationServiceImpl implements CotisationService {
     CycleTontine cycle = findCycleById(tontineId, request.getCycleId());
 
     if (cycle.getStatut() != CycleStatut.EN_COURS) {
-      throw new BadRequestException("Les cotisations ne sont acceptées que pour un cycle EN_COURS");
+      throw new BadRequestException(
+          "Les cotisations ne sont acceptées que pour un cycle EN_COURS",
+          ErrorCode.NO_CYCLE_IN_PROGRESS);
     }
 
-    if (cotisationRepository.existsByCycle_IdAndMembre_IdAndDeletedAtIsNull(
-        cycle.getId(), membre.getId())) {
-      throw new ConflictException("Une cotisation existe déjà pour ce membre sur ce cycle");
+    if (cotisationRepository.existsActiveByCycleAndMembre(cycle.getId(), membre.getId())) {
+      throw new ConflictException(
+          "Une cotisation existe déjà pour ce membre sur ce cycle",
+          ErrorCode.COTISATION_ALREADY_EXISTS);
     }
 
     validateMontantCotisation(tontine, request.getMontant());
@@ -252,7 +268,8 @@ public class CotisationServiceImpl implements CotisationService {
           NotificationType.COTISATION_VALIDEE,
           "Cotisation validée",
           "Votre cotisation de " + montantStr + " a été enregistrée · " + tontineName,
-          tontineId);
+          tontineId,
+          NotificationLiens.cotisation(saved));
     }
 
     // Notif membre — message adapté selon le statut du compte
@@ -334,7 +351,8 @@ public class CotisationServiceImpl implements CotisationService {
       throw new BadRequestException(
           "Seule une cotisation EN_ATTENTE peut être validée (statut actuel : "
               + cotisation.getStatut()
-              + ")");
+              + ")",
+          ErrorCode.COTISATION_NOT_PENDING);
     }
 
     cotisation.setStatut(CotisationStatut.VALIDE);
@@ -360,7 +378,8 @@ public class CotisationServiceImpl implements CotisationService {
             + saved.getMontant().toPlainString()
             + " FCFA a été validé · "
             + saved.getTontine().getNom(),
-        tontineId);
+        tontineId,
+        NotificationLiens.cotisation(saved));
 
     String memberPhone = saved.getMembre().getUser().getPhone();
     String memberNom =
@@ -418,12 +437,102 @@ public class CotisationServiceImpl implements CotisationService {
     return CotisationResponse.from(saved);
   }
 
+  // ─── Refus ───────────────────────────────────────────────────────────────
+
+  @Override
+  public CotisationResponse refuseCotisation(
+      String keycloakId, UUID tontineId, UUID cotisationId, RefuseCotisationRequest request)
+      throws CustomException {
+
+    User caller = findUserByKeycloakId(keycloakId);
+    Tontine tontine = findTontineById(tontineId);
+    assertIsCreatorOrSuperAdmin(caller, tontine);
+
+    Cotisation cotisation =
+        cotisationRepository
+            .findByIdAndDeletedAtIsNull(cotisationId)
+            .orElseThrow(
+                () -> new NotFoundException(ResponseMessageConstants.CONTRIBUTION_NOT_FOUND));
+
+    if (!cotisation.getTontine().getId().equals(tontineId)) {
+      throw new NotFoundException(ResponseMessageConstants.CONTRIBUTION_NOT_FOUND);
+    }
+
+    if (cotisation.getStatut() != CotisationStatut.EN_ATTENTE) {
+      throw new BadRequestException(
+          "Seule une cotisation EN_ATTENTE peut être refusée (statut actuel : "
+              + cotisation.getStatut()
+              + ")",
+          ErrorCode.COTISATION_NOT_PENDING);
+    }
+
+    String motif = request.getMotif().trim();
+    cotisation.setStatut(CotisationStatut.REFUSE);
+    cotisation.setMotifRefus(motif);
+    cotisation.setRefusePar(caller);
+    cotisation.setDateRefus(LocalDateTime.now());
+
+    Cotisation saved = cotisationRepository.save(cotisation);
+    auditService.log(
+        caller,
+        "cotisations",
+        cotisationId,
+        "statut",
+        CotisationStatut.EN_ATTENTE.name(),
+        CotisationStatut.REFUSE.name());
+    log.info("Cotisation refusée – cotisationId={} par userId={}", cotisationId, caller.getId());
+
+    String montantStr = saved.getMontant().toPlainString() + " FCFA";
+    String tontineName = saved.getTontine().getNom();
+    int numCycle = saved.getCycle().getNumeroCycle();
+
+    // Notification in-app membre — cotisation refusée (non bloquant)
+    notificationService.notify(
+        saved.getMembre().getUser().getId(),
+        NotificationType.COTISATION_REFUSEE,
+        "Cotisation refusée",
+        "Votre paiement de "
+            + montantStr
+            + " a été refusé · "
+            + tontineName
+            + " · Motif : "
+            + motif
+            + ". Vous pouvez déclarer un nouveau paiement.",
+        tontineId,
+        NotificationLiens.cotisation(saved));
+
+    // WhatsApp membre (non bloquant ; un pré-inscrit n'a pas forcément l'application)
+    try {
+      whatsappService.send(
+          saved.getMembre().getUser().getPhone(),
+          "❌ *Dinthialma* – Votre cotisation de "
+              + montantStr
+              + " pour la tontine *"
+              + tontineName
+              + "* (cycle "
+              + numCycle
+              + ") a été refusée.\nMotif : "
+              + motif
+              + "\nVous pouvez déclarer un nouveau paiement.");
+    } catch (Exception e) {
+      log.warn("Notif WA membre (refus) non envoyée : {}", e.getMessage());
+    }
+
+    return CotisationResponse.from(saved);
+  }
+
   // ─── Liste ───────────────────────────────────────────────────────────────
 
   @Override
   @Transactional(readOnly = true)
   public Page<CotisationResponse> listCotisations(
-      String keycloakId, UUID tontineId, UUID cycleId, UUID membreId, Pageable pageable)
+      String keycloakId,
+      UUID tontineId,
+      UUID cycleId,
+      UUID membreId,
+      List<CotisationStatut> statuts,
+      String q,
+      Pageable pageable)
       throws CustomException {
 
     User caller = findUserByKeycloakId(keycloakId);
@@ -432,42 +541,85 @@ public class CotisationServiceImpl implements CotisationService {
     boolean isAdminOrSuper =
         isSuperAdmin(caller) || tontine.getCreePar().getId().equals(caller.getId());
 
-    if (isAdminOrSuper) {
-      if (cycleId != null && membreId != null) {
-        return cotisationRepository
-            .findByCycle_IdAndMembre_IdAndDeletedAtIsNull(cycleId, membreId, pageable)
-            .map(CotisationResponse::from);
-      }
-      if (cycleId != null) {
-        return cotisationRepository
-            .findByCycle_IdAndDeletedAtIsNull(cycleId, pageable)
-            .map(CotisationResponse::from);
-      }
-      if (membreId != null) {
-        return cotisationRepository
-            .findByTontine_IdAndMembre_IdAndDeletedAtIsNull(tontineId, membreId, pageable)
-            .map(CotisationResponse::from);
-      }
-      return cotisationRepository
-          .findByTontine_IdAndDeletedAtIsNull(tontineId, pageable)
-          .map(CotisationResponse::from);
+    // Un membre ne voit que ses propres cotisations : le filtre membreId est forcé sur lui
+    UUID membreFiltre = membreId;
+    if (!isAdminOrSuper) {
+      TontineMembre membreCaller =
+          membreRepository
+              .findByTontine_IdAndUser_IdAndDeletedAtIsNull(tontineId, caller.getId())
+              .orElseThrow(
+                  () -> new ForbiddenException(ResponseMessageConstants.TONTINE_ACCESS_DENIED));
+      membreFiltre = membreCaller.getId();
     }
 
-    // Un membre ne voit que ses propres cotisations (filtre en base)
-    TontineMembre membreCaller =
-        membreRepository
-            .findByTontine_IdAndUser_IdAndDeletedAtIsNull(tontineId, caller.getId())
-            .orElseThrow(
-                () -> new ForbiddenException(ResponseMessageConstants.TONTINE_ACCESS_DENIED));
+    // Le filtre tontine est toujours appliqué : un cycleId d'une autre tontine ne renvoie rien
+    Specification<Cotisation> spec =
+        Specification.allOf(
+            CotisationSpecifications.nonSupprimee(),
+            CotisationSpecifications.deTontine(tontineId),
+            CotisationSpecifications.deCycle(cycleId),
+            CotisationSpecifications.deMembre(membreFiltre),
+            CotisationSpecifications.statutParmi(statuts),
+            CotisationSpecifications.recherche(q));
 
-    if (cycleId != null) {
-      return cotisationRepository
-          .findByCycle_IdAndMembre_IdAndDeletedAtIsNull(cycleId, membreCaller.getId(), pageable)
-          .map(CotisationResponse::from);
+    return cotisationRepository.findAll(spec, pageable).map(CotisationResponse::from);
+  }
+
+  // ─── Export CSV (B24) ─────────────────────────────────────────────────────
+
+  @Override
+  @Transactional(readOnly = true)
+  public byte[] exportCotisationsCsv(
+      String keycloakId, UUID tontineId, UUID cycleId, List<CotisationStatut> statuts)
+      throws CustomException {
+    User caller = findUserByKeycloakId(keycloakId);
+    Tontine tontine = findTontineById(tontineId);
+    assertIsCreatorOrSuperAdmin(caller, tontine);
+
+    Specification<Cotisation> spec =
+        Specification.allOf(
+            CotisationSpecifications.nonSupprimee(),
+            CotisationSpecifications.deTontine(tontineId),
+            CotisationSpecifications.deCycle(cycleId),
+            CotisationSpecifications.statutParmi(statuts));
+    List<Cotisation> cotisations =
+        cotisationRepository
+            .findAll(
+                spec,
+                PageRequest.of(
+                    0, CsvWriter.MAX_LIGNES, Sort.by("cycle.numeroCycle", "createdAt").ascending()))
+            .getContent();
+
+    CsvWriter csv =
+        new CsvWriter()
+            .ligne(
+                "Tour",
+                "Membre",
+                "Téléphone",
+                "Montant (FCFA)",
+                "Statut",
+                "Méthode",
+                "Référence",
+                "Déclarée le",
+                "Validée le",
+                "Motif refus",
+                "Note");
+    for (Cotisation c : cotisations) {
+      var u = c.getMembre().getUser();
+      csv.ligne(
+          c.getCycle().getNumeroCycle(),
+          (u.getFirstName() + " " + u.getLastName()).trim(),
+          u.getPhone(),
+          c.getMontant() != null ? c.getMontant().toPlainString() : null,
+          c.getStatut(),
+          c.getMethodePaiement(),
+          c.getReferenceTransaction(),
+          c.getCreatedAt(),
+          c.getDateValidation(),
+          c.getMotifRefus(),
+          c.getNote());
     }
-    return cotisationRepository
-        .findByTontine_IdAndMembre_IdAndDeletedAtIsNull(tontineId, membreCaller.getId(), pageable)
-        .map(CotisationResponse::from);
+    return csv.toBytes();
   }
 
   // ─── Récupération unique ──────────────────────────────────────────────────
@@ -530,15 +682,18 @@ public class CotisationServiceImpl implements CotisationService {
       throw new NotFoundException(ResponseMessageConstants.CONTRIBUTION_NOT_FOUND);
     }
 
-    // EN_RETARD → cycle fermé, modification interdite
-    if (cotisation.getStatut() == CotisationStatut.EN_RETARD) {
-      throw new BadRequestException(ResponseMessageConstants.CONTRIBUTION_CANNOT_EDIT);
+    // EN_RETARD → cycle fermé ; REFUSE → statut final : modification interdite
+    if (cotisation.getStatut() == CotisationStatut.EN_RETARD
+        || cotisation.getStatut() == CotisationStatut.REFUSE) {
+      throw new BadRequestException(
+          ResponseMessageConstants.CONTRIBUTION_CANNOT_EDIT, ErrorCode.COTISATION_NOT_EDITABLE);
     }
 
     // VALIDE + cycle TERMINE → jackpot déjà calculé, modification interdite
     if (cotisation.getStatut() == CotisationStatut.VALIDE
         && cotisation.getCycle().getStatut() == CycleStatut.TERMINE) {
-      throw new BadRequestException(ResponseMessageConstants.CONTRIBUTION_CANNOT_EDIT);
+      throw new BadRequestException(
+          ResponseMessageConstants.CONTRIBUTION_CANNOT_EDIT, ErrorCode.COTISATION_NOT_EDITABLE);
     }
 
     if (request.getMontant() != null
@@ -615,7 +770,8 @@ public class CotisationServiceImpl implements CotisationService {
         cotisationRepository
             .findByCycle_IdAndMembre_IdInAndDeletedAtIsNull(cycleId, membreIds)
             .stream()
-            .collect(Collectors.toMap(c -> c.getMembre().getId(), c -> c));
+            .collect(
+                Collectors.toMap(c -> c.getMembre().getId(), c -> c, Cotisation::plusPertinente));
 
     return membres.map(
         m -> CycleRecapCotisationResponse.from(m, cotisationByMembre.get(m.getId())));
@@ -700,14 +856,16 @@ public class CotisationServiceImpl implements CotisationService {
     if (!tontine.isMontantLibre()) {
       if (tontine.getMontant() != null && montant.compareTo(tontine.getMontant()) != 0) {
         throw new BadRequestException(
-            "Le montant doit être exactement " + tontine.getMontant().toPlainString() + " FCFA");
+            "Le montant doit être exactement " + tontine.getMontant().toPlainString() + " FCFA",
+            ErrorCode.AMOUNT_MISMATCH);
       }
     } else if (tontine.getMontantMinimum() != null
         && montant.compareTo(tontine.getMontantMinimum()) < 0) {
       throw new BadRequestException(
           "Le montant minimum de cotisation est "
               + tontine.getMontantMinimum().toPlainString()
-              + " FCFA");
+              + " FCFA",
+          ErrorCode.AMOUNT_BELOW_MINIMUM);
     }
   }
 }

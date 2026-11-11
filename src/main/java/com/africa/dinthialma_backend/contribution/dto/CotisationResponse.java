@@ -20,8 +20,14 @@ public class CotisationResponse {
   @Schema(description = "UUID de la tontine parente")
   private UUID tontineId;
 
+  @Schema(description = "Nom de la tontine parente", example = "Tontine Famille Diallo")
+  private String tontineNom;
+
   @Schema(description = "UUID du cycle concerné")
   private UUID cycleId;
+
+  @Schema(description = "Numéro du cycle concerné", example = "5")
+  private Integer numeroCycle;
 
   @Schema(description = "Informations du cotisant")
   private MembreInfo membre;
@@ -37,7 +43,7 @@ public class CotisationResponse {
 
   @Schema(
       description = "Statut de la cotisation",
-      allowableValues = {"EN_ATTENTE", "VALIDE", "EN_RETARD"})
+      allowableValues = {"EN_ATTENTE", "VALIDE", "EN_RETARD", "REFUSE"})
   private CotisationStatut statut;
 
   @Schema(description = "Note libre du membre", example = "Paiement juillet 2024")
@@ -51,6 +57,18 @@ public class CotisationResponse {
 
   @Schema(description = "Admin qui a validé la cotisation (null si pas encore validé)")
   private ValideurInfo validePar;
+
+  @Schema(
+      description = "Motif du refus – présent seulement si statut = REFUSE",
+      example = "Transfert non reçu",
+      nullable = true)
+  private String motifRefus;
+
+  @Schema(description = "Admin ayant refusé la déclaration (null si non refusée)", nullable = true)
+  private ValideurInfo refusePar;
+
+  @Schema(description = "Date du refus (null si non refusée)", nullable = true)
+  private LocalDateTime dateRefus;
 
   @Schema(description = "Date d'enregistrement de la cotisation")
   private LocalDateTime createdAt;
@@ -96,10 +114,23 @@ public class CotisationResponse {
               .build();
     }
 
+    ValideurInfo refuseurInfo = null;
+    if (cotisation.getRefusePar() != null) {
+      var r = cotisation.getRefusePar();
+      refuseurInfo =
+          ValideurInfo.builder()
+              .id(r.getId())
+              .firstName(r.getFirstName())
+              .lastName(r.getLastName())
+              .build();
+    }
+
     return CotisationResponse.builder()
         .id(cotisation.getId())
         .tontineId(cotisation.getTontine() != null ? cotisation.getTontine().getId() : null)
+        .tontineNom(cotisation.getTontine() != null ? cotisation.getTontine().getNom() : null)
         .cycleId(cotisation.getCycle() != null ? cotisation.getCycle().getId() : null)
+        .numeroCycle(cotisation.getCycle() != null ? cotisation.getCycle().getNumeroCycle() : null)
         .membre(membreInfo)
         .montant(cotisation.getMontant())
         .methodePaiement(cotisation.getMethodePaiement())
@@ -109,6 +140,9 @@ public class CotisationResponse {
         .enregistrePar(saisieParInfo)
         .dateValidation(cotisation.getDateValidation())
         .validePar(valideurInfo)
+        .motifRefus(cotisation.getMotifRefus())
+        .refusePar(refuseurInfo)
+        .dateRefus(cotisation.getDateRefus())
         .createdAt(cotisation.getCreatedAt())
         .updatedAt(cotisation.getUpdatedAt())
         .build();

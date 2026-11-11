@@ -12,6 +12,7 @@ import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.ConflictException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.common.util.PhoneUtils;
@@ -21,11 +22,14 @@ import com.africa.dinthialma_backend.member.dto.MembreResponse;
 import com.africa.dinthialma_backend.member.dto.UpdateMembreStatutRequest;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
+import com.africa.dinthialma_backend.member.repository.TontineMembreSpecifications;
 import com.africa.dinthialma_backend.member.service.interfaces.MembreService;
 import com.africa.dinthialma_backend.notification.codeList.NotificationType;
+import com.africa.dinthialma_backend.notification.dto.NotificationLiens;
 import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
+import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -34,6 +38,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,6 +50,7 @@ public class MembreServiceImpl implements MembreService {
 
   private final TontineMembreRepository membreRepository;
   private final TontineRepository tontineRepository;
+  private final CycleTontineRepository cycleRepository;
   private final UserRepository userRepository;
   private final UserRoleAssignmentRepository roleAssignmentRepository;
   private final KeycloakAuthService keycloakAuthService;
@@ -75,7 +81,8 @@ public class MembreServiceImpl implements MembreService {
           || request.getFirstName().isBlank()
           || request.getLastName() == null
           || request.getLastName().isBlank()) {
-        throw new BadRequestException(ResponseMessageConstants.MEMBER_NAME_REQUIRED);
+        throw new BadRequestException(
+            ResponseMessageConstants.MEMBER_NAME_REQUIRED, ErrorCode.MEMBER_NAME_REQUIRED);
       }
       targetUser =
           createPreEnrolledUser(
@@ -85,7 +92,8 @@ public class MembreServiceImpl implements MembreService {
     // Unicité : un utilisateur ne peut cotiser qu'une fois par tontine
     if (membreRepository.existsByTontine_IdAndUser_IdAndDeletedAtIsNull(
         tontineId, targetUser.getId())) {
-      throw new ConflictException(ResponseMessageConstants.MEMBER_ALREADY_EXISTS);
+      throw new ConflictException(
+          ResponseMessageConstants.MEMBER_ALREADY_EXISTS, ErrorCode.MEMBER_ALREADY_IN_TONTINE);
     }
 
     // Résoudre l'ordre jackpot
@@ -94,7 +102,8 @@ public class MembreServiceImpl implements MembreService {
       if (membreRepository.existsByTontine_IdAndOrdreJackpotAndDeletedAtIsNull(
           tontineId, request.getOrdreJackpot())) {
         throw new ConflictException(
-            "La position " + request.getOrdreJackpot() + " est déjà occupée dans cette tontine");
+            "La position " + request.getOrdreJackpot() + " est déjà occupée dans cette tontine",
+            ErrorCode.JACKPOT_POSITION_TAKEN);
       }
       ordreJackpot = request.getOrdreJackpot();
     } else {
@@ -139,7 +148,8 @@ public class MembreServiceImpl implements MembreService {
         NotificationType.INVITATION_TONTINE,
         "Invitation tontine",
         inviteBody,
-        tontineId);
+        tontineId,
+        NotificationLiens.membre(saved.getId()));
 
     return MembreResponse.from(saved);
   }
@@ -168,7 +178,8 @@ public class MembreServiceImpl implements MembreService {
         NotificationType.STATUT_MEMBRE,
         "Retiré de la tontine",
         "Vous avez été retiré(e) de la tontine " + tontine.getNom() + ".",
-        tontineId);
+        tontineId,
+        NotificationLiens.membre(membre.getId()));
 
     log.info("Membre retiré – tontineId={} membreId={}", tontineId, membreId);
   }
@@ -177,15 +188,33 @@ public class MembreServiceImpl implements MembreService {
 
   @Override
   @Transactional(readOnly = true)
-  public Page<MembreResponse> listMembres(String keycloakId, UUID tontineId, Pageable pageable)
+  public Page<MembreResponse> listMembres(
+      String keycloakId,
+      UUID tontineId,
+      MembreStatut statut,
+      String q,
+      UUID cycleId,
+      Boolean aPaye,
+      Pageable pageable)
       throws CustomException {
 
     User caller = findUserByKeycloakId(keycloakId);
     Tontine tontine = findTontineById(tontineId);
     assertCanAccess(caller, tontine);
 
+    if (cycleId != null
+        && cycleRepository.findByIdAndTontine_IdAndDeletedAtIsNull(cycleId, tontineId).isEmpty()) {
+      throw new NotFoundException(ResponseMessageConstants.CYCLE_NOT_FOUND);
+    }
+
     return membreRepository
-        .findByTontine_IdAndDeletedAtIsNull(tontineId, pageable)
+        .findAll(
+            Specification.allOf(
+                TontineMembreSpecifications.deTontine(tontineId),
+                TontineMembreSpecifications.statut(statut),
+                TontineMembreSpecifications.recherche(q),
+                TontineMembreSpecifications.paiementSurCycle(cycleId, aPaye)),
+            pageable)
         .map(MembreResponse::from);
   }
 
@@ -230,7 +259,8 @@ public class MembreServiceImpl implements MembreService {
           NotificationType.STATUT_MEMBRE,
           "Statut mis à jour",
           statutBody,
-          tontineId);
+          tontineId,
+          NotificationLiens.membre(saved.getId()));
     }
 
     log.info("Statut membre modifié – membreId={} statut={}", membreId, request.getStatut());

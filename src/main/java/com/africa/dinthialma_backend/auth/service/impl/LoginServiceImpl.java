@@ -11,6 +11,7 @@ import com.africa.dinthialma_backend.auth.service.interfaces.LoginService;
 import com.africa.dinthialma_backend.auth.service.interfaces.UserSessionService;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.UnAuthorizedException;
 import com.africa.dinthialma_backend.common.util.PhoneUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -63,18 +64,22 @@ public class LoginServiceImpl implements LoginService {
 
       if (user.getDeletedAt() != null) {
         log.warn("[Login] Compte supprimé – identifiant : {}", identifier);
-        throw new UnAuthorizedException("Identifiants incorrects");
+        throw new UnAuthorizedException("Identifiants incorrects", ErrorCode.INVALID_CREDENTIALS);
       }
       if (user.getAccountStatus() == AccountStatus.PRE_ENROLLED) {
         log.warn(
             "[Login] Tentative de connexion sur compte PRE_ENROLLED – userId : {}", user.getId());
         throw new CustomException(
-            HttpStatus.FORBIDDEN, ResponseMessageConstants.AUTH_ACCOUNT_NOT_ACTIVATED);
+            HttpStatus.FORBIDDEN,
+            ResponseMessageConstants.AUTH_ACCOUNT_NOT_ACTIVATED,
+            ErrorCode.ACCOUNT_PRE_ENROLLED);
       }
       if (!user.isActive()) {
         log.warn("[Login] Compte désactivé – userId : {}", user.getId());
         throw new CustomException(
-            HttpStatus.FORBIDDEN, ResponseMessageConstants.AUTH_ACCOUNT_DISABLED);
+            HttpStatus.FORBIDDEN,
+            ResponseMessageConstants.AUTH_ACCOUNT_DISABLED,
+            ErrorCode.ACCOUNT_DISABLED);
       }
 
       // ── 2. Authentification Keycloak ──────────────────────────────

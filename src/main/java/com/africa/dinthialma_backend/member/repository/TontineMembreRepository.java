@@ -2,19 +2,29 @@ package com.africa.dinthialma_backend.member.repository;
 
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 /** Accès base pour les cotisants (membres) d'une tontine. */
 @Repository
-public interface TontineMembreRepository extends JpaRepository<TontineMembre, UUID> {
+public interface TontineMembreRepository
+    extends JpaRepository<TontineMembre, UUID>, JpaSpecificationExecutor<TontineMembre> {
+
+  /** Liste filtrée (cf. {@link TontineMembreSpecifications}) avec l'utilisateur chargé. */
+  @Override
+  @EntityGraph(attributePaths = {"user"})
+  Page<TontineMembre> findAll(Specification<TontineMembre> spec, Pageable pageable);
 
   /**
    * Membres non supprimés d'une tontine triés d'abord par ordre_jackpot, puis par date d'adhésion.
@@ -45,8 +55,43 @@ public interface TontineMembreRepository extends JpaRepository<TontineMembre, UU
   /** Récupère l'enregistrement cotisant d'un utilisateur dans une tontine. */
   Optional<TontineMembre> findByTontine_IdAndUser_IdAndDeletedAtIsNull(UUID tontineId, UUID userId);
 
+  /**
+   * Tous les memberships (non supprimés) d'un utilisateur dans des tontines non supprimées, avec la
+   * tontine et son créateur chargés (résumé « Je cotise »).
+   */
+  @EntityGraph(attributePaths = {"tontine", "tontine.creePar"})
+  List<TontineMembre> findByUser_IdAndDeletedAtIsNullAndTontine_DeletedAtIsNullOrderByCreatedAtDesc(
+      UUID userId);
+
+  /** Memberships d'un utilisateur parmi un ensemble de tontines (page « Mes tontines »). */
+  List<TontineMembre> findByUser_IdAndTontine_IdInAndDeletedAtIsNull(
+      UUID userId, Collection<UUID> tontineIds);
+
   /** Récupère un membre par son id dans le contexte d'une tontine. */
   Optional<TontineMembre> findByIdAndTontine_IdAndDeletedAtIsNull(UUID id, UUID tontineId);
+
+  /** Nombre de membres d'un statut donné dans une tontine (ex : ACTIF). */
+  long countByTontine_IdAndStatutAndDeletedAtIsNull(UUID tontineId, MembreStatut statut);
+
+  /**
+   * Pour chaque tontine (non supprimée) d'un créateur ayant un cycle EN_COURS : paramètres de
+   * montant et nombre de membres ACTIFS. Chaque ligne : {@code [montantLibre (Boolean), montant
+   * (BigDecimal), montantMinimum (BigDecimal), membresActifs (Long)]}.
+   */
+  @Query(
+      "SELECT t.montantLibre, t.montant, t.montantMinimum, COUNT(m) FROM TontineMembre m"
+          + " JOIN m.tontine t"
+          + " WHERE t.creePar.id = :userId"
+          + "   AND t.deletedAt IS NULL"
+          + "   AND m.deletedAt IS NULL"
+          + "   AND m.statut = com.africa.dinthialma_backend.member.codeList.MembreStatut.ACTIF"
+          + "   AND EXISTS ("
+          + "     SELECT 1 FROM CycleTontine c WHERE c.tontine = t"
+          + "     AND c.statut = com.africa.dinthialma_backend.tontine.codeList.CycleStatut.EN_COURS"
+          + "     AND c.deletedAt IS NULL"
+          + "   )"
+          + " GROUP BY t.id, t.montantLibre, t.montant, t.montantMinimum")
+  List<Object[]> findParametresToursEnCoursByCreateur(@Param("userId") UUID userId);
 
   /** Nombre de cotisants actifs dans une tontine. */
   long countByTontine_IdAndDeletedAtIsNull(UUID tontineId);

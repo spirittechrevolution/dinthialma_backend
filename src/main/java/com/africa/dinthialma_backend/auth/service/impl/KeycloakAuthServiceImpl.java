@@ -5,6 +5,7 @@ import com.africa.dinthialma_backend.auth.dto.LoginResponse;
 import com.africa.dinthialma_backend.auth.dto.RegisterCompleteRequest;
 import com.africa.dinthialma_backend.auth.service.interfaces.KeycloakAuthService;
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.UnAuthorizedException;
 import jakarta.ws.rs.core.Response;
 import java.util.List;
@@ -78,7 +79,7 @@ public class KeycloakAuthServiceImpl implements KeycloakAuthService {
           e.getStatusCode(),
           e.getResponseBodyAsString());
       if (e.getStatusCode() == HttpStatus.UNAUTHORIZED) {
-        throw new UnAuthorizedException("Identifiants incorrects");
+        throw new UnAuthorizedException("Identifiants incorrects", ErrorCode.INVALID_CREDENTIALS);
       }
       throw new CustomException(HttpStatus.BAD_GATEWAY, "Erreur lors de la connexion");
     } catch (Exception e) {
@@ -139,7 +140,8 @@ public class KeycloakAuthServiceImpl implements KeycloakAuthService {
     } catch (HttpClientErrorException e) {
       log.warn("Impossible de rafraîchir le token Keycloak – status: {}", e.getStatusCode());
       throw new UnAuthorizedException(
-          "Session expirée. Veuillez vous reconnecter avec votre mot de passe");
+          "Session expirée. Veuillez vous reconnecter avec votre mot de passe",
+          ErrorCode.SESSION_EXPIRED);
     } catch (Exception e) {
       log.error("Erreur lors du rafraîchissement du token Keycloak : {}", e.getMessage());
       throw new CustomException(HttpStatus.BAD_GATEWAY, "Service d'authentification indisponible");

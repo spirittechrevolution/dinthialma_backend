@@ -5,6 +5,7 @@ import com.africa.dinthialma_backend.admin.dto.GlobalDashboardResponse;
 import com.africa.dinthialma_backend.admin.dto.MyDashboardResponse;
 import com.africa.dinthialma_backend.admin.dto.UpdateUserRolesRequest;
 import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
+import com.africa.dinthialma_backend.auth.codeList.UserRole;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
@@ -35,7 +36,8 @@ public interface AdminDashboardService {
    * @param pageable pagination (page, size, sort)
    */
   Page<AdminUserResponse> listUsers(
-      String keycloakId, AccountStatus accountStatus, Pageable pageable) throws CustomException;
+      String keycloakId, AccountStatus accountStatus, UserRole role, String q, Pageable pageable)
+      throws CustomException;
 
   /**
    * Détail complet d'un utilisateur.
@@ -74,8 +76,8 @@ public interface AdminDashboardService {
    * @param statut filtre optionnel (null = tous les statuts)
    * @param pageable pagination (tri par défaut : createdAt DESC)
    */
-  Page<TontineResponse> listAllTontines(String keycloakId, TontineStatut statut, Pageable pageable)
-      throws CustomException;
+  Page<TontineResponse> listAllTontines(
+      String keycloakId, TontineStatut statut, String q, Pageable pageable) throws CustomException;
 
   /**
    * Liste paginée de toutes les cotisations de la plateforme, filtrable par statut et tontine.

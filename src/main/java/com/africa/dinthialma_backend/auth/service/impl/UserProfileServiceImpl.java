@@ -15,6 +15,7 @@ import com.africa.dinthialma_backend.common.constants.Constants;
 import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.ConflictException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.common.util.OtpUtils;
 import com.africa.dinthialma_backend.common.util.PhoneUtils;
@@ -74,7 +75,8 @@ public class UserProfileServiceImpl implements UserProfileService {
         && !request.getEmail().isBlank()
         && !request.getEmail().equalsIgnoreCase(user.getEmail())) {
       if (userRepository.existsByEmail(request.getEmail().toLowerCase())) {
-        throw new ConflictException("Cette adresse email est déjà utilisée");
+        throw new ConflictException(
+            "Cette adresse email est déjà utilisée", ErrorCode.EMAIL_ALREADY_USED);
       }
     }
 
@@ -103,11 +105,14 @@ public class UserProfileServiceImpl implements UserProfileService {
     String newPhone = PhoneUtils.normalize(request.getNewPhone());
 
     if (newPhone.equals(user.getPhone())) {
-      throw new BadRequestException("Le nouveau numéro est identique au numéro actuel");
+      throw new BadRequestException(
+          "Le nouveau numéro est identique au numéro actuel", ErrorCode.PHONE_UNCHANGED);
     }
 
     if (userRepository.existsByPhone(newPhone)) {
-      throw new ConflictException("Ce numéro de téléphone est déjà utilisé par un autre compte");
+      throw new ConflictException(
+          "Ce numéro de téléphone est déjà utilisé par un autre compte",
+          ErrorCode.PHONE_ALREADY_USED);
     }
 
     // Supprimer les demandes précédentes de cet utilisateur
@@ -146,11 +151,12 @@ public class UserProfileServiceImpl implements UserProfileService {
                         "Aucune demande de changement en cours pour ce numéro"));
 
     if (changeReq.isExpired()) {
-      throw new BadRequestException("Le code OTP a expiré. Veuillez faire une nouvelle demande");
+      throw new BadRequestException(
+          "Le code OTP a expiré. Veuillez faire une nouvelle demande", ErrorCode.OTP_EXPIRED);
     }
 
     if (!changeReq.getOtpCode().equals(request.getCode())) {
-      throw new BadRequestException("Code OTP incorrect");
+      throw new BadRequestException("Code OTP incorrect", ErrorCode.OTP_INVALID);
     }
 
     String oldPhone = user.getPhone();

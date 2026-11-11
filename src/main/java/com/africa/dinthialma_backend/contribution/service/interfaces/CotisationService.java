@@ -1,12 +1,15 @@
 package com.africa.dinthialma_backend.contribution.service.interfaces;
 
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.CycleRecapCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.MembreTotalCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
+import com.africa.dinthialma_backend.contribution.dto.RefuseCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.UpdateCotisationRequest;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -51,6 +54,16 @@ public interface CotisationService {
    * @param tontineId identifiant de la tontine
    * @param cotisationId identifiant de la cotisation à valider
    */
+  /**
+   * Refuse une cotisation déclarée ({@code EN_ATTENTE} → {@code REFUSE}) avec un motif notifié au
+   * membre, qui peut ensuite déclarer à nouveau sur le même cycle.
+   *
+   * <p>Réservé au créateur de la tontine et au SUPER_ADMIN.
+   */
+  CotisationResponse refuseCotisation(
+      String keycloakId, UUID tontineId, UUID cotisationId, RefuseCotisationRequest request)
+      throws CustomException;
+
   CotisationResponse validateCotisation(String keycloakId, UUID tontineId, UUID cotisationId)
       throws CustomException;
 
@@ -64,9 +77,17 @@ public interface CotisationService {
    * @param tontineId identifiant de la tontine
    * @param cycleId filtre optionnel (null = tous les cycles)
    * @param membreId filtre optionnel admin (null = tous les membres)
+   * @param statuts filtre optionnel multi-valeurs (null ou vide = tous les statuts)
+   * @param q recherche libre : prénom, nom, téléphone du cotisant ou référence de transaction
    */
   Page<CotisationResponse> listCotisations(
-      String keycloakId, UUID tontineId, UUID cycleId, UUID membreId, Pageable pageable)
+      String keycloakId,
+      UUID tontineId,
+      UUID cycleId,
+      UUID membreId,
+      List<CotisationStatut> statuts,
+      String q,
+      Pageable pageable)
       throws CustomException;
 
   /**
@@ -74,6 +95,14 @@ public interface CotisationService {
    *
    * <p>Accès : propriétaire de la cotisation, admin de la tontine, SUPER_ADMIN.
    */
+  /**
+   * Export CSV des cotisations d'une tontine (créateur ou SUPER_ADMIN), triées par tour puis date ;
+   * filtres optionnels cycle et statuts. Au plus {@code CsvWriter.MAX_LIGNES} lignes.
+   */
+  byte[] exportCotisationsCsv(
+      String keycloakId, UUID tontineId, UUID cycleId, List<CotisationStatut> statuts)
+      throws CustomException;
+
   CotisationResponse getCotisation(String keycloakId, UUID tontineId, UUID cotisationId)
       throws CustomException;
 

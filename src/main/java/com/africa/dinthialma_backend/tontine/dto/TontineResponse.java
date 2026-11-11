@@ -1,6 +1,9 @@
 package com.africa.dinthialma_backend.tontine.dto;
 
+import com.africa.dinthialma_backend.member.codeList.MembreStatut;
+import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
+import com.africa.dinthialma_backend.tontine.codeList.MonRoleTontine;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
@@ -82,12 +85,53 @@ public class TontineResponse {
   @Schema(description = "Informations résumées du créateur")
   private CreateurInfo creePar;
 
+  // ─── Relation de l'appelant avec la tontine ─────────────────────────────
+
+  @Schema(
+      description =
+          "Rôle de l'appelant dans cette tontine (null dans les listes SUPER_ADMIN de la console)",
+      allowableValues = {"GESTIONNAIRE", "MEMBRE", "GESTIONNAIRE_ET_MEMBRE", "LECTURE"},
+      nullable = true)
+  private MonRoleTontine monRole;
+
+  @Schema(
+      description =
+          "UUID du membership de l'appelant (tontine_membres.id) – null s'il ne cotise pas",
+      nullable = true)
+  private UUID monMembreId;
+
+  @Schema(
+      description = "Statut du membership de l'appelant – null s'il ne cotise pas",
+      allowableValues = {"ACTIF", "SUSPENDU", "SORTI"},
+      nullable = true)
+  private MembreStatut monStatutMembre;
+
   @Schema(description = "Date de création de la tontine")
   private LocalDateTime createdAt;
 
   @Schema(description = "Date de dernière modification")
   private LocalDateTime updatedAt;
 
+  /**
+   * Construit la réponse enrichie de la relation de l'appelant avec la tontine.
+   *
+   * @param callerId UUID de l'utilisateur appelant
+   * @param monMembership membership de l'appelant dans cette tontine (null s'il ne cotise pas)
+   */
+  public static TontineResponse from(
+      Tontine tontine, int nombreMembresActuels, UUID callerId, TontineMembre monMembership) {
+    boolean createur =
+        tontine.getCreePar() != null && tontine.getCreePar().getId().equals(callerId);
+    TontineResponse response = from(tontine, nombreMembresActuels);
+    response.monRole = MonRoleTontine.of(createur, monMembership != null);
+    if (monMembership != null) {
+      response.monMembreId = monMembership.getId();
+      response.monStatutMembre = monMembership.getStatut();
+    }
+    return response;
+  }
+
+  /** Réponse sans relation de l'appelant (listes plateforme SUPER_ADMIN). */
   public static TontineResponse from(Tontine tontine, int nombreMembresActuels) {
     return TontineResponse.builder()
         .id(tontine.getId())
