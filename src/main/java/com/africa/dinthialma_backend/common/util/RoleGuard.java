@@ -2,6 +2,8 @@ package com.africa.dinthialma_backend.common.util;
 
 import com.africa.dinthialma_backend.auth.codeList.UserRole;
 import com.africa.dinthialma_backend.auth.dto.RequestUser;
+import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.UnAuthorizedException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Arrays;
@@ -14,11 +16,12 @@ public final class RoleGuard {
   /**
    * Exige que l'appelant possède au moins un des rôles Keycloak spécifiés.
    *
-   * @throws UnAuthorizedException si aucun rôle ne correspond
+   * @throws UnAuthorizedException si l'appelant n'est pas authentifié (401)
+   * @throws ForbiddenException si aucun rôle ne correspond (403)
    */
   public static RequestUser requireAnyRole(
       RequestHeaderParser parser, HttpServletRequest request, UserRole... roles)
-      throws UnAuthorizedException {
+      throws CustomException {
 
     RequestUser caller = parser.getRequestUser(request);
 
@@ -30,7 +33,7 @@ public final class RoleGuard {
         Arrays.stream(roles).anyMatch(role -> caller.getRoles().contains(role.getKeycloakRole()));
 
     if (!hasRole) {
-      throw new UnAuthorizedException(
+      throw new ForbiddenException(
           "Accès refusé – rôle requis : "
               + Arrays.stream(roles)
                   .map(UserRole::getKeycloakRole)
@@ -47,7 +50,7 @@ public final class RoleGuard {
    * @throws UnAuthorizedException si l'utilisateur n'est pas admin
    */
   public static RequestUser requireAdmin(RequestHeaderParser parser, HttpServletRequest request)
-      throws UnAuthorizedException {
+      throws CustomException {
     return requireAnyRole(parser, request, UserRole.SUPER_ADMIN, UserRole.ADMIN);
   }
 
@@ -57,7 +60,7 @@ public final class RoleGuard {
    * @throws UnAuthorizedException si l'utilisateur n'est pas super admin
    */
   public static RequestUser requireSuperAdmin(
-      RequestHeaderParser parser, HttpServletRequest request) throws UnAuthorizedException {
+      RequestHeaderParser parser, HttpServletRequest request) throws CustomException {
     return requireAnyRole(parser, request, UserRole.SUPER_ADMIN);
   }
 }
