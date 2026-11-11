@@ -59,6 +59,8 @@ public class SecurityConfig {
     "/v1/auth/forgot-password/reset",
     // CodeList – endpoint public pour peupler les selects frontend
     "/v1/code-list/type/**",
+    // Configuration publique (contact support, version minimale de l'app)
+    "/v1/public/config",
   };
 
   private final CustomAccessDenied customAccessDenied;
