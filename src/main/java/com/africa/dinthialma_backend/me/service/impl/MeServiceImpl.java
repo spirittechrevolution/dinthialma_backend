@@ -4,14 +4,18 @@ import com.africa.dinthialma_backend.auth.entity.User;
 import com.africa.dinthialma_backend.auth.repository.UserRepository;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
 import com.africa.dinthialma_backend.contribution.repository.CotisationSpecifications;
+import com.africa.dinthialma_backend.contribution.service.interfaces.CotisationService;
 import com.africa.dinthialma_backend.me.codeList.StatutCotisationDue;
 import com.africa.dinthialma_backend.me.dto.MeSummaryResponse;
+import com.africa.dinthialma_backend.me.dto.ValidationGroupeeRequest;
+import com.africa.dinthialma_backend.me.dto.ValidationGroupeeResponse;
 import com.africa.dinthialma_backend.me.service.interfaces.MeService;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
@@ -26,17 +30,21 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -47,6 +55,7 @@ public class MeServiceImpl implements MeService {
   private final TontineMembreRepository membreRepository;
   private final CycleTontineRepository cycleRepository;
   private final CycleGagnantRepository gagnantRepository;
+  private final CotisationService cotisationService;
 
   // ─── Résumé « Je cotise » ────────────────────────────────────────────────
 
@@ -245,6 +254,68 @@ public class MeServiceImpl implements MeService {
             CotisationSpecifications.recherche(q));
 
     return cotisationRepository.findAll(spec, pageable).map(CotisationResponse::from);
+  }
+
+  // ─── Validation groupée ──────────────────────────────────────────────────
+
+  /**
+   * Pas de transaction englobante : chaque validation s'exécute dans sa propre transaction (via le
+   * proxy de {@link CotisationService}), si bien qu'un échec n'annule pas les autres.
+   */
+  @Override
+  @Transactional(propagation = Propagation.NOT_SUPPORTED)
+  public ValidationGroupeeResponse validerCotisations(
+      String keycloakId, ValidationGroupeeRequest request) throws CustomException {
+
+    findUserByKeycloakId(keycloakId);
+    List<UUID> ids = new ArrayList<>(new LinkedHashSet<>(request.getCotisationIds()));
+    List<ValidationGroupeeResponse.Resultat> resultats = new ArrayList<>();
+
+    for (UUID id : ids) {
+      try {
+        Cotisation cotisation =
+            cotisationRepository
+                .findByIdAndDeletedAtIsNull(id)
+                .orElseThrow(
+                    () -> new NotFoundException(ResponseMessageConstants.CONTRIBUTION_NOT_FOUND));
+        CotisationResponse validee =
+            cotisationService.validateCotisation(keycloakId, cotisation.getTontine().getId(), id);
+        resultats.add(
+            ValidationGroupeeResponse.Resultat.builder()
+                .cotisationId(id)
+                .succes(true)
+                .statut(validee.getStatut())
+                .build());
+      } catch (CustomException e) {
+        resultats.add(
+            echec(
+                id,
+                e.getCode() != null ? e.getCode() : ErrorCode.fromStatus(e.getStatus()),
+                e.getMessage()));
+      } catch (Exception e) {
+        log.error("Validation groupée : échec inattendu pour cotisationId={}", id, e);
+        resultats.add(echec(id, ErrorCode.INTERNAL_ERROR, "Erreur interne du serveur"));
+      }
+    }
+
+    int validees =
+        (int) resultats.stream().filter(ValidationGroupeeResponse.Resultat::isSucces).count();
+    log.info("Validation groupée – {} / {} cotisations validées", validees, ids.size());
+    return ValidationGroupeeResponse.builder()
+        .total(ids.size())
+        .validees(validees)
+        .echecs(ids.size() - validees)
+        .resultats(resultats)
+        .build();
+  }
+
+  private static ValidationGroupeeResponse.Resultat echec(UUID id, ErrorCode code, String message) {
+    return ValidationGroupeeResponse.Resultat.builder()
+        .cotisationId(id)
+        .succes(false)
+        .code(code)
+        .message(message)
+        .build();
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────

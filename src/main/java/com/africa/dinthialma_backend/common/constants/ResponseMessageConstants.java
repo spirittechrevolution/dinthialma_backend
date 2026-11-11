@@ -114,6 +114,7 @@ public final class ResponseMessageConstants {
 
   // Espace personnel (/v1/me)
   public static final String ME_SUMMARY_SUCCESS = "Résumé de mes cotisations récupéré avec succès";
+  public static final String ME_VALIDATION_GROUPEE_SUCCESS = "Validation groupée traitée";
   public static final String ME_GESTION_COTISATIONS_SUCCESS =
       "Paiements de mes tontines gérées récupérés avec succès";
 

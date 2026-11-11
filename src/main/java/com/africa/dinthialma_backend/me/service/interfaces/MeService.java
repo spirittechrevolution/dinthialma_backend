@@ -4,6 +4,8 @@ import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.me.dto.MeSummaryResponse;
+import com.africa.dinthialma_backend.me.dto.ValidationGroupeeRequest;
+import com.africa.dinthialma_backend.me.dto.ValidationGroupeeResponse;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -11,6 +13,14 @@ import org.springframework.data.domain.Pageable;
 
 /** Vues transverses de l'utilisateur connecté, toutes tontines confondues ({@code /v1/me}). */
 public interface MeService {
+
+  /**
+   * Valide un lot de cotisations EN_ATTENTE des tontines gérées par l'appelant. Chaque cotisation
+   * est traitée indépendamment (mêmes règles et notifications qu'une validation unitaire) ; le
+   * résultat est rendu par identifiant.
+   */
+  ValidationGroupeeResponse validerCotisations(String keycloakId, ValidationGroupeeRequest request)
+      throws CustomException;
 
   /**
    * Résumé « Je cotise » : totaux, jackpots reçus et cotisation due du tour en cours pour chaque

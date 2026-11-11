@@ -7,6 +7,8 @@ import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.me.dto.MeSummaryResponse;
+import com.africa.dinthialma_backend.me.dto.ValidationGroupeeRequest;
+import com.africa.dinthialma_backend.me.dto.ValidationGroupeeResponse;
 import com.africa.dinthialma_backend.me.service.interfaces.MeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -17,6 +19,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +29,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -80,6 +85,41 @@ public class MeController {
 
     return ResponseEntity.ok(
         new CustomResponse(SUCCESS, OK, ResponseMessageConstants.ME_SUMMARY_SUCCESS, summary));
+  }
+
+  // ─── Je gère : validation groupée ────────────────────────────────────────
+
+  @PostMapping("/gestion/cotisations/valider")
+  @Operation(
+      summary = "Valider plusieurs cotisations en une fois (« Tout valider »)",
+      description =
+          "🔒 Rôles : tout utilisateur authentifié — chaque cotisation doit appartenir à une"
+              + " tontine dont l'appelant est le **créateur** (ou être SUPER_ADMIN).\n\n"
+              + "Corps : `{ \"cotisationIds\": [...] }` (1 à 100, doublons ignorés, plusieurs"
+              + " tontines possibles).\n\n"
+              + "Chaque cotisation est validée **indépendamment** (EN_ATTENTE → VALIDE, mêmes"
+              + " notifications qu'une validation unitaire) : un échec n'annule pas les autres."
+              + " La réponse est toujours 200 et détaille le résultat par identifiant, avec un"
+              + " `code` stable en cas d'échec (`COTISATION_NOT_PENDING`, `FORBIDDEN`,"
+              + " `NOT_FOUND`…).")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Résultat par cotisation",
+        content = @Content(schema = @Schema(implementation = ValidationGroupeeResponse.class))),
+    @ApiResponse(responseCode = "400", description = "Liste vide ou > 100 (VALIDATION_ERROR)"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+  })
+  public ResponseEntity<CustomResponse> validerCotisations(
+      @RequestBody @Valid ValidationGroupeeRequest request, HttpServletRequest httpRequest)
+      throws CustomException {
+
+    String keycloakId = headerParser.extractKeycloakId(httpRequest);
+    ValidationGroupeeResponse response = meService.validerCotisations(keycloakId, request);
+
+    return ResponseEntity.ok(
+        new CustomResponse(
+            SUCCESS, OK, ResponseMessageConstants.ME_VALIDATION_GROUPEE_SUCCESS, response));
   }
 
   // ─── Je gère : paiements de mes tontines ─────────────────────────────────
