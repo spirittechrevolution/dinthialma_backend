@@ -20,8 +20,14 @@ public class CotisationResponse {
   @Schema(description = "UUID de la tontine parente")
   private UUID tontineId;
 
+  @Schema(description = "Nom de la tontine parente", example = "Tontine Famille Diallo")
+  private String tontineNom;
+
   @Schema(description = "UUID du cycle concerné")
   private UUID cycleId;
+
+  @Schema(description = "Numéro du cycle concerné", example = "5")
+  private Integer numeroCycle;
 
   @Schema(description = "Informations du cotisant")
   private MembreInfo membre;
@@ -99,7 +105,9 @@ public class CotisationResponse {
     return CotisationResponse.builder()
         .id(cotisation.getId())
         .tontineId(cotisation.getTontine() != null ? cotisation.getTontine().getId() : null)
+        .tontineNom(cotisation.getTontine() != null ? cotisation.getTontine().getNom() : null)
         .cycleId(cotisation.getCycle() != null ? cotisation.getCycle().getId() : null)
+        .numeroCycle(cotisation.getCycle() != null ? cotisation.getCycle().getNumeroCycle() : null)
         .membre(membreInfo)
         .montant(cotisation.getMontant())
         .methodePaiement(cotisation.getMethodePaiement())

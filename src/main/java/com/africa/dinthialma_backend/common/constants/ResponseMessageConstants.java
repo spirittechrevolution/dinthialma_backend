@@ -111,6 +111,11 @@ public final class ResponseMessageConstants {
   public static final String COMMISSION_ALREADY_EXISTS =
       "Une commission de ce type existe déjà sur cette tontine";
 
+  // Espace personnel (/v1/me)
+  public static final String ME_SUMMARY_SUCCESS = "Résumé de mes cotisations récupéré avec succès";
+  public static final String ME_GESTION_COTISATIONS_SUCCESS =
+      "Paiements de mes tontines gérées récupérés avec succès";
+
   // Admin Dashboard
   public static final String ADMIN_DASHBOARD_SUCCESS = "Dashboard récupéré avec succès";
   public static final String ADMIN_MY_DASHBOARD_SUCCESS =
