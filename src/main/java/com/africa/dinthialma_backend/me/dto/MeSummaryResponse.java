@@ -169,6 +169,12 @@ public class MeSummaryResponse {
 
     @Schema(description = "UUID de ma cotisation sur ce tour – null si A_PAYER", nullable = true)
     private UUID cotisationId;
+
+    @Schema(
+        description = "A_PAYER après un refus : motif du dernier refus sur ce tour (null sinon)",
+        example = "Transfert non reçu",
+        nullable = true)
+    private String motifDernierRefus;
   }
 
   @Schema(description = "Gestionnaire d'une tontine")

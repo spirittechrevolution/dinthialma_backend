@@ -171,10 +171,7 @@ public class SchedulerService {
     } else {
       // Rappel journalier : uniquement les membres qui n'ont pas cotisé dans ce sous-cycle
       membresActifs.stream()
-          .filter(
-              m ->
-                  !cotisationRepository.existsByCycle_IdAndMembre_IdAndDeletedAtIsNull(
-                      cycle.getId(), m.getId()))
+          .filter(m -> !cotisationRepository.existsActiveByCycleAndMembre(cycle.getId(), m.getId()))
           .forEach(
               m -> {
                 BigDecimal totalCotise =

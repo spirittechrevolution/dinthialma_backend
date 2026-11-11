@@ -61,12 +61,16 @@ public interface CotisationRepository
   Optional<Cotisation> findByIdAndDeletedAtIsNull(UUID id);
 
   /**
-   * Cotisation d'un membre pour un cycle précis (contrainte unicité {@code uq_cot_cycle_membre}).
+   * Vrai si le membre a une cotisation <b>active</b> sur le cycle (tout statut sauf REFUSE) :
+   * pendant applicatif de l'index unique partiel {@code uq_cot_cycle_membre_actif} (V027).
    */
-  Optional<Cotisation> findByCycle_IdAndMembre_IdAndDeletedAtIsNull(UUID cycleId, UUID membreId);
+  default boolean existsActiveByCycleAndMembre(UUID cycleId, UUID membreId) {
+    return existsByCycle_IdAndMembre_IdAndStatutNotAndDeletedAtIsNull(
+        cycleId, membreId, CotisationStatut.REFUSE);
+  }
 
-  /** Vérifie si un membre a déjà enregistré une cotisation pour un cycle. */
-  boolean existsByCycle_IdAndMembre_IdAndDeletedAtIsNull(UUID cycleId, UUID membreId);
+  boolean existsByCycle_IdAndMembre_IdAndStatutNotAndDeletedAtIsNull(
+      UUID cycleId, UUID membreId, CotisationStatut statut);
 
   /** Cotisations par statut pour une tontine. */
   List<Cotisation> findByTontine_IdAndStatutAndDeletedAtIsNull(

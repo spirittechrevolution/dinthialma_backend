@@ -19,6 +19,7 @@ import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.CycleRecapCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.MembreTotalCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
+import com.africa.dinthialma_backend.contribution.dto.RefuseCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.UpdateCotisationRequest;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
@@ -92,8 +93,7 @@ public class CotisationServiceImpl implements CotisationService {
     }
 
     // Unicité cycle/membre
-    if (cotisationRepository.existsByCycle_IdAndMembre_IdAndDeletedAtIsNull(
-        cycle.getId(), membre.getId())) {
+    if (cotisationRepository.existsActiveByCycleAndMembre(cycle.getId(), membre.getId())) {
       throw new ConflictException(
           "Vous avez déjà enregistré une cotisation pour ce cycle",
           ErrorCode.COTISATION_ALREADY_EXISTS);
@@ -215,8 +215,7 @@ public class CotisationServiceImpl implements CotisationService {
           ErrorCode.NO_CYCLE_IN_PROGRESS);
     }
 
-    if (cotisationRepository.existsByCycle_IdAndMembre_IdAndDeletedAtIsNull(
-        cycle.getId(), membre.getId())) {
+    if (cotisationRepository.existsActiveByCycleAndMembre(cycle.getId(), membre.getId())) {
       throw new ConflictException(
           "Une cotisation existe déjà pour ce membre sur ce cycle",
           ErrorCode.COTISATION_ALREADY_EXISTS);
@@ -430,6 +429,89 @@ public class CotisationServiceImpl implements CotisationService {
     return CotisationResponse.from(saved);
   }
 
+  // ─── Refus ───────────────────────────────────────────────────────────────
+
+  @Override
+  public CotisationResponse refuseCotisation(
+      String keycloakId, UUID tontineId, UUID cotisationId, RefuseCotisationRequest request)
+      throws CustomException {
+
+    User caller = findUserByKeycloakId(keycloakId);
+    Tontine tontine = findTontineById(tontineId);
+    assertIsCreatorOrSuperAdmin(caller, tontine);
+
+    Cotisation cotisation =
+        cotisationRepository
+            .findByIdAndDeletedAtIsNull(cotisationId)
+            .orElseThrow(
+                () -> new NotFoundException(ResponseMessageConstants.CONTRIBUTION_NOT_FOUND));
+
+    if (!cotisation.getTontine().getId().equals(tontineId)) {
+      throw new NotFoundException(ResponseMessageConstants.CONTRIBUTION_NOT_FOUND);
+    }
+
+    if (cotisation.getStatut() != CotisationStatut.EN_ATTENTE) {
+      throw new BadRequestException(
+          "Seule une cotisation EN_ATTENTE peut être refusée (statut actuel : "
+              + cotisation.getStatut()
+              + ")",
+          ErrorCode.COTISATION_NOT_PENDING);
+    }
+
+    String motif = request.getMotif().trim();
+    cotisation.setStatut(CotisationStatut.REFUSE);
+    cotisation.setMotifRefus(motif);
+    cotisation.setRefusePar(caller);
+    cotisation.setDateRefus(LocalDateTime.now());
+
+    Cotisation saved = cotisationRepository.save(cotisation);
+    auditService.log(
+        caller,
+        "cotisations",
+        cotisationId,
+        "statut",
+        CotisationStatut.EN_ATTENTE.name(),
+        CotisationStatut.REFUSE.name());
+    log.info("Cotisation refusée – cotisationId={} par userId={}", cotisationId, caller.getId());
+
+    String montantStr = saved.getMontant().toPlainString() + " FCFA";
+    String tontineName = saved.getTontine().getNom();
+    int numCycle = saved.getCycle().getNumeroCycle();
+
+    // Notification in-app membre — cotisation refusée (non bloquant)
+    notificationService.notify(
+        saved.getMembre().getUser().getId(),
+        NotificationType.COTISATION_REFUSEE,
+        "Cotisation refusée",
+        "Votre paiement de "
+            + montantStr
+            + " a été refusé · "
+            + tontineName
+            + " · Motif : "
+            + motif
+            + ". Vous pouvez déclarer un nouveau paiement.",
+        tontineId);
+
+    // WhatsApp membre (non bloquant ; un pré-inscrit n'a pas forcément l'application)
+    try {
+      whatsappService.send(
+          saved.getMembre().getUser().getPhone(),
+          "❌ *Dinthialma* – Votre cotisation de "
+              + montantStr
+              + " pour la tontine *"
+              + tontineName
+              + "* (cycle "
+              + numCycle
+              + ") a été refusée.\nMotif : "
+              + motif
+              + "\nVous pouvez déclarer un nouveau paiement.");
+    } catch (Exception e) {
+      log.warn("Notif WA membre (refus) non envoyée : {}", e.getMessage());
+    }
+
+    return CotisationResponse.from(saved);
+  }
+
   // ─── Liste ───────────────────────────────────────────────────────────────
 
   @Override
@@ -534,8 +616,9 @@ public class CotisationServiceImpl implements CotisationService {
       throw new NotFoundException(ResponseMessageConstants.CONTRIBUTION_NOT_FOUND);
     }
 
-    // EN_RETARD → cycle fermé, modification interdite
-    if (cotisation.getStatut() == CotisationStatut.EN_RETARD) {
+    // EN_RETARD → cycle fermé ; REFUSE → statut final : modification interdite
+    if (cotisation.getStatut() == CotisationStatut.EN_RETARD
+        || cotisation.getStatut() == CotisationStatut.REFUSE) {
       throw new BadRequestException(
           ResponseMessageConstants.CONTRIBUTION_CANNOT_EDIT, ErrorCode.COTISATION_NOT_EDITABLE);
     }
@@ -621,7 +704,8 @@ public class CotisationServiceImpl implements CotisationService {
         cotisationRepository
             .findByCycle_IdAndMembre_IdInAndDeletedAtIsNull(cycleId, membreIds)
             .stream()
-            .collect(Collectors.toMap(c -> c.getMembre().getId(), c -> c));
+            .collect(
+                Collectors.toMap(c -> c.getMembre().getId(), c -> c, Cotisation::plusPertinente));
 
     return membres.map(
         m -> CycleRecapCotisationResponse.from(m, cotisationByMembre.get(m.getId())));

@@ -7,6 +7,7 @@ import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.CycleRecapCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.MembreTotalCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
+import com.africa.dinthialma_backend.contribution.dto.RefuseCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.UpdateCotisationRequest;
 import java.util.List;
 import java.util.UUID;
@@ -53,6 +54,16 @@ public interface CotisationService {
    * @param tontineId identifiant de la tontine
    * @param cotisationId identifiant de la cotisation à valider
    */
+  /**
+   * Refuse une cotisation déclarée ({@code EN_ATTENTE} → {@code REFUSE}) avec un motif notifié au
+   * membre, qui peut ensuite déclarer à nouveau sur le même cycle.
+   *
+   * <p>Réservé au créateur de la tontine et au SUPER_ADMIN.
+   */
+  CotisationResponse refuseCotisation(
+      String keycloakId, UUID tontineId, UUID cotisationId, RefuseCotisationRequest request)
+      throws CustomException;
+
   CotisationResponse validateCotisation(String keycloakId, UUID tontineId, UUID cotisationId)
       throws CustomException;
 

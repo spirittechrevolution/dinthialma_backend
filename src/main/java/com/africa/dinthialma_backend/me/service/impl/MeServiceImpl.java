@@ -101,7 +101,9 @@ public class MeServiceImpl implements MeService {
             : cotisationRepository
                 .findByCycle_IdInAndMembre_IdInAndDeletedAtIsNull(cycleEnCoursIds, membreIds)
                 .stream()
-                .collect(Collectors.toMap(c -> c.getMembre().getId(), c -> c, (a, b) -> a));
+                .collect(
+                    Collectors.toMap(
+                        c -> c.getMembre().getId(), c -> c, Cotisation::plusPertinente));
 
     BigDecimal totalValide = BigDecimal.ZERO;
     BigDecimal totalEnAttente = BigDecimal.ZERO;
@@ -187,6 +189,13 @@ public class MeServiceImpl implements MeService {
       return null;
     }
 
+    // Seul un refus sur ce tour : le membre doit déclarer à nouveau
+    String motifRefus = null;
+    if (cotisation != null && cotisation.getStatut() == CotisationStatut.REFUSE) {
+      motifRefus = cotisation.getMotifRefus();
+      cotisation = null;
+    }
+
     StatutCotisationDue statut = StatutCotisationDue.A_PAYER;
     if (cotisation != null) {
       statut =
@@ -202,6 +211,7 @@ public class MeServiceImpl implements MeService {
         .dateLimite(cycle.getDateFin())
         .statut(statut)
         .cotisationId(cotisation != null ? cotisation.getId() : null)
+        .motifDernierRefus(motifRefus)
         .build();
   }
 

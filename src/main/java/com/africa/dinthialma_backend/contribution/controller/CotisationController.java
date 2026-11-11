@@ -10,6 +10,7 @@ import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.CycleRecapCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.MembreTotalCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
+import com.africa.dinthialma_backend.contribution.dto.RefuseCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.UpdateCotisationRequest;
 import com.africa.dinthialma_backend.contribution.service.interfaces.CotisationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -310,6 +311,55 @@ public class CotisationController {
 
     return ResponseEntity.ok(
         new CustomResponse(SUCCESS, OK, ResponseMessageConstants.CONTRIBUTION_VALIDATED, response));
+  }
+
+  // ─── Refus ───────────────────────────────────────────────────────────────
+
+  @PutMapping("/{cotisationId}/refuser")
+  @Operation(
+      summary = "Refuser une cotisation déclarée",
+      description =
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "L'admin rejette un paiement déclaré (ex : transfert non reçu) : statut"
+              + " **EN_ATTENTE → REFUSE**, avec un `motif` obligatoire.\n\n"
+              + "- Remplit `motifRefus`, `refusePar` et `dateRefus`.\n"
+              + "- Le membre reçoit une notification `COTISATION_REFUSEE` (in-app + WhatsApp).\n"
+              + "- Une cotisation REFUSE n'entre dans aucun total et **ne bloque pas** une"
+              + " nouvelle déclaration du membre sur le même cycle.\n\n"
+              + "Erreur `COTISATION_NOT_PENDING` si la cotisation n'est pas EN_ATTENTE.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Cotisation refusée",
+        content = @Content(schema = @Schema(implementation = CotisationResponse.class))),
+    @ApiResponse(
+        responseCode = "400",
+        description = "Motif manquant (VALIDATION_ERROR) ou cotisation pas EN_ATTENTE"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+    @ApiResponse(responseCode = "404", description = "Tontine ou cotisation introuvable"),
+  })
+  public ResponseEntity<CustomResponse> refuseCotisation(
+      @Parameter(
+              description = "UUID de la tontine",
+              example = "550e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID tontineId,
+      @Parameter(
+              description = "UUID de la cotisation à refuser",
+              example = "880e8400-e29b-41d4-a716-446655440000")
+          @PathVariable
+          UUID cotisationId,
+      @RequestBody @Valid RefuseCotisationRequest request,
+      HttpServletRequest httpRequest)
+      throws CustomException {
+
+    String keycloakId = headerParser.extractKeycloakId(httpRequest);
+    CotisationResponse response =
+        cotisationService.refuseCotisation(keycloakId, tontineId, cotisationId, request);
+
+    return ResponseEntity.ok(
+        new CustomResponse(SUCCESS, OK, ResponseMessageConstants.CONTRIBUTION_REFUSED, response));
   }
 
   // ─── Modification ─────────────────────────────────────────────────────────

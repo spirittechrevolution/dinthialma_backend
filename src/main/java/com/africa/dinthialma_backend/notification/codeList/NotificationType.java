@@ -8,6 +8,9 @@ public enum NotificationType {
   /** Une cotisation a été validée par l'admin (destinataire : membre cotisant). */
   COTISATION_VALIDEE,
 
+  /** Une cotisation déclarée a été refusée par l'admin, avec motif (destinataire : membre). */
+  COTISATION_REFUSEE,
+
   /** Le jackpot d'un cycle ROTATIVE a été attribué (destinataire : gagnant + admin). */
   JACKPOT_DISTRIBUE,
 

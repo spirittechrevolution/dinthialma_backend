@@ -102,6 +102,7 @@
 | `/admin` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 saisie admin pour n'importe quel membre (y compris PRE_ENROLLED), créée directement VALIDE |
 | `/{id}` | PATCH | ❌ | ❌ | ✅² | ✅ | 🔒 correction (champs non-null) : EN_ATTENTE ou VALIDE + cycle EN_COURS ; refusé si cycle TERMINE ou EN_RETARD |
 | `/{id}/valider` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 EN_ATTENTE → VALIDE |
+| `/{id}/refuser` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 EN_ATTENTE → REFUSE, `motif` obligatoire ; notifie le membre (`COTISATION_REFUSEE`) ; le membre peut redéclarer sur le même cycle |
 | `/recap/{cycleId}` | GET | ❌ | ❌ | ✅² | ✅ | 🔒 statut de cotisation par membre pour un cycle (pageable, SORTI exclus) |
 | `/recap-total` | GET | ❌ | ❌ | ✅² | ✅ | 🔒 total VALIDÉ cumulé par membre, tous cycles (pageable, SORTI exclus) |
 
@@ -228,7 +229,7 @@ src/main/java/com/africa/dinthialma_backend/
 │       ├── interfaces/ CotisationService
 │       └── impl/       CotisationServiceImpl
 ├── notification/   ✅ SMS (LAfricaMobile) + notifications in-app
-│   ├── codeList/       NotificationType (12 valeurs)
+│   ├── codeList/       NotificationType (13 valeurs)
 │   ├── controller/     NotificationController
 │   ├── dto/            NotificationResponse
 │   ├── entity/         UserNotification
@@ -265,9 +266,12 @@ src/main/java/com/africa/dinthialma_backend/
 | 2 | Toutes les autres routes | JWT Keycloak obligatoire |
 
 Routes publiques : `/api-docs/**`, `/swagger-ui/**`, `/actuator/health`,
-`/v1/auth/login`, `/v1/auth/logout`, `/v1/auth/register/**`,
+`/v1/auth/login`, `/v1/auth/logout`, `/v1/auth/refresh`, `/v1/auth/register/**`,
 `/v1/auth/forgot-password/**`, `/v1/auth/login-pin`, `/v1/auth/pin/reset/**`,
 `/v1/code-list/type/**`
+
+> ⚠️ Les routes de `WHITELIST` (`SecurityConfig`) doivent porter le préfixe complet `/v1/...`
+> (le context path `/api` est exclu). Une entrée sans préfixe est silencieusement inopérante.
 
 ### Vérification des droits — pattern service
 
@@ -296,6 +300,12 @@ private boolean isSuperAdmin(User user) {
 - **Soft delete** : `deletedAt` (`LocalDateTime`, null = actif) – jamais de suppression physique
 - **Réponses API** : toujours `CustomResponse(status, statusCode, message, data)`
 - **Exceptions** : hiérarchie `CustomException` → `ApiExceptionHandler` → JSON normalisé
+- **Codes d'erreur** : toute erreur porte `code` (enum `ErrorCode`), absent sur les succès.
+  Pour un cas que le front doit distinguer, lever l'exception avec un code métier
+  (`new ConflictException(msg, ErrorCode.COTISATION_ALREADY_EXISTS)`) ; sinon le handler
+  déduit un code générique du statut (`NOT_FOUND`, `FORBIDDEN`…). Détails éventuels dans
+  `data` (ex. `PIN_LOCKED` → `data.retryAfterSeconds`). On **ajoute** des valeurs à
+  `ErrorCode`, on n'en renomme ni n'en supprime jamais.
 - **Services** : interface dans `service/interfaces/` + impl dans `service/impl/` ; `@Transactional` sur écriture
 - **Phone** : toujours stocké SANS le `+` (normalisé via `PhoneUtils.normalize()` en entrée)
 - **JPQL** : pas de `SELECT DISTINCT` dans les repositories — PostgreSQL gère la déduplication nativement
@@ -421,8 +431,9 @@ public class ModuleController {
 | V024 | `add_nombre_gagnants_and_cycle_gagnants.sql` | `tontines.nombre_gagnants`, table `cycle_gagnants` |
 | V025 | `add_evenementielle_fields_to_tontines.sql` | `tontines.tontine_type`, `date_echeance`, `nom_evenement`, `montant_libre`, `montant_minimum` ; `ordre_beneficiaire` nullable |
 | V026 | `create_user_notifications.sql` | `user_notifications` (id, user_id FK, type, title, body, is_read, tontine_id, timestamps, deleted_at) ; index sur (user_id, is_read) et createdAt DESC |
+| V027 | `add_refus_to_cotisations.sql` | `cotisations.motif_refus`, `refuse_par`, `date_refus` ; `uq_cot_cycle_membre` remplacée par l'index unique partiel `uq_cot_cycle_membre_actif` (`WHERE deleted_at IS NULL AND statut <> 'REFUSE'`) |
 
-Prochaine version disponible : **V027**
+Prochaine version disponible : **V028**
 
 ---
 
@@ -491,6 +502,7 @@ Prochaine version disponible : **V027**
 | Saisie admin directe (VALIDE, membres PRE_ENROLLED inclus) | ✅ | 🔒 créateur + SUPER_ADMIN |
 | Modifier cotisation (PATCH, selon statut / cycle) | ✅ | 🔒 créateur + SUPER_ADMIN |
 | Valider cotisation | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Refuser cotisation (motif, redéclaration possible) | ✅ | 🔒 créateur + SUPER_ADMIN |
 | Liste cotisations (filtres cycle + membre) | ✅ | 🔒 MEMBER voit les siennes ; admin voit tout |
 | Détail cotisation | ✅ | 🔒 propriétaire + créateur + SUPER_ADMIN |
 | Récapitulatif par membre pour un cycle (paginé) | ✅ | 🔒 créateur + SUPER_ADMIN |
@@ -564,13 +576,14 @@ Prochaine version disponible : **V027**
 | Marquer tout lu (bulk `@Modifying`) | ✅ | 🔒 tout auth |
 | `notify()` non-bloquant (try/catch interne, jamais de rollback) | ✅ | INFRA |
 
-#### Mapping événements → `NotificationType` (12 valeurs)
+#### Mapping événements → `NotificationType` (13 valeurs)
 
 | Événement | Type | Destinataire |
 |-----------|------|--------------|
 | Membre soumet une cotisation | `PAIEMENT_RECU` | Admin de la tontine |
 | Membre soumet une cotisation | `COTISATION_SOUMISE` | Membre lui-même |
 | Cotisation validée par admin | `COTISATION_VALIDEE` | Membre cotisant |
+| Cotisation refusée par admin (avec motif) | `COTISATION_REFUSEE` | Membre cotisant |
 | Jackpot distribué (ROTATIVE) | `JACKPOT_DISTRIBUE` | Gagnant + admin |
 | Distribution finale (EVENEMENTIELLE) | `DISTRIBUTION_FINALE` | Chaque membre |
 | Cycle clôturé avec retards | `PAIEMENT_EN_RETARD` | Admin |
@@ -686,7 +699,7 @@ cd docker && docker compose up -d
       → processEvenementielleReminders() : jours clés J-30/7/3/1
   7.2 UserNotification entity + repository + service + controller       ✅ FAIT
       → Migration V026 : table user_notifications
-      → NotificationType enum (12 valeurs)
+      → NotificationType enum (12 valeurs, 13 depuis B18)
       → notify() non-bloquant (try/catch interne)
       → 4 endpoints : GET / · GET /unread-count · PATCH /{id}/read · PATCH /read-all
       → Bulk markAllAsRead via @Modifying @Query (non itératif)
@@ -707,8 +720,11 @@ cd docker && docker compose up -d
   B05 my-dashboard : collecté / attendu du tour en cours + gagnantsADesigner       ✅
   B04 GET /v1/me/summary (résumé « Je cotise »)                                    ✅
   B08 Docs OpenAPI : schémas login / refresh / login-pin / register / notifications ✅
-  → Prochains lots : B02 codes d'erreur stables ; B18 refus de paiement (index
-    partiel à la place de uq_cot_cycle_membre) ; B14, B15, B11, B13, B09, B10, B19
+  B02 Codes d'erreur stables (champ `code`, enum ErrorCode)                     ✅
+      → fix : /v1/auth/refresh et /v1/auth/pin/reset/** réellement publics
+      → fix : 400/404/405 au lieu de 500 (JSON illisible, route inconnue…)
+  B18 Refus de paiement : PUT /cotisations/{id}/refuser + V027 (index partiel)  ✅
+  → Prochains lots : B14, B15, B11, B13, B09, B10, B19 ; B03 (diagnostic encodage)
 ```
 
 ---
