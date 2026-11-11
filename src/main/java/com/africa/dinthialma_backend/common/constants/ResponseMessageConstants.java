@@ -124,6 +124,7 @@ public final class ResponseMessageConstants {
   public static final String ME_SESSIONS_SUCCESS = "Appareils connectés récupérés avec succès";
   public static final String ME_SESSION_REVOKED = "Appareil déconnecté";
   public static final String SESSION_NOT_FOUND = "Session introuvable";
+  public static final String PUBLIC_CONFIG_SUCCESS = "Configuration publique récupérée";
   public static final String ME_GESTION_COTISATIONS_SUCCESS =
       "Paiements de mes tontines gérées récupérés avec succès";
 

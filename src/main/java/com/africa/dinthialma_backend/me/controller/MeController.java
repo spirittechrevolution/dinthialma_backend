@@ -3,6 +3,7 @@ package com.africa.dinthialma_backend.me.controller;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
+import com.africa.dinthialma_backend.common.util.CsvExport;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
@@ -133,6 +134,30 @@ public class MeController {
 
     return ResponseEntity.ok(
         new CustomResponse(SUCCESS, OK, ResponseMessageConstants.ME_ACTIVITE_SUCCESS, page));
+  }
+
+  @GetMapping("/activite/export")
+  @Operation(
+      summary = "Exporter mon fil d'activité en CSV",
+      description =
+          "🔒 Rôles : tout utilisateur authentifié.\n\n"
+              + "Mêmes filtres que `/v1/me/activite` (`mode`, `tontineId`, `type`, `statut`)."
+              + " CSV `;` UTF-8 avec BOM, 10 000 lignes max. Seul `format=csv` est pris en"
+              + " charge.")
+  @ApiResponse(responseCode = "200", description = "Fichier CSV")
+  public ResponseEntity<byte[]> exportActivite(
+      @RequestParam(defaultValue = "csv") String format,
+      @RequestParam(defaultValue = "COTISE") ModeActivite mode,
+      @RequestParam(required = false) UUID tontineId,
+      @RequestParam(required = false) TypeActivite type,
+      @RequestParam(required = false) CotisationStatut statut,
+      HttpServletRequest httpRequest)
+      throws CustomException {
+    CsvExport.verifierFormat(format);
+    byte[] csv =
+        meService.exportActiviteCsv(
+            headerParser.extractKeycloakId(httpRequest), mode, tontineId, type, statut);
+    return CsvExport.reponse(csv, "activite-" + mode.name().toLowerCase() + ".csv");
   }
 
   // ─── Je cotise : mes jackpots ────────────────────────────────────────────

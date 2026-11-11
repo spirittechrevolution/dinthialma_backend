@@ -13,6 +13,7 @@ import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
+import com.africa.dinthialma_backend.common.util.CsvWriter;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
@@ -47,7 +48,9 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -560,6 +563,63 @@ public class CotisationServiceImpl implements CotisationService {
             CotisationSpecifications.recherche(q));
 
     return cotisationRepository.findAll(spec, pageable).map(CotisationResponse::from);
+  }
+
+  // ─── Export CSV (B24) ─────────────────────────────────────────────────────
+
+  @Override
+  @Transactional(readOnly = true)
+  public byte[] exportCotisationsCsv(
+      String keycloakId, UUID tontineId, UUID cycleId, List<CotisationStatut> statuts)
+      throws CustomException {
+    User caller = findUserByKeycloakId(keycloakId);
+    Tontine tontine = findTontineById(tontineId);
+    assertIsCreatorOrSuperAdmin(caller, tontine);
+
+    Specification<Cotisation> spec =
+        Specification.allOf(
+            CotisationSpecifications.nonSupprimee(),
+            CotisationSpecifications.deTontine(tontineId),
+            CotisationSpecifications.deCycle(cycleId),
+            CotisationSpecifications.statutParmi(statuts));
+    List<Cotisation> cotisations =
+        cotisationRepository
+            .findAll(
+                spec,
+                PageRequest.of(
+                    0, CsvWriter.MAX_LIGNES, Sort.by("cycle.numeroCycle", "createdAt").ascending()))
+            .getContent();
+
+    CsvWriter csv =
+        new CsvWriter()
+            .ligne(
+                "Tour",
+                "Membre",
+                "Téléphone",
+                "Montant (FCFA)",
+                "Statut",
+                "Méthode",
+                "Référence",
+                "Déclarée le",
+                "Validée le",
+                "Motif refus",
+                "Note");
+    for (Cotisation c : cotisations) {
+      var u = c.getMembre().getUser();
+      csv.ligne(
+          c.getCycle().getNumeroCycle(),
+          (u.getFirstName() + " " + u.getLastName()).trim(),
+          u.getPhone(),
+          c.getMontant() != null ? c.getMontant().toPlainString() : null,
+          c.getStatut(),
+          c.getMethodePaiement(),
+          c.getReferenceTransaction(),
+          c.getCreatedAt(),
+          c.getDateValidation(),
+          c.getMotifRefus(),
+          c.getNote());
+    }
+    return csv.toBytes();
   }
 
   // ─── Récupération unique ──────────────────────────────────────────────────

@@ -3,6 +3,7 @@ package com.africa.dinthialma_backend.contribution.controller;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
+import com.africa.dinthialma_backend.common.util.CsvExport;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
@@ -465,6 +466,37 @@ public class CotisationController {
     return ResponseEntity.ok(
         new CustomResponse(
             SUCCESS, OK, ResponseMessageConstants.CONTRIBUTION_RECAP_SUCCESS, recap));
+  }
+
+  // ─── Export CSV (B24) ─────────────────────────────────────────────────────
+
+  @GetMapping("/export")
+  @Operation(
+      summary = "Exporter les cotisations en CSV",
+      description =
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN.\n\n"
+              + "Fichier CSV (séparateur `;`, UTF-8 avec BOM pour Excel) : tour, membre,"
+              + " téléphone, montant, statut, méthode, référence, dates, motif de refus, note."
+              + " Filtres optionnels `cycleId` et `statut` (multi). Au plus 10 000 lignes.\n\n"
+              + "Seul `format=csv` est pris en charge.")
+  @ApiResponses({
+    @ApiResponse(responseCode = "200", description = "Fichier CSV"),
+    @ApiResponse(responseCode = "400", description = "Format non pris en charge"),
+    @ApiResponse(responseCode = "403", description = "Accès interdit"),
+  })
+  public ResponseEntity<byte[]> exportCotisations(
+      @PathVariable UUID tontineId,
+      @Parameter(description = "Format d'export (csv)") @RequestParam(defaultValue = "csv")
+          String format,
+      @RequestParam(required = false) UUID cycleId,
+      @RequestParam(required = false) List<CotisationStatut> statut,
+      HttpServletRequest httpRequest)
+      throws CustomException {
+    CsvExport.verifierFormat(format);
+    byte[] csv =
+        cotisationService.exportCotisationsCsv(
+            headerParser.extractKeycloakId(httpRequest), tontineId, cycleId, statut);
+    return CsvExport.reponse(csv, "cotisations-" + tontineId + ".csv");
   }
 
   // ─── Récapitulatif total par membre ───────────────────────────────────────

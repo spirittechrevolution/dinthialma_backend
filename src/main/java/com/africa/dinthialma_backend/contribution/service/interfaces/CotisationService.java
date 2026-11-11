@@ -95,6 +95,14 @@ public interface CotisationService {
    *
    * <p>Accès : propriétaire de la cotisation, admin de la tontine, SUPER_ADMIN.
    */
+  /**
+   * Export CSV des cotisations d'une tontine (créateur ou SUPER_ADMIN), triées par tour puis date ;
+   * filtres optionnels cycle et statuts. Au plus {@code CsvWriter.MAX_LIGNES} lignes.
+   */
+  byte[] exportCotisationsCsv(
+      String keycloakId, UUID tontineId, UUID cycleId, List<CotisationStatut> statuts)
+      throws CustomException;
+
   CotisationResponse getCotisation(String keycloakId, UUID tontineId, UUID cotisationId)
       throws CustomException;
 

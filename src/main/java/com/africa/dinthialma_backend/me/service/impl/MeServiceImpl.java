@@ -6,6 +6,7 @@ import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
+import com.africa.dinthialma_backend.common.util.CsvWriter;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
@@ -408,6 +409,34 @@ public class MeServiceImpl implements MeService {
             statut != null ? statut.name() : null,
             page)
         .map(ActiviteResponse::from);
+  }
+
+  @Override
+  public byte[] exportActiviteCsv(
+      String keycloakId,
+      ModeActivite mode,
+      UUID tontineId,
+      TypeActivite type,
+      CotisationStatut statut)
+      throws CustomException {
+    Page<ActiviteResponse> lignes =
+        getActivite(
+            keycloakId, mode, tontineId, type, statut, PageRequest.of(0, CsvWriter.MAX_LIGNES));
+    CsvWriter csv =
+        new CsvWriter()
+            .ligne("Date", "Type", "Tontine", "Tour", "Membre", "Montant (FCFA)", "Sens", "Statut");
+    for (ActiviteResponse a : lignes.getContent()) {
+      csv.ligne(
+          a.getDate(),
+          a.getType(),
+          a.getTontineNom(),
+          a.getNumeroCycle(),
+          a.getMembreNom(),
+          a.getMontant() != null ? a.getMontant().toPlainString() : null,
+          a.getSens(),
+          a.getStatut());
+    }
+    return csv.toBytes();
   }
 
   // ─── Validation groupée ──────────────────────────────────────────────────

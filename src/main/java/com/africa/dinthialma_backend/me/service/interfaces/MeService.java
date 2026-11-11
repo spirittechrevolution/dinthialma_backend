@@ -18,6 +18,15 @@ import org.springframework.data.domain.Pageable;
 /** Vues transverses de l'utilisateur connecté, toutes tontines confondues ({@code /v1/me}). */
 public interface MeService {
 
+  /** Export CSV du fil d'activité (mêmes filtres que {@link #getActivite}, 10 000 lignes max). */
+  byte[] exportActiviteCsv(
+      String keycloakId,
+      ModeActivite mode,
+      UUID tontineId,
+      TypeActivite type,
+      CotisationStatut statut)
+      throws CustomException;
+
   /**
    * Fil d'activité paginé (date décroissante) : cotisations et jackpots, soit les miens ({@code
    * COTISE}), soit ceux des tontines que je gère ({@code GERE}).
