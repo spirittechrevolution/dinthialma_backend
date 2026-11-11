@@ -153,6 +153,32 @@
 | `/activite` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 fil cotisations + jackpots (UNION native, tri date DESC imposé), `?mode=COTISE\|GERE`, `?tontineId=`, `?type=`, `?statut=` |
 | `/qr` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 mon QR : jeton opaque stable `m_…` + url (pas de téléphone) |
 | `/qr/regenerer` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 nouveau jeton, l'ancien → 404 |
+| `/activite/export` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 export CSV du fil (mêmes filtres), `;` + BOM UTF-8, 10 000 lignes max |
+| `/password` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 changer de mot de passe (ancien vérifié) ; `deconnecterAutresAppareils` ; codes `CURRENT_PASSWORD_INVALID`, `PASSWORD_UNCHANGED` |
+| `/sessions` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 appareils connectés (1 session par clientType), `courante` via le `sid` du JWT |
+| `/sessions/{id}` | DELETE | ✅ | ✅ | ✅ | ✅ | 🔒 déconnexion à distance (révocation Keycloak + suppression) ; 404 si pas à moi |
+| `/preferences` | GET / PUT | ✅ | ✅ | ✅ | ✅ | 🔒 préférences synchronisées (JSONB) : favoris (50 max), dernierMode, masquerMontant, dernierMoyenPaiement |
+| `/gestion/demandes` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 demandes d'adhésion reçues sur mes tontines (`?statut=`, `?tontineId=`), avec téléphone |
+| `/demandes` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 mes demandes d'adhésion envoyées |
+
+### ✉️ Invitations et demandes d'adhésion
+
+| Endpoint | Méthode | Accès | Notes |
+|----------|---------|-------|-------|
+| `/v1/tontines/{id}/invitation` | POST | créateur, SUPER_ADMIN | code `XXXX-XXXX` + url + qrToken `t_<code>` ; `?regenerer=true` ; tontine BROUILLON/ACTIVE |
+| `/v1/tontines/{id}/invitation` | DELETE | créateur, SUPER_ADMIN | révoque (lien et QR → 404) |
+| `/v1/public/invitations/{code}` | GET | 🌐 public | aperçu minimal sans données des membres ; `placesRestantes`, `ouverte` |
+| `/v1/invitations/{code}/demandes` | POST | tout auth | demande EN_ATTENTE ; `DEMANDE_DEJA_EN_ATTENTE`, `MEMBER_ALREADY_IN_TONTINE`, `TONTINE_FULL`, `TONTINE_NOT_OPEN` |
+| `/v1/tontines/{id}/demandes/{demandeId}/accepter` | PUT | créateur, SUPER_ADMIN | réutilise l'ajout de membre (`ordreJackpot` optionnel) ; `DEMANDE_NOT_PENDING` |
+| `/v1/tontines/{id}/demandes/{demandeId}/refuser` | PUT | créateur, SUPER_ADMIN | motif optionnel, notification `ADHESION_REFUSEE` |
+
+### 🌐 Public / divers
+
+| Endpoint | Méthode | Accès | Notes |
+|----------|---------|-------|-------|
+| `/v1/public/config` | GET | 🌐 public | `supportWhatsapp`, `supportEmail`, `versionMinimaleApp` (env `SUPPORT_WHATSAPP`, `SUPPORT_EMAIL`, `APP_VERSION_MINIMALE`) ; champ absent si non configuré |
+| `/v1/tontines/{id}/cotisations/export` | GET | créateur, SUPER_ADMIN | export CSV (`format=csv`, `cycleId`, `statut`) |
+| `/v1/code-list/{id}` | DELETE | SUPER_ADMIN | suppression logique ; valeurs système refusées (`CODE_LIST_SYSTEM_VALUE`) ; recréer restaure |
 
 > `GET /v1/qr/{token}` (tout auth) : résout un QR membre → identité sans téléphone + `dansMesTontines` (tontines gérées par l'appelant : membreId, statut, `aPayeCycleEnCours`). Préfixe `t_` réservé aux invitations (B16).
 
@@ -236,7 +262,7 @@ src/main/java/com/africa/dinthialma_backend/
 │       ├── interfaces/ CotisationService
 │       └── impl/       CotisationServiceImpl
 ├── notification/   ✅ SMS (LAfricaMobile) + notifications in-app
-│   ├── codeList/       NotificationType (13 valeurs)
+│   ├── codeList/       NotificationType (15 valeurs)
 │   ├── controller/     NotificationController
 │   ├── dto/            NotificationResponse
 │   ├── entity/         UserNotification
@@ -247,11 +273,19 @@ src/main/java/com/africa/dinthialma_backend/
 │       └── (directs)   SmsService, WhatsappService, SchedulerService
 ├── me/             ✅ Vues transverses de l'utilisateur connecté (/v1/me, /v1/qr)
 │   ├── codeList/       StatutCotisationDue, ModeActivite, TypeActivite
-│   ├── controller/     MeController, QrController
+│   ├── controller/     MeController, QrController, CompteController
 │   ├── dto/            MeSummaryResponse, MesJackpotsResponse, ActiviteResponse,
 │   │                   ValidationGroupeeRequest/Response, MonQrResponse, QrResolutionResponse
 │   ├── repository/     ActiviteRepository (requête native UNION)
 │   └── service/        MeService(+Impl), QrService(+Impl)
+├── adhesion/       ✅ Invitations par code + demandes d'adhésion (B16/B17)
+│   ├── codeList/       StatutDemande
+│   ├── controller/     AdhesionController
+│   ├── dto/            InvitationResponse, InvitationApercuResponse,
+│   │                   DemandeAdhesionResponse, DemandeRequests
+│   ├── entity/         DemandeAdhesion
+│   ├── repository/     DemandeAdhesionRepository
+│   └── service/        AdhesionService(+Impl)
 ├── admin/          ✅ Complet (GlobalDashboard + gestion users + MyDashboard)
 │   ├── controller/     AdminDashboardController
 │   ├── dto/            GlobalDashboardResponse, AdminUserResponse,
@@ -277,7 +311,7 @@ src/main/java/com/africa/dinthialma_backend/
 Routes publiques : `/api-docs/**`, `/swagger-ui/**`, `/actuator/health`,
 `/v1/auth/login`, `/v1/auth/logout`, `/v1/auth/refresh`, `/v1/auth/register/**`,
 `/v1/auth/forgot-password/**`, `/v1/auth/login-pin`, `/v1/auth/pin/reset/**`,
-`/v1/code-list/type/**`
+`/v1/code-list/type/**`, `/v1/public/config`, `/v1/public/invitations/**`
 
 > ⚠️ Les routes de `WHITELIST` (`SecurityConfig`) doivent porter le préfixe complet `/v1/...`
 > (le context path `/api` est exclu). Une entrée sans préfixe est silencieusement inopérante.
@@ -444,8 +478,11 @@ public class ModuleController {
 | V027 | `add_refus_to_cotisations.sql` | `cotisations.motif_refus`, `refuse_par`, `date_refus` ; `uq_cot_cycle_membre` remplacée par l'index unique partiel `uq_cot_cycle_membre_actif` (`WHERE deleted_at IS NULL AND statut <> 'REFUSE'`) |
 | V028 | `add_liens_to_user_notifications.sql` | `user_notifications.cycle_id`, `cotisation_id`, `membre_id` (liens précis, sans FK) |
 | V029 | `add_qr_token_to_users.sql` | `users.qr_token` + index unique partiel (QR membre opaque) |
+| V030 | `add_deleted_at_to_la_code_list.sql` | `la_code_list.deleted_at` (suppression logique) |
+| V031 | `add_preferences_to_users.sql` | `users.preferences` JSONB |
+| V032 | `create_invitations_et_demandes_adhesion.sql` | `tontines.code_invitation` (unique) + table `demandes_adhesion` (1 EN_ATTENTE max par personne/tontine) |
 
-Prochaine version disponible : **V030**
+Prochaine version disponible : **V033**
 
 ---
 
@@ -588,7 +625,7 @@ Prochaine version disponible : **V030**
 | Marquer tout lu (bulk `@Modifying`) | ✅ | 🔒 tout auth |
 | `notify()` non-bloquant (try/catch interne, jamais de rollback) | ✅ | INFRA |
 
-#### Mapping événements → `NotificationType` (13 valeurs)
+#### Mapping événements → `NotificationType` (15 valeurs)
 
 | Événement | Type | Destinataire |
 |-----------|------|--------------|
@@ -596,6 +633,8 @@ Prochaine version disponible : **V030**
 | Membre soumet une cotisation | `COTISATION_SOUMISE` | Membre lui-même |
 | Cotisation validée par admin | `COTISATION_VALIDEE` | Membre cotisant |
 | Cotisation refusée par admin (avec motif) | `COTISATION_REFUSEE` | Membre cotisant |
+| Demande d'adhésion reçue (code d'invitation) | `DEMANDE_ADHESION` | Gestionnaire |
+| Demande d'adhésion refusée | `ADHESION_REFUSEE` | Demandeur |
 | Jackpot distribué (ROTATIVE) | `JACKPOT_DISTRIBUE` | Gagnant + admin |
 | Distribution finale (EVENEMENTIELLE) | `DISTRIBUTION_FINALE` | Chaque membre |
 | Cycle clôturé avec retards | `PAIEMENT_EN_RETARD` | Admin |
@@ -745,9 +784,14 @@ cd docker && docker compose up -d
   B15 QR membre opaque + résolution GET /v1/qr/{token} (V029)                   ✅
   B09 GET /v1/me/activite (fil cotisations + jackpots)                          ✅
       → fix : POST /cycles (MANUEL) renvoyait 500 (@Builder.Default manquant)
-  → Restant (P2) : B16/B17 invitations + adhésion, B19 push, B20 appareils,
-    B21 mot de passe connecté, B22 préférences, B23 suppression code list,
-    B24 export CSV, B25 config support
+  P2 :
+  B21 POST /v1/me/password · B20 GET/DELETE /v1/me/sessions                    ✅
+  B23 DELETE /v1/code-list/{id} (V030, SUPER_ADMIN)                             ✅
+      → fix : RoleGuard renvoyait 401 au lieu de 403 sur rôle insuffisant
+  B25 GET /v1/public/config · B24 exports CSV                                   ✅
+  B22 GET/PUT /v1/me/preferences (V031, JSONB)                                  ✅
+  B16/B17 invitation par code + demandes d'adhésion (V032)                      ✅
+  → Restant : B19 notifications push (Web Push : dépendance + clés VAPID à décider)
 ```
 
 ---
