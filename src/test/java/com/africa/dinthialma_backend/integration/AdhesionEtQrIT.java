@@ -161,6 +161,39 @@ class AdhesionEtQrIT extends AbstractIntegrationTest {
     assertThat(api.get("/v1/qr/" + nouveau, t.gestionnaire().jeton()).statut()).isEqualTo(200);
   }
 
+  @Test
+  @DisplayName(
+      "QR d'une personne absente de mes tontines : ajout par qrToken sans connaître son numéro")
+  void ajoutParQr() {
+    Utilisateur gestionnaire = donnees.inscrire("Gestionnaire");
+    Utilisateur scanne = donnees.inscrire("Scanne");
+    String tid = donnees.creerTontine(gestionnaire.jeton(), "Ajout QR").path("id").asText();
+    String jeton = api.get("/v1/me/qr", scanne.jeton()).data().path("qrToken").asText();
+    String chemin = "/v1/tontines/" + tid + "/membres";
+
+    Reponse scan = api.get("/v1/qr/" + jeton, gestionnaire.jeton());
+    assertThat(scan.data().path("dansMesTontines")).isEmpty();
+    assertThat(scan.texte()).doesNotContain(scanne.phoneNormalise());
+
+    Reponse ajout = api.post(chemin, gestionnaire.jeton(), Map.of("qrToken", jeton));
+    assertThat(ajout.statut()).isEqualTo(201);
+    assertThat(api.get("/v1/qr/" + jeton, gestionnaire.jeton()).data().path("dansMesTontines"))
+        .hasSize(1);
+    assertThat(notificationRecue(scanne, "INVITATION_TONTINE")).isTrue();
+
+    assertThat(api.post(chemin, gestionnaire.jeton(), Map.of("qrToken", jeton)).code())
+        .isEqualTo("MEMBER_ALREADY_IN_TONTINE");
+    assertThat(
+            api.post(
+                    chemin, gestionnaire.jeton(), Map.of("qrToken", jeton, "phone", "221770000000"))
+                .code())
+        .isEqualTo("MEMBER_IDENTIFIER_REQUIRED");
+    assertThat(api.post(chemin, gestionnaire.jeton(), Map.of()).code())
+        .isEqualTo("MEMBER_IDENTIFIER_REQUIRED");
+    assertThat(api.post(chemin, gestionnaire.jeton(), Map.of("qrToken", "m_inconnu")).statut())
+        .isEqualTo(404);
+  }
+
   private boolean notificationRecue(Utilisateur u, String type) {
     JsonNode notifs = api.get("/v1/notifications?size=20", u.jeton()).data().path("content");
     return StreamSupport.stream(notifs.spliterator(), false)

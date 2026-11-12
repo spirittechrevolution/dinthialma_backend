@@ -75,6 +75,8 @@ public final class ResponseMessageConstants {
   public static final String USER_SEARCH_NOT_FOUND = "Aucun compte avec ce numéro de téléphone";
   public static final String MEMBER_NAME_REQUIRED =
       "Le prénom et le nom sont obligatoires pour ajouter un membre sans compte Dinthialma";
+  public static final String MEMBER_IDENTIFIER_REQUIRED =
+      "Indiquez soit le numéro de téléphone, soit le QR du membre (l'un ou l'autre)";
 
   // Membre
   public static final String MEMBER_ADD_SUCCESS = "Membre ajouté avec succès";

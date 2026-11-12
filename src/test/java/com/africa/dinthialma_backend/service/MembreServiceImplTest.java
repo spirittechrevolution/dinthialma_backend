@@ -539,4 +539,92 @@ class MembreServiceImplTest {
           .isInstanceOf(ForbiddenException.class);
     }
   }
+
+  @Nested
+  @DisplayName("ajout depuis un QR scanné")
+  class AjoutParQr {
+
+    private AddMembreRequest parQr(String qrToken, String phone) {
+      AddMembreRequest r = ajout(phone, null, null, null);
+      r.setQrToken(qrToken);
+      return r;
+    }
+
+    @Test
+    @DisplayName("qrToken m_… : le compte désigné est ajouté sans que le numéro soit fourni")
+    void succes() throws Exception {
+      User awa = Fixtures.user("Awa");
+      when(userRepository.findByQrTokenAndDeletedAtIsNull("m_abc")).thenReturn(Optional.of(awa));
+      when(membreRepository.findMaxOrdreJackpot(tontine.getId())).thenReturn(0);
+
+      MembreResponse r =
+          service.addMembre(gestionnaire.getKeycloakId(), tontine.getId(), parQr(" m_abc ", null));
+
+      assertThat(r.getOrdreJackpot()).isEqualTo(1);
+      assertThat(r.getStatut()).isEqualTo(MembreStatut.ACTIF);
+      verify(userRepository, never()).findByPhoneAndDeletedAtIsNull(any());
+      verify(userRepository, never()).save(any());
+      verify(notificationService)
+          .notify(
+              eq(awa.getId()),
+              eq(NotificationType.INVITATION_TONTINE),
+              anyString(),
+              anyString(),
+              eq(tontine.getId()),
+              any());
+    }
+
+    @Test
+    @DisplayName("QR inconnu, révoqué ou d'invitation (t_…) -> 404")
+    void qrInvalide() {
+      when(userRepository.findByQrTokenAndDeletedAtIsNull("m_revoque"))
+          .thenReturn(Optional.empty());
+      assertThatThrownBy(
+              () ->
+                  service.addMembre(
+                      gestionnaire.getKeycloakId(), tontine.getId(), parQr("m_revoque", null)))
+          .isInstanceOf(NotFoundException.class);
+      assertThatThrownBy(
+              () ->
+                  service.addMembre(
+                      gestionnaire.getKeycloakId(), tontine.getId(), parQr("t_ABCD-EFGH", null)))
+          .isInstanceOf(NotFoundException.class);
+      verify(membreRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("ni téléphone ni QR, ou les deux -> 400 MEMBER_IDENTIFIER_REQUIRED")
+    void identifiantUnique() {
+      for (AddMembreRequest r :
+          List.of(parQr(null, null), parQr(" ", " "), parQr("m_abc", "221770000001"))) {
+        assertThatThrownBy(
+                () -> service.addMembre(gestionnaire.getKeycloakId(), tontine.getId(), r))
+            .isInstanceOfSatisfying(
+                BadRequestException.class,
+                e -> assertThat(e.getCode()).isEqualTo(ErrorCode.MEMBER_IDENTIFIER_REQUIRED));
+      }
+    }
+
+    @Test
+    @DisplayName("personne déjà membre -> 409 ; tiers -> 403 avant toute résolution du QR")
+    void refus() {
+      User awa = Fixtures.user("Awa");
+      when(userRepository.findByQrTokenAndDeletedAtIsNull("m_abc")).thenReturn(Optional.of(awa));
+      when(membreRepository.existsByTontine_IdAndUser_IdAndDeletedAtIsNull(
+              tontine.getId(), awa.getId()))
+          .thenReturn(true);
+      assertThatThrownBy(
+              () ->
+                  service.addMembre(
+                      gestionnaire.getKeycloakId(), tontine.getId(), parQr("m_abc", null)))
+          .isInstanceOfSatisfying(
+              ConflictException.class,
+              e -> assertThat(e.getCode()).isEqualTo(ErrorCode.MEMBER_ALREADY_IN_TONTINE));
+      assertThatThrownBy(
+              () ->
+                  service.addMembre(
+                      etranger.getKeycloakId(), tontine.getId(), parQr("m_abc", null)))
+          .isInstanceOf(ForbiddenException.class);
+    }
+  }
 }

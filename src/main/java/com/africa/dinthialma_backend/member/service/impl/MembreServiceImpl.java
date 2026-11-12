@@ -70,9 +70,39 @@ public class MembreServiceImpl implements MembreService {
     Tontine tontine = findTontineById(tontineId);
     assertIsCreatorOrSuperAdmin(caller, tontine);
 
-    String phone = PhoneUtils.normalize(request.getPhone());
+    boolean parQr = !estVide(request.getQrToken());
+    if (parQr == !estVide(request.getPhone())) {
+      throw new BadRequestException(
+          ResponseMessageConstants.MEMBER_IDENTIFIER_REQUIRED,
+          ErrorCode.MEMBER_IDENTIFIER_REQUIRED);
+    }
 
     // Résoudre ou créer l'utilisateur cible
+    User targetUser;
+    if (parQr) {
+      targetUser = findUserByQrToken(request.getQrToken().trim());
+    } else {
+      targetUser = resolveByPhone(request, tontine);
+    }
+
+    return ajouter(caller, tontine, tontineId, targetUser, request);
+  }
+
+  /**
+   * Utilisateur désigné par un QR membre ({@code m_…}) ; QR de tontine, inconnu ou révoqué → 404.
+   */
+  private User findUserByQrToken(String qrToken) throws CustomException {
+    if (!qrToken.startsWith("m_")) {
+      throw new NotFoundException(ResponseMessageConstants.QR_NOT_FOUND);
+    }
+    return userRepository
+        .findByQrTokenAndDeletedAtIsNull(qrToken)
+        .orElseThrow(() -> new NotFoundException(ResponseMessageConstants.QR_NOT_FOUND));
+  }
+
+  /** Compte existant (complété si PRE_ENROLLED au nom vide) ou nouveau compte PRE_ENROLLED. */
+  private User resolveByPhone(AddMembreRequest request, Tontine tontine) throws CustomException {
+    String phone = PhoneUtils.normalize(request.getPhone());
     User targetUser;
     var existingUser = userRepository.findByPhoneAndDeletedAtIsNull(phone);
     if (existingUser.isPresent()) {
@@ -90,7 +120,13 @@ public class MembreServiceImpl implements MembreService {
           createPreEnrolledUser(
               phone, request.getFirstName().trim(), request.getLastName().trim(), tontine);
     }
+    return targetUser;
+  }
 
+  /** Ajout effectif : unicité, rang dans la rotation, rôle MEMBER, audit et notification. */
+  private MembreResponse ajouter(
+      User caller, Tontine tontine, UUID tontineId, User targetUser, AddMembreRequest request)
+      throws CustomException {
     // Unicité : un utilisateur ne peut cotiser qu'une fois par tontine
     if (membreRepository.existsByTontine_IdAndUser_IdAndDeletedAtIsNull(
         tontineId, targetUser.getId())) {
