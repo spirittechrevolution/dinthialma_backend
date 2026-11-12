@@ -396,7 +396,12 @@ public class MeServiceImpl implements MeService {
 
     if (!"ROTATION".equals(t.getOrdreBeneficiaire())) {
       return ligne
-          .modeAttribution("ALEATOIRE".equals(t.getOrdreBeneficiaire()) ? "TIRAGE" : "CHOIX")
+          .modeAttribution(
+              switch (t.getOrdreBeneficiaire() == null ? "" : t.getOrdreBeneficiaire()) {
+                case "ALEATOIRE" -> "TIRAGE";
+                case "HYBRIDE" -> "HYBRIDE";
+                default -> "CHOIX";
+              })
           .build();
     }
 

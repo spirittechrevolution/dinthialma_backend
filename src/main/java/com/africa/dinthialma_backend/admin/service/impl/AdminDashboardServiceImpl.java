@@ -29,6 +29,7 @@ import com.africa.dinthialma_backend.contribution.repository.CotisationRepositor
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
+import com.africa.dinthialma_backend.tontine.codeList.OrdreBeneficiaire;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
@@ -437,7 +438,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
     boolean evenementielle = tontine.getTontineType() == TontineType.EVENEMENTIELLE;
     boolean gagnantsADesigner =
         tontine.getTontineType() == TontineType.ROTATIVE
-            && "MANUEL".equals(tontine.getOrdreBeneficiaire())
+            && OrdreBeneficiaire.designationApresCloture(tontine.getOrdreBeneficiaire())
             && cycleRepository.existsTermineSansGagnant(tid);
 
     return MyDashboardResponse.TontineStats.builder()

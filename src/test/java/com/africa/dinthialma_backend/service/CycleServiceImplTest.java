@@ -565,6 +565,71 @@ class CycleServiceImplTest {
   }
 
   @Nested
+  @DisplayName("ordre HYBRIDE : tirage au sort ou choix, tour par tour")
+  class Hybride {
+
+    @BeforeEach
+    void hybride() {
+      tontine.setOrdreBeneficiaire("HYBRIDE");
+    }
+
+    @Test
+    @DisplayName("clôture : aucun gagnant désigné automatiquement")
+    void cloture() throws Exception {
+      membresActifs(3);
+      CycleTontine c = cycleConnu(1, CycleStatut.EN_COURS);
+      assertThat(service.closeCycle(kc, tontine.getId(), c.getId()).getGagnants()).isEmpty();
+      verify(gagnantRepository, never()).save(any());
+      verify(schedulerService, never()).annoncerGagnants(any(), any());
+    }
+
+    @Test
+    @DisplayName("après clôture : tirage au sort (liste vide) puis choix explicite au tour suivant")
+    void tirageEtChoix() throws Exception {
+      List<TontineMembre> membres = membresActifs(3);
+      CycleTontine tour1 = cycleConnu(1, CycleStatut.TERMINE);
+      tour1.setMontantNet(new BigDecimal("3000"));
+      SelectionnerBeneficiaireRequest tirage = new SelectionnerBeneficiaireRequest();
+
+      CycleResponse r1 =
+          service.selectionnerBeneficiaire(kc, tontine.getId(), tour1.getId(), tirage);
+      assertThat(r1.getGagnants()).hasSize(1);
+      assertThat(r1.getGagnants().get(0).getMontantRecu()).isEqualByComparingTo("3000");
+
+      TontineMembre restant =
+          membres.stream().filter(m -> !m.isARecuJackpot()).findFirst().orElseThrow();
+      when(membreRepository.findByIdAndTontine_IdAndDeletedAtIsNull(
+              restant.getId(), tontine.getId()))
+          .thenReturn(Optional.of(restant));
+      CycleTontine tour2 = cycleConnu(2, CycleStatut.TERMINE);
+      tour2.setMontantNet(new BigDecimal("3000"));
+      SelectionnerBeneficiaireRequest choix = new SelectionnerBeneficiaireRequest();
+      choix.setMembreIds(List.of(restant.getId()));
+
+      CycleResponse r2 =
+          service.selectionnerBeneficiaire(kc, tontine.getId(), tour2.getId(), choix);
+      assertThat(r2.getGagnants())
+          .extracting(CycleResponse.GagnantInfo::getMembreId)
+          .containsExactly(restant.getId());
+    }
+
+    @Test
+    @DisplayName("ROTATION et ALEATOIRE : désignation après clôture refusée")
+    void autresOrdresRefuses() {
+      CycleTontine c = cycleConnu(1, CycleStatut.TERMINE);
+      for (String ordre : new String[] {"ROTATION", "ALEATOIRE"}) {
+        tontine.setOrdreBeneficiaire(ordre);
+        assertThatThrownBy(
+                () ->
+                    service.selectionnerBeneficiaire(
+                        kc, tontine.getId(), c.getId(), new SelectionnerBeneficiaireRequest()))
+            .isInstanceOf(BadRequestException.class)
+            .hasMessageContaining("HYBRIDE");
+      }
+    }
+  }
+
+  @Nested
   @DisplayName("désignation des gagnants (MANUEL)")
   class Designation {
 

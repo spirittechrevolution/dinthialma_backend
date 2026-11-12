@@ -20,6 +20,7 @@ import com.africa.dinthialma_backend.auth.service.interfaces.KeycloakAuthService
 import com.africa.dinthialma_backend.common.audit.AuditService;
 import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
@@ -212,6 +213,43 @@ class TontineServiceImplTest {
       r.setMontantMinimum(null);
       assertThat(service.createTontine(gestionnaire.getKeycloakId(), r).getMontant())
           .isEqualByComparingTo("0");
+    }
+
+    @Test
+    @DisplayName(
+        "ordre des bénéficiaires : HYBRIDE accepté ; valeur inconnue -> 400 INVALID_PARAMETER")
+    void ordreBeneficiaire() throws Exception {
+      when(roleRepository.existsByUserIdAndRole(gestionnaire.getId(), UserRole.ADMIN))
+          .thenReturn(true);
+      CreateTontineRequest hybride = rotative();
+      hybride.setOrdreBeneficiaire("HYBRIDE");
+      assertThat(
+              service.createTontine(gestionnaire.getKeycloakId(), hybride).getOrdreBeneficiaire())
+          .isEqualTo("HYBRIDE");
+
+      for (String inconnu : new String[] {"FIXE", "hybride", "AUTO"}) {
+        CreateTontineRequest r = rotative();
+        r.setOrdreBeneficiaire(inconnu);
+        assertThatThrownBy(() -> service.createTontine(gestionnaire.getKeycloakId(), r))
+            .isInstanceOfSatisfying(
+                BadRequestException.class,
+                e -> {
+                  assertThat(e.getCode()).isEqualTo(ErrorCode.INVALID_PARAMETER);
+                  assertThat(e.getMessage()).contains("HYBRIDE");
+                });
+      }
+
+      UpdateTontineRequest maj = new UpdateTontineRequest();
+      maj.setOrdreBeneficiaire("FIXE");
+      assertThatThrownBy(
+              () -> service.updateTontine(gestionnaire.getKeycloakId(), tontine.getId(), maj))
+          .isInstanceOf(BadRequestException.class);
+      maj.setOrdreBeneficiaire("HYBRIDE");
+      assertThat(
+              service
+                  .updateTontine(gestionnaire.getKeycloakId(), tontine.getId(), maj)
+                  .getOrdreBeneficiaire())
+          .isEqualTo("HYBRIDE");
     }
 
     @Test

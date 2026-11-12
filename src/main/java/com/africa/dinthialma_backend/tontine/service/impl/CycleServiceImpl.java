@@ -24,6 +24,7 @@ import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
+import com.africa.dinthialma_backend.tontine.codeList.OrdreBeneficiaire;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.dto.BeneficiaireHistoriqueResponse;
@@ -631,10 +632,10 @@ public class CycleServiceImpl implements CycleService {
       throw new BadRequestException(
           "La sélection du bénéficiaire n'est possible que sur un cycle TERMINE");
     }
-    if (!"MANUEL".equals(tontine.getOrdreBeneficiaire())) {
+    if (!OrdreBeneficiaire.designationApresCloture(tontine.getOrdreBeneficiaire())) {
       throw new BadRequestException(
-          "La désignation manuelle des gagnants n'est disponible que pour les tontines"
-              + " avec ordreBeneficiaire = MANUEL");
+          "La désignation des gagnants après clôture n'est disponible que pour les tontines"
+              + " avec ordreBeneficiaire = MANUEL ou HYBRIDE");
     }
     if (cycleGagnantRepository.existsByCycle_IdAndDeletedAtIsNull(cycleId)) {
       throw new BadRequestException("Les gagnants ont déjà été désignés pour ce cycle");

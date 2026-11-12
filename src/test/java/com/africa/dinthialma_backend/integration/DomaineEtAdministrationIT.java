@@ -171,6 +171,69 @@ class DomaineEtAdministrationIT extends AbstractIntegrationTest {
 
   @Test
   @DisplayName(
+      "ordre HYBRIDE : tour 1 par tirage au sort, tour 2 par choix ; valeur inconnue refusée")
+  void ordreHybride() {
+    Utilisateur g = donnees.inscrire();
+    Utilisateur m1 = donnees.inscrire();
+    Utilisateur m2 = donnees.inscrire();
+
+    Reponse inconnu =
+        api.post(
+            "/v1/tontines",
+            g.jeton(),
+            Map.of(
+                "nom", "Ordre inconnu",
+                "tontineType", "ROTATIVE",
+                "montant", 1000,
+                "frequence", "MENSUEL",
+                "ordreBeneficiaire", "FIXE",
+                "modeCycle", "MANUEL",
+                "dateDebut", java.time.LocalDate.now().toString(),
+                "nombreMembres", 3));
+    assertThat(inconnu.statut()).isEqualTo(400);
+    assertThat(inconnu.code()).isEqualTo("INVALID_PARAMETER");
+
+    String tid =
+        donnees
+            .creerTontine(g.jeton(), "Hybride", Map.of("ordreBeneficiaire", "HYBRIDE"))
+            .path("id")
+            .asText();
+    String m1Id = donnees.ajouterMembre(g.jeton(), tid, m1.phone()).path("id").asText();
+    String m2Id = donnees.ajouterMembre(g.jeton(), tid, m2.phone()).path("id").asText();
+    donnees.activer(g.jeton(), tid);
+
+    // Tour 1 : aucun gagnant à la clôture, puis tirage au sort (liste vide)
+    String tour1 = donnees.ouvrirCycle(g.jeton(), tid).path("id").asText();
+    valider(g.jeton(), tid, donnees.declarer(m1.jeton(), tid, tour1, 1000));
+    assertThat(cloturer(g.jeton(), tid, tour1).path("gagnants")).isEmpty();
+    Reponse tirage =
+        api.patch(
+            "/v1/tontines/" + tid + "/cycles/" + tour1 + "/beneficiaire",
+            g.jeton(),
+            Map.of("membreIds", List.of()));
+    assertThat(tirage.statut()).isEqualTo(200);
+    String gagnantTour1 = tirage.data().path("gagnants").get(0).path("membreId").asText();
+    assertThat(gagnantTour1).isIn(m1Id, m2Id);
+
+    // Tour 2 : choix explicite du membre restant
+    String restant = gagnantTour1.equals(m1Id) ? m2Id : m1Id;
+    String tour2 = donnees.ouvrirCycle(g.jeton(), tid).path("id").asText();
+    valider(g.jeton(), tid, donnees.declarer(m2.jeton(), tid, tour2, 1000));
+    assertThat(cloturer(g.jeton(), tid, tour2).path("gagnants")).isEmpty();
+    Reponse choix =
+        api.patch(
+            "/v1/tontines/" + tid + "/cycles/" + tour2 + "/beneficiaire",
+            g.jeton(),
+            Map.of("membreIds", List.of(restant)));
+    assertThat(choix.statut()).isEqualTo(200);
+    assertThat(choix.data().path("gagnants").get(0).path("membreId").asText()).isEqualTo(restant);
+
+    // Référentiel public : HYBRIDE exposé aux selects du front
+    assertThat(api.get("/v1/code-list/type/ORDRE_BENEFICIAIRE", null).texte()).contains("HYBRIDE");
+  }
+
+  @Test
+  @DisplayName(
       "événementielle : sous-cycles quotidiens, clôture intermédiaire puis distribution finale")
   void tontineEvenementielle() {
     Utilisateur g = donnees.inscrire();

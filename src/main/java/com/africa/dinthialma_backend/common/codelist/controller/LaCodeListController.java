@@ -91,7 +91,7 @@ public class LaCodeListController {
               + " | Moyen de paiement d'une cotisation |\n"
               + "| `STATUT_COTISATION` | `EN_ATTENTE` · `VALIDE` · `EN_RETARD`"
               + " | Cycle de vie d'une cotisation |\n"
-              + "| `ORDRE_BENEFICIAIRE` | `ALEATOIRE` · `MANUEL` · `ROTATION`"
+              + "| `ORDRE_BENEFICIAIRE` | `ALEATOIRE` · `HYBRIDE` · `MANUEL` · `ROTATION`"
               + " | Règle de désignation du bénéficiaire du jackpot |\n\n"
               + "> ⚠️ **`ROLE_INTERNE`** est restreint — utiliser"
               + " `GET /v1/code-list/admin/type/ROLE_INTERNE`.",

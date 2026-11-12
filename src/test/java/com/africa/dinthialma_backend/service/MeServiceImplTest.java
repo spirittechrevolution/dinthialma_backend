@@ -456,6 +456,8 @@ class MeServiceImplTest {
       tirage.setMontant(null);
       Tontine choix = Fixtures.tontine(gestionnaire);
       choix.setOrdreBeneficiaire("MANUEL");
+      Tontine hybride = Fixtures.tontine(gestionnaire);
+      hybride.setOrdreBeneficiaire("HYBRIDE");
       Tontine evt = Fixtures.tontine(gestionnaire);
       evt.setTontineType(TontineType.EVENEMENTIELLE);
       Tontine suspendue = Fixtures.tontine(gestionnaire);
@@ -467,6 +469,7 @@ class MeServiceImplTest {
       mesAdhesions(
           Fixtures.membre(tirage, moi, 1),
           Fixtures.membre(choix, moi, 1),
+          Fixtures.membre(hybride, moi, 1),
           Fixtures.membre(evt, moi, 1),
           Fixtures.membre(suspendue, moi, 1),
           suspendu,
@@ -477,7 +480,7 @@ class MeServiceImplTest {
 
       assertThat(r)
           .extracting(MesJackpotsResponse.JackpotAVenir::getModeAttribution)
-          .containsExactly("TIRAGE", "CHOIX");
+          .containsExactly("TIRAGE", "CHOIX", "HYBRIDE");
       assertThat(r.get(0).getMontantEstime()).isNull();
       assertThat(r.get(0).getPosition()).isNull();
     }

@@ -10,6 +10,7 @@ import com.africa.dinthialma_backend.common.audit.AuditService;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
@@ -17,6 +18,7 @@ import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
+import com.africa.dinthialma_backend.tontine.codeList.OrdreBeneficiaire;
 import com.africa.dinthialma_backend.tontine.codeList.RoleFiltreTontine;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
@@ -208,6 +210,7 @@ public class TontineServiceImpl implements TontineService {
       tontine.setFrequence(request.getFrequence());
     }
     if (request.getOrdreBeneficiaire() != null) {
+      verifierOrdreBeneficiaire(request.getOrdreBeneficiaire());
       auditService.log(
           caller,
           "tontines",
@@ -475,6 +478,7 @@ public class TontineServiceImpl implements TontineService {
         throw new BadRequestException(
             "L'ordre des bénéficiaires est obligatoire pour une tontine rotative");
       }
+      verifierOrdreBeneficiaire(request.getOrdreBeneficiaire());
       if (request.getMontant() == null || request.getMontant().compareTo(BigDecimal.ZERO) <= 0) {
         throw new BadRequestException(
             "Le montant de cotisation est obligatoire pour une tontine rotative");
@@ -486,6 +490,17 @@ public class TontineServiceImpl implements TontineService {
       if (request.getModeCycle() == null) {
         throw new BadRequestException("Le mode de cycle est obligatoire pour une tontine rotative");
       }
+    }
+  }
+
+  private static void verifierOrdreBeneficiaire(String ordre) throws CustomException {
+    if (!OrdreBeneficiaire.estValide(ordre)) {
+      throw new BadRequestException(
+          "Ordre des bénéficiaires inconnu : « "
+              + ordre
+              + " ». Valeurs acceptées : "
+              + OrdreBeneficiaire.VALEURS,
+          ErrorCode.INVALID_PARAMETER);
     }
   }
 
