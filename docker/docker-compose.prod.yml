@@ -21,7 +21,7 @@
 #
 # Service            | URL publique
 # —————————————————  | —————————————————————————————
-# Frontend           | https://app.DOMAIN
+# Frontend           | https://www.DOMAIN (DOMAIN nu redirigé vers www)
 # API                | https://api.DOMAIN
 # WhatsApp (OpenWA)  | interne uniquement
 # Grafana            | https://grafana.DOMAIN (profil monitoring)
@@ -104,10 +104,15 @@ services:
       LAM_SENDER: ${LAM_SENDER}
       # Sécurité
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
-      # CORS – origines autorisées (frontend prod + dev)
-      FRONTEND_URL: https://www.dinthialma.com,https://dinthialma.com
-      # URL de l'app incluse dans les notifications WhatsApp
-      APP_URL: https://www.dinthialma.com
+      # CORS – origines autorisées (front servi sur www.DOMAIN, DOMAIN nu redirigé)
+      FRONTEND_URL: https://www.${DOMAIN},https://${DOMAIN}
+      # Base des liens générés : QR membre {APP_URL}/q/{m_…}, invitation {APP_URL}/q/t/{code},
+      # liens des messages WhatsApp -> doit être l'URL publique du FRONT (pas de l'API)
+      APP_URL: https://www.${DOMAIN}
+      # Configuration publique (GET /v1/public/config) – vide = champ absent de la réponse
+      SUPPORT_WHATSAPP: ${SUPPORT_WHATSAPP:-}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-}
+      APP_VERSION_MINIMALE: ${APP_VERSION_MINIMALE:-}
       # Bootstrap Super Admin (désactiver après le 1er démarrage)
       BOOTSTRAP_ENABLED: ${BOOTSTRAP_ENABLED:-false}
       BOOTSTRAP_SUPER_ADMIN_PHONE: ${BOOTSTRAP_SUPER_ADMIN_PHONE}

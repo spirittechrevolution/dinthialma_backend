@@ -35,7 +35,9 @@ build/
 ### Docker – fichiers locaux sensibles ───────────────────────────
 docker/.env
 docker/*.env
+docker/.env.*
 !docker/.env.example
+!docker/.env.prod.example
 
 ### Spring – profils locaux (contiennent des secrets) ───────────
 src/main/resources/application-local.yml
