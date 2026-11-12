@@ -238,6 +238,11 @@ Le filtre `aPayeCycleId=false` alimente directement l'écran **Encaisser** (« m
 
 ### B22 — Préférences utilisateur synchronisées
 - `GET/PUT /v1/me/preferences` → `{ "tontinesFavorites": [...], "dernierMode": "COTISE|GERE", "masquerMontant": true, "dernierMoyenPaiement": "WAVE" }`. Sans cela, ces réglages restent propres à chaque appareil (acceptable en v1).
+- **Ajout (2026-11-12)** : champ facultatif `"derniereTontineGeree": "uuid | null"` — dernière tontine choisie dans l'espace Gestionnaire de l'accueil (l'accueil gestionnaire a toujours une tontine sélectionnée, dont il affiche le QR d'invitation).
+  - accepté en `PUT` et renvoyé en `GET` ; absent ou null = aucune ;
+  - **contrôle** : si l'identifiant ne correspond pas à une tontine dont l'utilisateur est gestionnaire, le serveur l'enregistre à null (ou renvoie null en lecture) plutôt que de refuser tout l'objet ;
+  - le `PUT` remplace l'objet complet : tant que ce champ n'est pas accepté, le front le garde seulement sur l'appareil (il ne l'envoie pas, pour ne pas faire échouer la sauvegarde des autres préférences).
+  - ✅ **Livré** (branche `feature/socles-ponctualite-montants`) : gestionnaire = créateur de la tontine, tontine non supprimée.
 
 ### B23 — Supprimer une valeur de liste
 - `DELETE /v1/code-list/{id}` (refusé pour les valeurs système). Annoncé dans la documentation projet, absent de l'API.

@@ -45,4 +45,13 @@ public class PreferencesDto implements Serializable {
       nullable = true)
   @Size(max = 50, message = "Moyen de paiement trop long")
   private String dernierMoyenPaiement;
+
+  @Schema(
+      description =
+          "Dernière tontine choisie dans l'espace Gestionnaire de l'accueil. Une tontine dont"
+              + " l'utilisateur n'est pas (ou plus) gestionnaire est ramenée à null, sans refuser"
+              + " les autres préférences.",
+      format = "uuid",
+      nullable = true)
+  private UUID derniereTontineGeree;
 }

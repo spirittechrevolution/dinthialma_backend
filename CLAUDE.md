@@ -169,7 +169,7 @@
 | `/password` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 changer de mot de passe (ancien vérifié) ; `deconnecterAutresAppareils` ; codes `CURRENT_PASSWORD_INVALID`, `PASSWORD_UNCHANGED` |
 | `/sessions` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 appareils connectés (1 session par clientType), `courante` via le `sid` du JWT |
 | `/sessions/{id}` | DELETE | ✅ | ✅ | ✅ | ✅ | 🔒 déconnexion à distance (révocation Keycloak + suppression) ; 404 si pas à moi |
-| `/preferences` | GET / PUT | ✅ | ✅ | ✅ | ✅ | 🔒 préférences synchronisées (JSONB) : favoris (50 max), dernierMode, masquerMontant, dernierMoyenPaiement |
+| `/preferences` | GET / PUT | ✅ | ✅ | ✅ | ✅ | 🔒 préférences synchronisées (JSONB) : favoris (50 max), dernierMode, masquerMontant, dernierMoyenPaiement, `derniereTontineGeree` (null si l'utilisateur n'en est pas/plus gestionnaire, sans refus) |
 | `/gestion/demandes` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 demandes d'adhésion reçues sur mes tontines (`?statut=`, `?tontineId=`), avec téléphone |
 | `/demandes` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 mes demandes d'adhésion envoyées |
 
