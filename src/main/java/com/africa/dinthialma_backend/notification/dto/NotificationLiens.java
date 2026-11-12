@@ -5,9 +5,14 @@ import java.util.UUID;
 
 /**
  * Identifiants facultatifs attachés à une notification pour ouvrir l'écran exact côté front (reçu,
- * tour, fiche membre). Chaque champ peut être null.
+ * tour, fiche membre, demande d'adhésion). Chaque champ peut être null.
  */
-public record NotificationLiens(UUID cycleId, UUID cotisationId, UUID membreId) {
+public record NotificationLiens(UUID cycleId, UUID cotisationId, UUID membreId, UUID demandeId) {
+
+  /** Liens sans demande d'adhésion. */
+  public NotificationLiens(UUID cycleId, UUID cotisationId, UUID membreId) {
+    this(cycleId, cotisationId, membreId, null);
+  }
 
   /** Aucun lien précis (la notification ne pointe que vers la tontine, ou vers rien). */
   public static final NotificationLiens AUCUN = new NotificationLiens(null, null, null);
@@ -28,5 +33,10 @@ public record NotificationLiens(UUID cycleId, UUID cotisationId, UUID membreId) 
   /** Lien vers un membership (fiche membre). */
   public static NotificationLiens membre(UUID membreId) {
     return new NotificationLiens(null, null, membreId);
+  }
+
+  /** Lien vers une demande d'adhésion. */
+  public static NotificationLiens demande(UUID demandeId) {
+    return new NotificationLiens(null, null, null, demandeId);
   }
 }

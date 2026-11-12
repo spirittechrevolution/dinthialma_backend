@@ -68,10 +68,20 @@ class NotificationServiceImplTest {
         "Corps",
         tontineId,
         new NotificationLiens(cycleId, cotisationId, membreId));
+    service.notify(
+        user.getId(),
+        NotificationType.DEMANDE_ADHESION,
+        "Titre",
+        "Corps",
+        tontineId,
+        NotificationLiens.demande(membreId));
 
     ArgumentCaptor<UserNotification> captor = ArgumentCaptor.forClass(UserNotification.class);
-    verify(notificationRepository).save(captor.capture());
-    UserNotification n = captor.getValue();
+    verify(notificationRepository, org.mockito.Mockito.times(2)).save(captor.capture());
+    UserNotification n = captor.getAllValues().get(0);
+    assertThat(n.getDemandeId()).isNull();
+    assertThat(captor.getAllValues().get(1).getDemandeId()).isEqualTo(membreId);
+    assertThat(captor.getAllValues().get(1).getMembreId()).isNull();
     assertThat(n.getUser()).isSameAs(user);
     assertThat(n.getType()).isEqualTo(NotificationType.COTISATION_VALIDEE);
     assertThat(n.isRead()).isFalse();

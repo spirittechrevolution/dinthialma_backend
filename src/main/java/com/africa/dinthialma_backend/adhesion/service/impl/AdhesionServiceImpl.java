@@ -97,24 +97,45 @@ public class AdhesionServiceImpl implements AdhesionService {
 
   @Override
   @Transactional(readOnly = true)
-  public InvitationApercuResponse apercu(String code) throws CustomException {
+  public InvitationApercuResponse apercu(String code, String keycloakId) throws CustomException {
     Tontine t = findByCode(code);
     Integer places = placesRestantes(t);
-    return InvitationApercuResponse.builder()
-        .code(t.getCodeInvitation())
-        .nom(t.getNom())
-        .tontineType(t.getTontineType())
-        .montant(t.isMontantLibre() ? null : t.getMontant())
-        .frequence(t.getFrequence())
-        .montantLibre(t.isMontantLibre())
-        .montantMinimum(t.getMontantMinimum())
-        .nomEvenement(t.getNomEvenement())
-        .dateEcheance(t.getDateEcheance())
-        .dateDebut(t.getDateDebut())
-        .placesRestantes(places)
-        .gestionnairePrenom(t.getCreePar() != null ? t.getCreePar().getFirstName() : null)
-        .ouverte(estOuverte(t) && (places == null || places > 0))
-        .build();
+    InvitationApercuResponse.InvitationApercuResponseBuilder apercu =
+        InvitationApercuResponse.builder()
+            .code(t.getCodeInvitation())
+            .nom(t.getNom())
+            .tontineType(t.getTontineType())
+            .montant(t.isMontantLibre() ? null : t.getMontant())
+            .frequence(t.getFrequence())
+            .montantLibre(t.isMontantLibre())
+            .montantMinimum(t.getMontantMinimum())
+            .nomEvenement(t.getNomEvenement())
+            .dateEcheance(t.getDateEcheance())
+            .dateDebut(t.getDateDebut())
+            .placesRestantes(places)
+            .gestionnairePrenom(t.getCreePar() != null ? t.getCreePar().getFirstName() : null)
+            .ouverte(estOuverte(t) && (places == null || places > 0));
+    if (keycloakId != null) {
+      userRepository
+          .findByKeycloakId(keycloakId)
+          .ifPresent(caller -> relationAppelant(apercu, t, caller));
+    }
+    return apercu.build();
+  }
+
+  /** Relation de l'appelant identifié : membre, gestionnaire, demande en attente. */
+  private void relationAppelant(
+      InvitationApercuResponse.InvitationApercuResponseBuilder apercu, Tontine t, User caller) {
+    boolean membre =
+        membreRepository.existsByTontine_IdAndUser_IdAndDeletedAtIsNull(t.getId(), caller.getId());
+    boolean gestionnaire = t.getCreePar().getId().equals(caller.getId());
+    apercu
+        .dejaMembre(membre)
+        .estGestionnaire(gestionnaire)
+        .demandeEnAttente(
+            demandeRepository.existsByTontine_IdAndUser_IdAndStatutAndDeletedAtIsNull(
+                t.getId(), caller.getId(), StatutDemande.EN_ATTENTE))
+        .tontineId(membre || gestionnaire ? t.getId() : null);
   }
 
   // ─── B17 : demandes ──────────────────────────────────────────────────────
@@ -165,7 +186,7 @@ public class AdhesionServiceImpl implements AdhesionService {
             + " demande à rejoindre "
             + tontine.getNom(),
         tontine.getId(),
-        NotificationLiens.AUCUN);
+        NotificationLiens.demande(demande.getId()));
     log.info("Demande d'adhésion – tontineId={} userId={}", tontine.getId(), caller.getId());
     return demandeAdhesionMapper.toVueDemandeur(demande);
   }
@@ -242,7 +263,7 @@ public class AdhesionServiceImpl implements AdhesionService {
             + (motif != null ? " · Motif : " + motif : "")
             + ".",
         tontineId,
-        NotificationLiens.AUCUN);
+        NotificationLiens.demande(demande.getId()));
     log.info("Demande refusée – demandeId={}", demandeId);
     return demandeAdhesionMapper.toVueGestionnaire(demande);
   }

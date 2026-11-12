@@ -154,6 +154,8 @@ class MeServiceImplTest {
                   }));
       when(cycleRepository.countByTontineIds(anyList()))
           .thenReturn(List.<Object[]>of(new Object[] {aPayer.getId(), 5L}));
+      when(gagnantRepository.sumAndCountByMembreIds(anyList()))
+          .thenReturn(List.<Object[]>of(new Object[] {m2.getId(), new BigDecimal("9000"), 2L}));
       when(cycleRepository.findByTontine_IdInAndStatutAndDeletedAtIsNull(
               anyList(), eq(CycleStatut.EN_COURS)))
           .thenReturn(List.of(c1, c2, c3));
@@ -172,6 +174,10 @@ class MeServiceImplTest {
       assertThat(r.getMontantDu()).isEqualByComparingTo("2000");
 
       MeSummaryResponse.TontineCotisant l1 = r.getTontines().get(0);
+      assertThat(l1.getTotalJackpotsRecus()).isEqualByComparingTo("0");
+      assertThat(l1.getNombreJackpotsRecus()).isZero();
+      assertThat(r.getTontines().get(1).getTotalJackpotsRecus()).isEqualByComparingTo("9000");
+      assertThat(r.getTontines().get(1).getNombreJackpotsRecus()).isEqualTo(2);
       assertThat(l1.getToursPayes()).isEqualTo(1);
       assertThat(l1.getToursTotal()).isEqualTo(5);
       assertThat(l1.getCycleEnCours().getNumeroCycle()).isEqualTo(2);
@@ -407,7 +413,7 @@ class MeServiceImplTest {
     void filtres() throws Exception {
       ActiviteRepository.ActiviteRow row = ligne("COTISATION", "Fatou", "Sow");
       when(activiteRepository.findActivite(
-              eq(moi.getId()), eq(true), any(), eq("COTISATION_VALIDEE"), eq("VALIDE"), any()))
+              eq(moi.getId()), eq(true), any(), eq(true), any(), eq("VALIDE"), any()))
           .thenReturn(new PageImpl<>(List.of(row)));
 
       List<ActiviteResponse> r =
@@ -416,7 +422,7 @@ class MeServiceImplTest {
                   kc,
                   ModeActivite.GERE,
                   null,
-                  TypeActivite.COTISATION_VALIDEE,
+                  List.of(TypeActivite.COTISATION_VALIDEE),
                   CotisationStatut.VALIDE,
                   PageRequest.of(1, 10, Sort.by("montant")))
               .getContent();
@@ -429,16 +435,52 @@ class MeServiceImplTest {
                 assertThat(a.getDate()).isEqualTo(LocalDateTime.of(2026, 3, 1, 10, 0));
               });
       ArgumentCaptor<Pageable> page = ArgumentCaptor.forClass(Pageable.class);
-      verify(activiteRepository).findActivite(any(), eq(true), any(), any(), any(), page.capture());
+      verify(activiteRepository)
+          .findActivite(any(), eq(true), any(), eq(true), any(), any(), page.capture());
       assertThat(page.getValue().getPageNumber()).isEqualTo(1);
       assertThat(page.getValue().getSort().isUnsorted()).isTrue();
+    }
+
+    @Test
+    @DisplayName(
+        "type répétable : plusieurs types dédoublonnés transmis ; aucun type -> filtre désactivé")
+    @SuppressWarnings("unchecked")
+    void plusieursTypes() throws Exception {
+      when(activiteRepository.findActivite(
+              any(), eq(false), any(), any(Boolean.class), any(), any(), any()))
+          .thenReturn(new PageImpl<>(List.of()));
+
+      service.getActivite(
+          kc,
+          ModeActivite.COTISE,
+          null,
+          List.of(
+              TypeActivite.COTISATION_VALIDEE,
+              TypeActivite.COTISATION_ENCAISSEE,
+              TypeActivite.COTISATION_VALIDEE),
+          null,
+          PageRequest.of(0, 20));
+      service.getActivite(kc, ModeActivite.COTISE, null, List.of(), null, PageRequest.of(0, 20));
+      service.getActivite(kc, ModeActivite.COTISE, null, null, null, PageRequest.of(0, 20));
+
+      ArgumentCaptor<Boolean> filtrer = ArgumentCaptor.forClass(Boolean.class);
+      ArgumentCaptor<java.util.Collection<String>> types =
+          ArgumentCaptor.forClass(java.util.Collection.class);
+      verify(activiteRepository, times(3))
+          .findActivite(any(), eq(false), any(), filtrer.capture(), types.capture(), any(), any());
+      assertThat(filtrer.getAllValues()).containsExactly(true, false, false);
+      assertThat(types.getAllValues().get(0))
+          .containsExactly("COTISATION_VALIDEE", "COTISATION_ENCAISSEE");
+      // liste jamais vide (IN () invalide en SQL), filtre désactivé par le drapeau
+      assertThat(types.getAllValues().get(1)).isNotEmpty();
     }
 
     @Test
     @DisplayName("export CSV : en-tête, lignes, nom selon le mode ; format autre que csv -> 400")
     void export() throws Exception {
       ActiviteRepository.ActiviteRow jackpot = ligne("JACKPOT", null, null);
-      when(activiteRepository.findActivite(eq(moi.getId()), eq(false), any(), any(), any(), any()))
+      when(activiteRepository.findActivite(
+              eq(moi.getId()), eq(false), any(), any(Boolean.class), any(), any(), any()))
           .thenReturn(new PageImpl<>(List.of(jackpot)));
 
       FichierExport f = service.exportActivite(kc, "csv", ModeActivite.COTISE, null, null, null);

@@ -47,4 +47,11 @@ public interface DemandeAdhesionRepository extends JpaRepository<DemandeAdhesion
   /** Mes demandes envoyées. */
   @EntityGraph(attributePaths = {"tontine"})
   Page<DemandeAdhesion> findByUser_IdAndDeletedAtIsNull(UUID userId, Pageable pageable);
+
+  /** Demandes d'un statut reçues sur toutes les tontines (non supprimées) d'un créateur. */
+  long countByTontine_CreePar_IdAndTontine_DeletedAtIsNullAndStatutAndDeletedAtIsNull(
+      UUID createurId, StatutDemande statut);
+
+  /** Demandes d'un statut reçues sur une tontine. */
+  long countByTontine_IdAndStatutAndDeletedAtIsNull(UUID tontineId, StatutDemande statut);
 }

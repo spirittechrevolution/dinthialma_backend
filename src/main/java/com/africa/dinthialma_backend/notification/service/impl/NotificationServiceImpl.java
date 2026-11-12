@@ -62,6 +62,7 @@ public class NotificationServiceImpl implements NotificationService {
               .cycleId(l.cycleId())
               .cotisationId(l.cotisationId())
               .membreId(l.membreId())
+              .demandeId(l.demandeId())
               .build();
       notificationRepository.save(notif);
     } catch (Exception e) {

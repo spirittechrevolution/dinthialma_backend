@@ -1,5 +1,7 @@
 package com.africa.dinthialma_backend.admin.service.impl;
 
+import com.africa.dinthialma_backend.adhesion.codeList.StatutDemande;
+import com.africa.dinthialma_backend.adhesion.repository.DemandeAdhesionRepository;
 import com.africa.dinthialma_backend.admin.dto.AdminUserResponse;
 import com.africa.dinthialma_backend.admin.dto.GlobalDashboardResponse;
 import com.africa.dinthialma_backend.admin.dto.MyDashboardResponse;
@@ -68,6 +70,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
   private final TontineMembreRepository membreRepository;
   private final CotisationRepository cotisationRepository;
   private final KeycloakAuthService keycloakAuthService;
+  private final DemandeAdhesionRepository demandeRepository;
 
   // ─── Dashboard global SUPER_ADMIN ─────────────────────────────────────────
 
@@ -335,6 +338,10 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                 uid))
         .totalCotisationsEnAttente(countCotisationsCreateur(uid, CotisationStatut.EN_ATTENTE))
         .totalCotisationsEnRetard(countCotisationsCreateur(uid, CotisationStatut.EN_RETARD))
+        .totalDemandesEnAttente(
+            demandeRepository
+                .countByTontine_CreePar_IdAndTontine_DeletedAtIsNullAndStatutAndDeletedAtIsNull(
+                    uid, StatutDemande.EN_ATTENTE))
         .totalCollecteToursEnCours(cotisationRepository.sumMontantValideToursEnCoursByCreateur(uid))
         .totalAttenduToursEnCours(computeTotalAttenduToursEnCours(uid))
         .tontines(new PagedModel<>(statsPage))
@@ -452,6 +459,9 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         .montantTotalValide(montantValide)
         .cycleEnCours(cycleInfo)
         .gagnantsADesigner(gagnantsADesigner)
+        .demandesEnAttente(
+            demandeRepository.countByTontine_IdAndStatutAndDeletedAtIsNull(
+                tid, StatutDemande.EN_ATTENTE))
         .build();
   }
 

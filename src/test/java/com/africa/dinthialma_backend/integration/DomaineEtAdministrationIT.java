@@ -38,6 +38,10 @@ class DomaineEtAdministrationIT extends AbstractIntegrationTest {
     return cotisation.path("id").asText();
   }
 
+  private long totalActivite(Utilisateur u, String chemin) {
+    return api.get(chemin, u.jeton()).data().path("page").path("totalElements").asLong();
+  }
+
   private JsonNode cloturer(String jeton, String tontineId, String cycleId) {
     return TestDataFactory.attendre(
             api.put("/v1/tontines/" + tontineId + "/cycles/" + cycleId + "/cloturer", jeton, null),
@@ -89,6 +93,30 @@ class DomaineEtAdministrationIT extends AbstractIntegrationTest {
     JsonNode jackpots = api.get("/v1/me/jackpots", m1.jeton()).data();
     assertThat(jackpots.path("totalRecu").asDouble()).isEqualTo(1800);
     assertThat(jackpots.path("recus").get(0).path("numeroCycle").asInt()).isEqualTo(1);
+
+    // Résumé « Je cotise » : jackpots par tontine
+    JsonNode ligneGagnant = api.get("/v1/me/summary", m1.jeton()).data().path("tontines").get(0);
+    assertThat(ligneGagnant.path("totalJackpotsRecus").asDouble()).isEqualTo(1800);
+    assertThat(ligneGagnant.path("nombreJackpotsRecus").asLong()).isEqualTo(1);
+    JsonNode ligneAutre = api.get("/v1/me/summary", m2.jeton()).data().path("tontines").get(0);
+    assertThat(ligneAutre.path("totalJackpotsRecus").asDouble()).isZero();
+    assertThat(ligneAutre.path("nombreJackpotsRecus").asLong()).isZero();
+
+    // Activité du gestionnaire : 2 VALIDEE + 1 EN_RETARD + 1 JACKPOT ; type répétable
+    String activite = "/v1/me/activite?mode=GERE&tontineId=" + tid;
+    assertThat(totalActivite(g, activite)).isEqualTo(4);
+    assertThat(totalActivite(g, activite + "&type=JACKPOT_RECU")).isEqualTo(1);
+    assertThat(totalActivite(g, activite + "&type=COTISATION_VALIDEE&type=COTISATION_EN_RETARD"))
+        .isEqualTo(3);
+    String csv =
+        api.get(
+                "/v1/me/activite/export?mode=GERE&tontineId="
+                    + tid
+                    + "&type=COTISATION_VALIDEE&type=COTISATION_EN_RETARD",
+                g.jeton())
+            .texte();
+    assertThat(csv.lines().filter(l -> !l.isBlank()).count()).isEqualTo(4); // en-tête + 3
+    assertThat(csv).doesNotContain("JACKPOT_RECU");
     JsonNode membres =
         api.get("/v1/tontines/" + tid + "/membres", g.jeton()).data().path("content");
     JsonNode premier =

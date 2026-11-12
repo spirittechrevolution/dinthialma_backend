@@ -2,6 +2,7 @@ package com.africa.dinthialma_backend.tontine.repository;
 
 import com.africa.dinthialma_backend.tontine.entity.CycleGagnant;
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -27,6 +28,18 @@ public interface CycleGagnantRepository extends JpaRepository<CycleGagnant, UUID
           + "   AND g.cycle.deletedAt IS NULL"
           + "   AND g.cycle.tontine.deletedAt IS NULL")
   BigDecimal sumMontantRecuByUserId(@Param("userId") UUID userId);
+
+  /**
+   * Total et nombre de jackpots reçus, par adhésion : lignes {@code [membreId (UUID), total
+   * (BigDecimal), nombre (Long)]} ; une adhésion sans jackpot n'a pas de ligne.
+   */
+  @Query(
+      "SELECT g.membre.id, COALESCE(SUM(g.montantRecu), 0), COUNT(g) FROM CycleGagnant g"
+          + " WHERE g.membre.id IN :membreIds"
+          + "   AND g.deletedAt IS NULL"
+          + "   AND g.cycle.deletedAt IS NULL"
+          + " GROUP BY g.membre.id")
+  List<Object[]> sumAndCountByMembreIds(@Param("membreIds") Collection<UUID> membreIds);
 
   /** Jackpots reçus par un utilisateur, avec cycle et tontine chargés (plus récents d'abord). */
   @Query(

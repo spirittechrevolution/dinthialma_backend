@@ -25,7 +25,7 @@ public interface MeService {
       String format,
       ModeActivite mode,
       UUID tontineId,
-      TypeActivite type,
+      List<TypeActivite> types,
       CotisationStatut statut)
       throws CustomException;
 
@@ -37,7 +37,7 @@ public interface MeService {
       String keycloakId,
       ModeActivite mode,
       UUID tontineId,
-      TypeActivite type,
+      List<TypeActivite> types,
       CotisationStatut statut,
       Pageable pageable)
       throws CustomException;

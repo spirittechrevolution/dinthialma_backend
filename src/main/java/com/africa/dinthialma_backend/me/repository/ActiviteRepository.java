@@ -3,6 +3,7 @@ package com.africa.dinthialma_backend.me.repository;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -65,7 +66,7 @@ public interface ActiviteRepository extends Repository<Cotisation, UUID> {
           + "     OR (:gere = false AND m.user_id = :userId))"
           + " ) a"
           + " WHERE (CAST(:tontineId AS uuid) IS NULL OR a.tontine_id = CAST(:tontineId AS uuid))"
-          + "   AND (CAST(:type AS varchar) IS NULL OR a.type = CAST(:type AS varchar))"
+          + "   AND (:filtrerType = false OR a.type IN (:types))"
           + "   AND (CAST(:statut AS varchar) IS NULL OR a.statut = CAST(:statut AS varchar))";
 
   @Query(
@@ -84,7 +85,8 @@ public interface ActiviteRepository extends Repository<Cotisation, UUID> {
       @Param("userId") UUID userId,
       @Param("gere") boolean gere,
       @Param("tontineId") UUID tontineId,
-      @Param("type") String type,
+      @Param("filtrerType") boolean filtrerType,
+      @Param("types") Collection<String> types,
       @Param("statut") String statut,
       Pageable pageable);
 

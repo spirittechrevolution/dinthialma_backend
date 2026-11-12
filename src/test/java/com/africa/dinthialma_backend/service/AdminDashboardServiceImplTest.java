@@ -11,6 +11,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.africa.dinthialma_backend.adhesion.codeList.StatutDemande;
+import com.africa.dinthialma_backend.adhesion.repository.DemandeAdhesionRepository;
 import com.africa.dinthialma_backend.admin.dto.AdminUserResponse;
 import com.africa.dinthialma_backend.admin.dto.GlobalDashboardResponse;
 import com.africa.dinthialma_backend.admin.dto.MyDashboardResponse;
@@ -82,6 +84,7 @@ class AdminDashboardServiceImplTest {
   @Mock private TontineMembreRepository membreRepository;
   @Mock private CotisationRepository cotisationRepository;
   @Mock private KeycloakAuthService keycloakAuthService;
+  @Mock private DemandeAdhesionRepository demandeRepository;
   @InjectMocks private AdminDashboardServiceImpl service;
 
   private User superAdmin;
@@ -396,7 +399,19 @@ class AdminDashboardServiceImplTest {
       when(cycleRepository.existsTermineSansGagnant(rotative.getId())).thenReturn(true);
       when(cotisationRepository.countMembresAyantCotiseValide(evt.getId())).thenReturn(3L);
 
+      when(demandeRepository
+              .countByTontine_CreePar_IdAndTontine_DeletedAtIsNullAndStatutAndDeletedAtIsNull(
+                  uid, StatutDemande.EN_ATTENTE))
+          .thenReturn(4L);
+      when(demandeRepository.countByTontine_IdAndStatutAndDeletedAtIsNull(
+              rotative.getId(), StatutDemande.EN_ATTENTE))
+          .thenReturn(3L);
+
       MyDashboardResponse r = service.getMyDashboard(k, page);
+
+      assertThat(r.getTotalDemandesEnAttente()).isEqualTo(4);
+      assertThat(r.getTontines().getContent().get(0).getDemandesEnAttente()).isEqualTo(3);
+      assertThat(r.getTontines().getContent().get(1).getDemandesEnAttente()).isZero();
 
       assertThat(r.getNombreTontinesGerees()).isEqualTo(2);
       assertThat(r.getMontantTotalValide()).isEqualByComparingTo("9000");
@@ -407,7 +422,7 @@ class AdminDashboardServiceImplTest {
       // 1000 × 4 + 500 × 2 (montant libre au minimum) ; montant libre sans minimum ignoré
       assertThat(r.getTotalAttenduToursEnCours()).isEqualByComparingTo("5000");
 
-      MyDashboardResponse.TontineStats s1 = r.getTontines().getContent().get(0);
+      MyDashboardResponse.TontineStats s1 = r.getTontines().getContent().getFirst();
       assertThat(s1.isGagnantsADesigner()).isTrue();
       assertThat(s1.getDateEcheance()).isNull();
       assertThat(s1.getMontantLibre()).isNull();

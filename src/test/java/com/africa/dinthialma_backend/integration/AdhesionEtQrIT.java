@@ -94,6 +94,34 @@ class AdhesionEtQrIT extends AbstractIntegrationTest {
     assertThat(notificationRecue(g, "DEMANDE_ADHESION")).isTrue();
 
     String d1Id = d1.data().path("id").asText();
+    String apercu = "/v1/public/invitations/" + code;
+
+    // Aperçu : anonyme / JWT invalide -> champs absents ; demandeur -> demande en attente
+    JsonNode anonyme = api.get(apercu, null).data();
+    assertThat(anonyme.has("dejaMembre")).isFalse();
+    assertThat(anonyme.has("tontineId")).isFalse();
+    Reponse jetonInvalide = api.get(apercu, "jeton.invalide.xyz");
+    assertThat(jetonInvalide.statut()).isEqualTo(200);
+    assertThat(jetonInvalide.data().has("dejaMembre")).isFalse();
+    JsonNode vuParDemandeur = api.get(apercu, demandeur.jeton()).data();
+    assertThat(vuParDemandeur.path("dejaMembre").asBoolean()).isFalse();
+    assertThat(vuParDemandeur.path("estGestionnaire").asBoolean()).isFalse();
+    assertThat(vuParDemandeur.path("demandeEnAttente").asBoolean()).isTrue();
+    assertThat(vuParDemandeur.has("tontineId")).isFalse();
+    JsonNode vuParGestionnaire = api.get(apercu, g.jeton()).data();
+    assertThat(vuParGestionnaire.path("estGestionnaire").asBoolean()).isTrue();
+    assertThat(vuParGestionnaire.path("tontineId").asText()).isEqualTo(tid);
+
+    // Notification DEMANDE_ADHESION : tontineId + demandeId
+    JsonNode notifDemande = notification(g, "DEMANDE_ADHESION");
+    assertThat(notifDemande.path("tontineId").asText()).isEqualTo(tid);
+    assertThat(notifDemande.path("demandeId").asText()).isEqualTo(d1Id);
+
+    // my-dashboard : demandes en attente (global et par tontine)
+    JsonNode tableau = api.get("/v1/admin/my-dashboard", g.jeton()).data();
+    assertThat(tableau.path("totalDemandesEnAttente").asLong()).isEqualTo(1);
+    assertThat(tableau.path("tontines").path("content").get(0).path("demandesEnAttente").asLong())
+        .isEqualTo(1);
     assertThat(
             api.put(
                     "/v1/tontines/" + tid + "/demandes/" + d1Id + "/refuser",
@@ -108,6 +136,15 @@ class AdhesionEtQrIT extends AbstractIntegrationTest {
                 .code())
         .isEqualTo("DEMANDE_NOT_PENDING");
     assertThat(notificationRecue(demandeur, "ADHESION_REFUSEE")).isTrue();
+    JsonNode notifRefus = notification(demandeur, "ADHESION_REFUSEE");
+    assertThat(notifRefus.path("tontineId").asText()).isEqualTo(tid);
+    assertThat(notifRefus.path("demandeId").asText()).isEqualTo(d1Id);
+    assertThat(
+            api.get("/v1/admin/my-dashboard", g.jeton())
+                .data()
+                .path("totalDemandesEnAttente")
+                .asLong())
+        .isZero();
 
     String d2Id = api.post(demandes, demandeur.jeton(), Map.of()).data().path("id").asText();
     JsonNode acceptee =
@@ -122,6 +159,10 @@ class AdhesionEtQrIT extends AbstractIntegrationTest {
         .isEqualTo("MEMBRE");
     assertThat(api.post(demandes, demandeur.jeton(), Map.of()).code())
         .isEqualTo("MEMBER_ALREADY_IN_TONTINE");
+    JsonNode devenuMembre = api.get(apercu, demandeur.jeton()).data();
+    assertThat(devenuMembre.path("dejaMembre").asBoolean()).isTrue();
+    assertThat(devenuMembre.path("demandeEnAttente").asBoolean()).isFalse();
+    assertThat(devenuMembre.path("tontineId").asText()).isEqualTo(tid);
 
     // Tontine complète
     assertThat(api.get("/v1/public/invitations/" + code, null).data().path("ouverte").asBoolean())
@@ -192,6 +233,14 @@ class AdhesionEtQrIT extends AbstractIntegrationTest {
         .isEqualTo("MEMBER_IDENTIFIER_REQUIRED");
     assertThat(api.post(chemin, gestionnaire.jeton(), Map.of("qrToken", "m_inconnu")).statut())
         .isEqualTo(404);
+  }
+
+  private JsonNode notification(Utilisateur u, String type) {
+    JsonNode notifs = api.get("/v1/notifications?size=20", u.jeton()).data().path("content");
+    return StreamSupport.stream(notifs.spliterator(), false)
+        .filter(n -> n.path("type").asText().equals(type))
+        .findFirst()
+        .orElseThrow();
   }
 
   private boolean notificationRecue(Utilisateur u, String type) {

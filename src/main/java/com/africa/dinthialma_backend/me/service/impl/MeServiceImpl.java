@@ -111,6 +111,11 @@ public class MeServiceImpl implements MeService {
           .put((CotisationStatut) row[1], row);
     }
 
+    Map<UUID, Object[]> jackpotsParMembre = new HashMap<>();
+    for (Object[] row : gagnantRepository.sumAndCountByMembreIds(membreIds)) {
+      jackpotsParMembre.put((UUID) row[0], row);
+    }
+
     Map<UUID, Long> toursParTontine = new HashMap<>();
     for (Object[] row : cycleRepository.countByTontineIds(tontineIds)) {
       toursParTontine.put((UUID) row[0], (Long) row[1]);
@@ -172,6 +177,14 @@ public class MeServiceImpl implements MeService {
               .aRecuJackpot(m.isARecuJackpot())
               .totalCotiseValide(valide)
               .totalEnAttente(enAttente)
+              .totalJackpotsRecus(
+                  jackpotsParMembre.containsKey(m.getId())
+                      ? (BigDecimal) jackpotsParMembre.get(m.getId())[1]
+                      : BigDecimal.ZERO)
+              .nombreJackpotsRecus(
+                  jackpotsParMembre.containsKey(m.getId())
+                      ? (Long) jackpotsParMembre.get(m.getId())[2]
+                      : 0L)
               .toursPayes(nombre(stats.get(CotisationStatut.VALIDE)))
               .toursTotal(toursParTontine.getOrDefault(t.getId(), 0L))
               .cycleEnCours(
@@ -400,7 +413,7 @@ public class MeServiceImpl implements MeService {
       String keycloakId,
       ModeActivite mode,
       UUID tontineId,
-      TypeActivite type,
+      List<TypeActivite> types,
       CotisationStatut statut,
       Pageable pageable)
       throws CustomException {
@@ -412,7 +425,10 @@ public class MeServiceImpl implements MeService {
             caller.getId(),
             mode == ModeActivite.GERE,
             tontineId,
-            type != null ? type.name() : null,
+            types != null && !types.isEmpty(),
+            types == null || types.isEmpty()
+                ? List.of("-")
+                : types.stream().map(TypeActivite::name).distinct().toList(),
             statut != null ? statut.name() : null,
             page)
         .map(activiteMapper::toResponse);
@@ -424,13 +440,13 @@ public class MeServiceImpl implements MeService {
       String format,
       ModeActivite mode,
       UUID tontineId,
-      TypeActivite type,
+      List<TypeActivite> types,
       CotisationStatut statut)
       throws CustomException {
     CsvExport.verifierFormat(format);
     Page<ActiviteResponse> lignes =
         getActivite(
-            keycloakId, mode, tontineId, type, statut, PageRequest.of(0, CsvWriter.MAX_LIGNES));
+            keycloakId, mode, tontineId, types, statut, PageRequest.of(0, CsvWriter.MAX_LIGNES));
     CsvWriter csv =
         new CsvWriter()
             .ligne("Date", "Type", "Tontine", "Tour", "Membre", "Montant (FCFA)", "Sens", "Statut");

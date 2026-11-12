@@ -45,6 +45,12 @@ public class NotificationResponse {
       nullable = true)
   private UUID membreId;
 
+  @Schema(
+      description =
+          "Demande d'adhésion concernée (DEMANDE_ADHESION, ADHESION_REFUSEE) – null sinon",
+      nullable = true)
+  private UUID demandeId;
+
   @Schema(description = "Date de création")
   private LocalDateTime createdAt;
 }

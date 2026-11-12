@@ -120,8 +120,12 @@ public class MeController {
           ModeActivite mode,
       @Parameter(description = "Restreindre à une tontine") @RequestParam(required = false)
           UUID tontineId,
-      @Parameter(description = "Filtrer par type d'événement") @RequestParam(required = false)
-          TypeActivite type,
+      @Parameter(
+              description =
+                  "Filtrer par type d'événement, répétable : `?type=A&type=B` (OU logique)."
+                      + " Absent = tous les types.")
+          @RequestParam(name = "type", required = false)
+          List<TypeActivite> types,
       @Parameter(description = "Filtrer par statut de cotisation") @RequestParam(required = false)
           CotisationStatut statut,
       @PageableDefault(size = 20) Pageable pageable,
@@ -130,7 +134,7 @@ public class MeController {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
     Page<ActiviteResponse> page =
-        meService.getActivite(keycloakId, mode, tontineId, type, statut, pageable);
+        meService.getActivite(keycloakId, mode, tontineId, types, statut, pageable);
 
     return ResponseEntity.ok(
         new CustomResponse(SUCCESS, OK, ResponseMessageConstants.ME_ACTIVITE_SUCCESS, page));
@@ -149,13 +153,13 @@ public class MeController {
       @RequestParam(defaultValue = "csv") String format,
       @RequestParam(defaultValue = "COTISE") ModeActivite mode,
       @RequestParam(required = false) UUID tontineId,
-      @RequestParam(required = false) TypeActivite type,
+      @RequestParam(name = "type", required = false) List<TypeActivite> types,
       @RequestParam(required = false) CotisationStatut statut,
       HttpServletRequest httpRequest)
       throws CustomException {
     return CsvExport.reponse(
         meService.exportActivite(
-            headerParser.extractKeycloakId(httpRequest), format, mode, tontineId, type, statut));
+            headerParser.extractKeycloakId(httpRequest), format, mode, tontineId, types, statut));
   }
 
   // ─── Je cotise : mes jackpots ────────────────────────────────────────────

@@ -140,17 +140,17 @@
 | `/dashboard/users/{id}/enable` | POST | ❌ | ✅ | Réactiver un compte |
 | `/dashboard/users/{id}/roles` | PUT | ❌ | ✅ | Modifier les rôles |
 | `/dashboard/contributions` | GET | ❌ | ✅ | Toutes cotisations (pageable, filtres cumulables `?statut=` `?tontineId=`) |
-| `/my-dashboard` | GET | ✅ | ✅ | Métriques de l'admin pour ses tontines (`tontines` = `PagedModel`) + agrégats globaux : `nombreTontinesGerees`, `montantTotalValide`, `totalMembres`, `totalCotisationsEnAttente/EnRetard`, `totalCollecteToursEnCours`, `totalAttenduToursEnCours` ; par tontine : `gagnantsADesigner` + `cycleEnCours` (`montantCollecte`, `montantEnAttente`, `montantAttendu`, `membresAyantPaye`, `membresEnAttente`, `membresActifs`) |
+| `/my-dashboard` | GET | ✅ | ✅ | Métriques de l'admin pour ses tontines (`tontines` = `PagedModel`) + agrégats globaux : `nombreTontinesGerees`, `montantTotalValide`, `totalMembres`, `totalCotisationsEnAttente/EnRetard`, `totalDemandesEnAttente`, `totalCollecteToursEnCours`, `totalAttenduToursEnCours` ; par tontine : `gagnantsADesigner`, `demandesEnAttente` + `cycleEnCours` (`montantCollecte`, `montantEnAttente`, `montantAttendu`, `membresAyantPaye`, `membresEnAttente`, `membresActifs`) |
 
 ### 🙋 Mon espace (`/v1/me`)
 
 | Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
 |----------|---------|------|--------|-------|-------------|-------|
-| `/summary` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 résumé « Je cotise » : par tontine où je cotise (membership, totaux, tours, tour EN_COURS, `cotisationDue` A_PAYER/EN_ATTENTE/VALIDE, gestionnaire) + totaux et jackpots reçus ; liste non paginée |
+| `/summary` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 résumé « Je cotise » : par tontine où je cotise (membership, totaux, tours, tour EN_COURS, `cotisationDue` A_PAYER/EN_ATTENTE/VALIDE, gestionnaire) + totaux et jackpots reçus ; par tontine `totalJackpotsRecus` / `nombreJackpotsRecus` (0 si aucun, toujours 0 en EVENEMENTIELLE) ; liste non paginée |
 | `/gestion/cotisations` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 paiements de **toutes les tontines que j'ai créées** (file « À valider »), filtres `?statut=` (multi), `?tontineId=`, `?q=` ; pageable |
 | `/gestion/cotisations/valider` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 validation groupée `{cotisationIds}` (1–100) ; chaque cotisation dans sa propre transaction, résultat par id avec `code` d'échec ; toujours 200 |
 | `/jackpots` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 jackpots reçus + `aVenir` (ROTATION : rang, tour et date estimés ; TIRAGE / CHOIX : sans estimation) |
-| `/activite` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 fil cotisations + jackpots (UNION native, tri date DESC imposé), `?mode=COTISE\|GERE`, `?tontineId=`, `?type=`, `?statut=` |
+| `/activite` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 fil cotisations + jackpots (UNION native, tri date DESC imposé), `?mode=COTISE\|GERE`, `?tontineId=`, `?type=` (répétable : `?type=A&type=B`), `?statut=` |
 | `/qr` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 mon QR : jeton opaque stable `m_…` + url (pas de téléphone) |
 | `/qr/regenerer` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 nouveau jeton, l'ancien → 404 |
 | `/activite/export` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 export CSV du fil (mêmes filtres), `;` + BOM UTF-8, 10 000 lignes max |
@@ -167,7 +167,7 @@
 |----------|---------|-------|-------|
 | `/v1/tontines/{id}/invitation` | POST | créateur, SUPER_ADMIN | code `XXXX-XXXX` + url + qrToken `t_<code>` ; `?regenerer=true` ; tontine BROUILLON/ACTIVE |
 | `/v1/tontines/{id}/invitation` | DELETE | créateur, SUPER_ADMIN | révoque (lien et QR → 404) |
-| `/v1/public/invitations/{code}` | GET | 🌐 public | aperçu minimal sans données des membres ; `placesRestantes`, `ouverte` |
+| `/v1/public/invitations/{code}` | GET | 🌐 public (JWT facultatif) | aperçu minimal sans données des membres ; `placesRestantes`, `ouverte` ; avec JWT valide (`JwtOptionnel`) : `dejaMembre`, `estGestionnaire`, `demandeEnAttente`, `tontineId` (si membre ou gestionnaire) — absents sinon, jamais de 401 |
 | `/v1/invitations/{code}/demandes` | POST | tout auth | demande EN_ATTENTE ; `DEMANDE_DEJA_EN_ATTENTE`, `MEMBER_ALREADY_IN_TONTINE`, `TONTINE_FULL`, `TONTINE_NOT_OPEN` |
 | `/v1/tontines/{id}/demandes/{demandeId}/accepter` | PUT | créateur, SUPER_ADMIN | réutilise l'ajout de membre (`ordreJackpot` optionnel) ; `DEMANDE_NOT_PENDING` |
 | `/v1/tontines/{id}/demandes/{demandeId}/refuser` | PUT | créateur, SUPER_ADMIN | motif optionnel, notification `ADHESION_REFUSEE` |
@@ -186,7 +186,7 @@
 
 | Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
 |----------|---------|------|--------|-------|-------------|-------|
-| `/` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 notifications paginées (lues + non lues, tri createdAt DESC) ; liens `tontineId`, `cycleId`, `cotisationId`, `membreId` quand ils existent |
+| `/` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 notifications paginées (lues + non lues, tri createdAt DESC) ; liens `tontineId`, `cycleId`, `cotisationId`, `membreId`, `demandeId` (DEMANDE_ADHESION, ADHESION_REFUSEE) quand ils existent |
 | `/unread-count` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 compteur badge cloche |
 | `/{id}/read` | PATCH | ✅ | ✅ | ✅ | ✅ | 🔒 marquer une notification lue (idempotent) |
 | `/read-all` | PATCH | ✅ | ✅ | ✅ | ✅ | 🔒 tout marquer lu en une opération (bulk) |
@@ -530,8 +530,9 @@ obligatoire** : sans Docker démarré, le build échoue (les `*IT` ne sont jamai
 | V030 | `add_deleted_at_to_la_code_list.sql` | `la_code_list.deleted_at` (suppression logique) |
 | V031 | `add_preferences_to_users.sql` | `users.preferences` JSONB |
 | V032 | `create_invitations_et_demandes_adhesion.sql` | `tontines.code_invitation` (unique) + table `demandes_adhesion` (1 EN_ATTENTE max par personne/tontine) |
+| V033 | `add_demande_id_to_user_notifications.sql` | `user_notifications.demande_id` (lien vers la demande d'adhésion, sans FK) |
 
-Prochaine version disponible : **V033**
+Prochaine version disponible : **V034**
 
 ---
 

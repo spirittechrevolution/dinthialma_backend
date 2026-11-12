@@ -100,6 +100,16 @@ public class MeSummaryResponse {
     @Schema(description = "Mes cotisations EN_ATTENTE dans cette tontine, en FCFA")
     private BigDecimal totalEnAttente;
 
+    @Schema(
+        description =
+            "Total des jackpots reçus dans cette tontine (FCFA). 0 si aucun ; toujours 0 pour une"
+                + " tontine EVENEMENTIELLE (pas de jackpot : chaque membre récupère sa mise).",
+        example = "50000")
+    private BigDecimal totalJackpotsRecus;
+
+    @Schema(description = "Nombre de jackpots reçus dans cette tontine. 0 si aucun.", example = "1")
+    private long nombreJackpotsRecus;
+
     @Schema(description = "Nombre de tours où ma cotisation est VALIDÉE", example = "4")
     private long toursPayes;
 

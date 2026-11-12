@@ -4,6 +4,7 @@ import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.UUID;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -60,4 +61,31 @@ public class InvitationApercuResponse {
           "true si l'on peut encore demander à rejoindre (tontine BROUILLON ou ACTIVE, non"
               + " complète)")
   private boolean ouverte;
+
+  // ─── Renseignés uniquement si un JWT valide est envoyé (absents sinon) ───
+
+  @Schema(
+      description =
+          "Appelant déjà membre de la tontine (actif ou suspendu). Absent sans JWT valide.",
+      nullable = true)
+  private Boolean dejaMembre;
+
+  @Schema(
+      description = "Appelant gestionnaire (créateur) de la tontine. Absent sans JWT valide.",
+      nullable = true)
+  private Boolean estGestionnaire;
+
+  @Schema(
+      description =
+          "Appelant ayant déjà une demande d'adhésion EN_ATTENTE sur cette tontine. Absent sans"
+              + " JWT valide.",
+      nullable = true)
+  private Boolean demandeEnAttente;
+
+  @Schema(
+      description =
+          "Identifiant de la tontine, renseigné seulement si l'appelant en est membre ou"
+              + " gestionnaire (pour ouvrir sa fiche). Absent sinon.",
+      nullable = true)
+  private UUID tontineId;
 }

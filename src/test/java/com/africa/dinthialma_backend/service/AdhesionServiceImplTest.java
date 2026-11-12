@@ -35,6 +35,7 @@ import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.member.service.interfaces.MembreService;
 import com.africa.dinthialma_backend.notification.codeList.NotificationType;
+import com.africa.dinthialma_backend.notification.dto.NotificationLiens;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.support.Fixtures;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
@@ -223,6 +224,55 @@ class AdhesionServiceImplTest {
     }
   }
 
+  @Nested
+  @DisplayName("aperçu avec appelant identifié (JWT facultatif)")
+  class ApercuIdentifie {
+
+    @Test
+    @DisplayName("anonyme ou utilisateur inconnu : champs de relation absents")
+    void anonyme() throws Exception {
+      InvitationApercuResponse anonyme = service.apercu(CODE, null);
+      assertThat(anonyme.getDejaMembre()).isNull();
+      assertThat(anonyme.getTontineId()).isNull();
+      when(userRepository.findByKeycloakId("inconnu")).thenReturn(Optional.empty());
+      assertThat(service.apercu(CODE, "inconnu").getEstGestionnaire()).isNull();
+    }
+
+    @Test
+    @DisplayName("membre : dejaMembre + tontineId")
+    void membre() throws Exception {
+      when(membreRepository.existsByTontine_IdAndUser_IdAndDeletedAtIsNull(
+              tontine.getId(), demandeur.getId()))
+          .thenReturn(true);
+      InvitationApercuResponse r = service.apercu(CODE, demandeur.getKeycloakId());
+      assertThat(r.getDejaMembre()).isTrue();
+      assertThat(r.getEstGestionnaire()).isFalse();
+      assertThat(r.getDemandeEnAttente()).isFalse();
+      assertThat(r.getTontineId()).isEqualTo(tontine.getId());
+    }
+
+    @Test
+    @DisplayName("gestionnaire : tontineId sans être membre")
+    void gestionnaire() throws Exception {
+      InvitationApercuResponse r = service.apercu(CODE, gestionnaire.getKeycloakId());
+      assertThat(r.getDejaMembre()).isFalse();
+      assertThat(r.getEstGestionnaire()).isTrue();
+      assertThat(r.getTontineId()).isEqualTo(tontine.getId());
+    }
+
+    @Test
+    @DisplayName("visiteur connecté non membre avec demande en attente : pas de tontineId")
+    void demandeEnAttente() throws Exception {
+      when(demandeRepository.existsByTontine_IdAndUser_IdAndStatutAndDeletedAtIsNull(
+              tontine.getId(), demandeur.getId(), StatutDemande.EN_ATTENTE))
+          .thenReturn(true);
+      InvitationApercuResponse r = service.apercu(CODE, demandeur.getKeycloakId());
+      assertThat(r.getDejaMembre()).isFalse();
+      assertThat(r.getDemandeEnAttente()).isTrue();
+      assertThat(r.getTontineId()).isNull();
+    }
+  }
+
   @Test
   @DisplayName(
       "normalisation du code : minuscules, espaces, tiret absent ; code court ou nul introuvable")
@@ -264,7 +314,7 @@ class AdhesionServiceImplTest {
               anyString(),
               anyString(),
               eq(tontine.getId()),
-              any());
+              eq(NotificationLiens.demande(r.getId())));
     }
 
     @Test
@@ -417,7 +467,7 @@ class AdhesionServiceImplTest {
             anyString(),
             corps.capture(),
             eq(tontine.getId()),
-            any());
+            eq(NotificationLiens.demande(d.getId())));
     assertThat(corps.getValue()).contains("Motif : Tontine réservée à la famille");
 
     DemandeAdhesion d2 = demande(StatutDemande.EN_ATTENTE);
