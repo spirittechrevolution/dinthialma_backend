@@ -65,6 +65,10 @@ public class UserNotification extends BaseEntity {
   @Column(name = "membre_id")
   private UUID membreId;
 
+  /** Demande d'adhésion concernée (demandes_adhesion.id) – V033. */
+  @Column(name = "demande_id")
+  private UUID demandeId;
+
   /** Soft delete. */
   @Column(name = "deleted_at")
   private LocalDateTime deletedAt;

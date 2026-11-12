@@ -1,8 +1,6 @@
 package com.africa.dinthialma_backend.admin.dto;
 
 import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
-import com.africa.dinthialma_backend.auth.entity.User;
-import com.africa.dinthialma_backend.auth.entity.UserRoleAssignment;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -62,30 +60,4 @@ public class AdminUserResponse {
 
   @Schema(description = "Date de dernière modification")
   private LocalDateTime updatedAt;
-
-  public static AdminUserResponse from(User user) {
-    List<String> roleNames =
-        user.getRoles().stream()
-            .map(UserRoleAssignment::getRole)
-            .map(r -> r.getKeycloakRole())
-            .sorted()
-            .toList();
-
-    return AdminUserResponse.builder()
-        .id(user.getId())
-        .keycloakId(user.getKeycloakId())
-        .firstName(user.getFirstName())
-        .lastName(user.getLastName())
-        .phone(user.getPhone())
-        .email(user.getEmail())
-        .avatarUrl(user.getAvatarUrl())
-        .active(user.isActive())
-        .accountStatus(
-            user.getAccountStatus() != null ? user.getAccountStatus() : AccountStatus.ACTIVE)
-        .pinConfigured(user.getPinHash() != null)
-        .roles(roleNames)
-        .createdAt(user.getCreatedAt())
-        .updatedAt(user.getUpdatedAt())
-        .build();
-  }
 }

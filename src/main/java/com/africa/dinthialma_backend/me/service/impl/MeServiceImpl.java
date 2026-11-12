@@ -6,10 +6,13 @@ import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
+import com.africa.dinthialma_backend.common.util.CsvExport;
 import com.africa.dinthialma_backend.common.util.CsvWriter;
+import com.africa.dinthialma_backend.common.util.FichierExport;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
+import com.africa.dinthialma_backend.contribution.mapper.CotisationMapper;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
 import com.africa.dinthialma_backend.contribution.repository.CotisationSpecifications;
 import com.africa.dinthialma_backend.contribution.service.interfaces.CotisationService;
@@ -21,6 +24,7 @@ import com.africa.dinthialma_backend.me.dto.MeSummaryResponse;
 import com.africa.dinthialma_backend.me.dto.MesJackpotsResponse;
 import com.africa.dinthialma_backend.me.dto.ValidationGroupeeRequest;
 import com.africa.dinthialma_backend.me.dto.ValidationGroupeeResponse;
+import com.africa.dinthialma_backend.me.mapper.ActiviteMapper;
 import com.africa.dinthialma_backend.me.repository.ActiviteRepository;
 import com.africa.dinthialma_backend.me.service.interfaces.MeService;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
@@ -30,9 +34,11 @@ import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
+import com.africa.dinthialma_backend.tontine.entity.DistributionEvenementielle;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.CycleGagnantRepository;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
+import com.africa.dinthialma_backend.tontine.repository.DistributionEvenementielleRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -42,6 +48,7 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -63,10 +70,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class MeServiceImpl implements MeService {
 
   private final UserRepository userRepository;
+  private final CotisationMapper cotisationMapper;
+  private final ActiviteMapper activiteMapper;
   private final CotisationRepository cotisationRepository;
   private final TontineMembreRepository membreRepository;
   private final CycleTontineRepository cycleRepository;
   private final CycleGagnantRepository gagnantRepository;
+  private final DistributionEvenementielleRepository distributionRepository;
   private final CotisationService cotisationService;
   private final ActiviteRepository activiteRepository;
 
@@ -80,7 +90,9 @@ public class MeServiceImpl implements MeService {
         membreRepository
             .findByUser_IdAndDeletedAtIsNullAndTontine_DeletedAtIsNullOrderByCreatedAtDesc(
                 caller.getId());
-    BigDecimal totalJackpots = gagnantRepository.sumMontantRecuByUserId(caller.getId());
+    BigDecimal totalJackpots =
+        zeroSiNul(gagnantRepository.sumMontantRecuByUserId(caller.getId()))
+            .add(zeroSiNul(distributionRepository.sumMontantNetByUserId(caller.getId())));
 
     if (memberships.isEmpty()) {
       return MeSummaryResponse.builder()
@@ -102,6 +114,21 @@ public class MeServiceImpl implements MeService {
       statsParMembre
           .computeIfAbsent((UUID) row[0], k -> new EnumMap<>(CotisationStatut.class))
           .put((CotisationStatut) row[1], row);
+    }
+
+    Map<UUID, Object[]> jackpotsParMembre = new HashMap<>();
+    for (Object[] row : gagnantRepository.sumAndCountByMembreIds(membreIds)) {
+      jackpotsParMembre.put((UUID) row[0], row);
+    }
+    // Tontines événementielles : la distribution finale compte comme « jackpot reçu »
+    for (Object[] row : distributionRepository.sumAndCountByMembreIds(membreIds)) {
+      jackpotsParMembre.merge(
+          (UUID) row[0],
+          row,
+          (a, b) ->
+              new Object[] {
+                a[0], ((BigDecimal) a[1]).add((BigDecimal) b[1]), (Long) a[2] + (Long) b[2]
+              });
     }
 
     Map<UUID, Long> toursParTontine = new HashMap<>();
@@ -165,6 +192,14 @@ public class MeServiceImpl implements MeService {
               .aRecuJackpot(m.isARecuJackpot())
               .totalCotiseValide(valide)
               .totalEnAttente(enAttente)
+              .totalJackpotsRecus(
+                  jackpotsParMembre.containsKey(m.getId())
+                      ? (BigDecimal) jackpotsParMembre.get(m.getId())[1]
+                      : BigDecimal.ZERO)
+              .nombreJackpotsRecus(
+                  jackpotsParMembre.containsKey(m.getId())
+                      ? (Long) jackpotsParMembre.get(m.getId())[2]
+                      : 0L)
               .toursPayes(nombre(stats.get(CotisationStatut.VALIDE)))
               .toursTotal(toursParTontine.getOrDefault(t.getId(), 0L))
               .cycleEnCours(
@@ -237,6 +272,10 @@ public class MeServiceImpl implements MeService {
         .build();
   }
 
+  private static BigDecimal zeroSiNul(BigDecimal valeur) {
+    return valeur != null ? valeur : BigDecimal.ZERO;
+  }
+
   private static BigDecimal montant(Object[] row) {
     return row != null ? (BigDecimal) row[3] : BigDecimal.ZERO;
   }
@@ -266,7 +305,7 @@ public class MeServiceImpl implements MeService {
             CotisationSpecifications.statutParmi(statuts),
             CotisationSpecifications.recherche(q));
 
-    return cotisationRepository.findAll(spec, pageable).map(CotisationResponse::from);
+    return cotisationRepository.findAll(spec, pageable).map(cotisationMapper::toResponse);
   }
 
   // ─── Mes jackpots ────────────────────────────────────────────────────────
@@ -287,9 +326,27 @@ public class MeServiceImpl implements MeService {
                       .numeroCycle(c.getNumeroCycle())
                       .dateRemise(c.getDateRemise() != null ? c.getDateRemise() : c.getDateFin())
                       .montantRecu(g.getMontantRecu())
+                      .nature("JACKPOT")
                       .build();
                 })
-            .toList();
+            .collect(Collectors.toCollection(ArrayList::new));
+    for (DistributionEvenementielle d : distributionRepository.findRecuesByUserId(caller.getId())) {
+      CycleTontine c = d.getCycle();
+      recus.add(
+          MesJackpotsResponse.JackpotRecu.builder()
+              .tontineId(d.getTontine().getId())
+              .tontineNom(d.getTontine().getNom())
+              .cycleId(c.getId())
+              .numeroCycle(c.getNumeroCycle())
+              .dateRemise(c.getDateRemise() != null ? c.getDateRemise() : c.getDateFin())
+              .montantRecu(d.getMontantNet())
+              .nature("DISTRIBUTION_FINALE")
+              .build());
+    }
+    recus.sort(
+        Comparator.comparing(
+            MesJackpotsResponse.JackpotRecu::getDateRemise,
+            Comparator.nullsLast(Comparator.reverseOrder())));
     BigDecimal totalRecu =
         recus.stream()
             .map(MesJackpotsResponse.JackpotRecu::getMontantRecu)
@@ -339,7 +396,12 @@ public class MeServiceImpl implements MeService {
 
     if (!"ROTATION".equals(t.getOrdreBeneficiaire())) {
       return ligne
-          .modeAttribution("ALEATOIRE".equals(t.getOrdreBeneficiaire()) ? "TIRAGE" : "CHOIX")
+          .modeAttribution(
+              switch (t.getOrdreBeneficiaire() == null ? "" : t.getOrdreBeneficiaire()) {
+                case "ALEATOIRE" -> "TIRAGE";
+                case "HYBRIDE" -> "HYBRIDE";
+                default -> "CHOIX";
+              })
           .build();
     }
 
@@ -393,7 +455,7 @@ public class MeServiceImpl implements MeService {
       String keycloakId,
       ModeActivite mode,
       UUID tontineId,
-      TypeActivite type,
+      List<TypeActivite> types,
       CotisationStatut statut,
       Pageable pageable)
       throws CustomException {
@@ -405,23 +467,28 @@ public class MeServiceImpl implements MeService {
             caller.getId(),
             mode == ModeActivite.GERE,
             tontineId,
-            type != null ? type.name() : null,
+            types != null && !types.isEmpty(),
+            types == null || types.isEmpty()
+                ? List.of("-")
+                : types.stream().map(TypeActivite::name).distinct().toList(),
             statut != null ? statut.name() : null,
             page)
-        .map(ActiviteResponse::from);
+        .map(activiteMapper::toResponse);
   }
 
   @Override
-  public byte[] exportActiviteCsv(
+  public FichierExport exportActivite(
       String keycloakId,
+      String format,
       ModeActivite mode,
       UUID tontineId,
-      TypeActivite type,
+      List<TypeActivite> types,
       CotisationStatut statut)
       throws CustomException {
+    CsvExport.verifierFormat(format);
     Page<ActiviteResponse> lignes =
         getActivite(
-            keycloakId, mode, tontineId, type, statut, PageRequest.of(0, CsvWriter.MAX_LIGNES));
+            keycloakId, mode, tontineId, types, statut, PageRequest.of(0, CsvWriter.MAX_LIGNES));
     CsvWriter csv =
         new CsvWriter()
             .ligne("Date", "Type", "Tontine", "Tour", "Membre", "Montant (FCFA)", "Sens", "Statut");
@@ -436,7 +503,8 @@ public class MeServiceImpl implements MeService {
           a.getSens(),
           a.getStatut());
     }
-    return csv.toBytes();
+    return FichierExport.csv(
+        "activite-" + mode.name().toLowerCase(Locale.ROOT) + ".csv", csv.toBytes());
   }
 
   // ─── Validation groupée ──────────────────────────────────────────────────

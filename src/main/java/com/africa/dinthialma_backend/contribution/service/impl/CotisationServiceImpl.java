@@ -13,7 +13,9 @@ import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
+import com.africa.dinthialma_backend.common.util.CsvExport;
 import com.africa.dinthialma_backend.common.util.CsvWriter;
+import com.africa.dinthialma_backend.common.util.FichierExport;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
@@ -23,6 +25,7 @@ import com.africa.dinthialma_backend.contribution.dto.RecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.RefuseCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.UpdateCotisationRequest;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
+import com.africa.dinthialma_backend.contribution.mapper.CotisationMapper;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
 import com.africa.dinthialma_backend.contribution.repository.CotisationSpecifications;
 import com.africa.dinthialma_backend.contribution.service.interfaces.CotisationService;
@@ -63,6 +66,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class CotisationServiceImpl implements CotisationService {
 
   private final CotisationRepository cotisationRepository;
+  private final CotisationMapper cotisationMapper;
   private final TontineRepository tontineRepository;
   private final CycleTontineRepository cycleRepository;
   private final TontineMembreRepository membreRepository;
@@ -194,7 +198,7 @@ public class CotisationServiceImpl implements CotisationService {
       log.warn("Notif WA admin (nouvelle cotisation) non envoyée : {}", e.getMessage());
     }
 
-    return CotisationResponse.from(saved);
+    return cotisationMapper.toResponse(saved);
   }
 
   // ─── Enregistrement admin (cash / PRE_ENROLLED) ──────────────────────────
@@ -324,7 +328,7 @@ public class CotisationServiceImpl implements CotisationService {
       log.warn("Notif WA admin (admin-record) non envoyée : {}", e.getMessage());
     }
 
-    return CotisationResponse.from(saved);
+    return cotisationMapper.toResponse(saved);
   }
 
   // ─── Validation ──────────────────────────────────────────────────────────
@@ -434,7 +438,7 @@ public class CotisationServiceImpl implements CotisationService {
       log.warn("Notif WA admin (validation) non envoyée : {}", e.getMessage());
     }
 
-    return CotisationResponse.from(saved);
+    return cotisationMapper.toResponse(saved);
   }
 
   // ─── Refus ───────────────────────────────────────────────────────────────
@@ -518,7 +522,7 @@ public class CotisationServiceImpl implements CotisationService {
       log.warn("Notif WA membre (refus) non envoyée : {}", e.getMessage());
     }
 
-    return CotisationResponse.from(saved);
+    return cotisationMapper.toResponse(saved);
   }
 
   // ─── Liste ───────────────────────────────────────────────────────────────
@@ -562,16 +566,21 @@ public class CotisationServiceImpl implements CotisationService {
             CotisationSpecifications.statutParmi(statuts),
             CotisationSpecifications.recherche(q));
 
-    return cotisationRepository.findAll(spec, pageable).map(CotisationResponse::from);
+    return cotisationRepository.findAll(spec, pageable).map(cotisationMapper::toResponse);
   }
 
   // ─── Export CSV (B24) ─────────────────────────────────────────────────────
 
   @Override
   @Transactional(readOnly = true)
-  public byte[] exportCotisationsCsv(
-      String keycloakId, UUID tontineId, UUID cycleId, List<CotisationStatut> statuts)
+  public FichierExport exportCotisations(
+      String keycloakId,
+      UUID tontineId,
+      String format,
+      UUID cycleId,
+      List<CotisationStatut> statuts)
       throws CustomException {
+    CsvExport.verifierFormat(format);
     User caller = findUserByKeycloakId(keycloakId);
     Tontine tontine = findTontineById(tontineId);
     assertIsCreatorOrSuperAdmin(caller, tontine);
@@ -619,7 +628,7 @@ public class CotisationServiceImpl implements CotisationService {
           c.getMotifRefus(),
           c.getNote());
     }
-    return csv.toBytes();
+    return FichierExport.csv("cotisations-" + tontineId + ".csv", csv.toBytes());
   }
 
   // ─── Récupération unique ──────────────────────────────────────────────────
@@ -658,7 +667,7 @@ public class CotisationServiceImpl implements CotisationService {
       }
     }
 
-    return CotisationResponse.from(cotisation);
+    return cotisationMapper.toResponse(cotisation);
   }
 
   // ─── Modification ────────────────────────────────────────────────────────
@@ -741,7 +750,7 @@ public class CotisationServiceImpl implements CotisationService {
         cotisationId,
         caller.getId());
 
-    return CotisationResponse.from(saved);
+    return cotisationMapper.toResponse(saved);
   }
 
   // ─── Récapitulatif par membre ─────────────────────────────────────────────
@@ -762,7 +771,7 @@ public class CotisationServiceImpl implements CotisationService {
         membreRepository.findByTontine_IdAndStatutNotAndDeletedAtIsNull(
             tontineId, MembreStatut.SORTI, pageable);
     if (membres.isEmpty()) {
-      return membres.map(m -> CycleRecapCotisationResponse.from(m, null));
+      return membres.map(m -> cotisationMapper.toRecap(m, null));
     }
 
     List<UUID> membreIds = membres.getContent().stream().map(TontineMembre::getId).toList();
@@ -773,8 +782,7 @@ public class CotisationServiceImpl implements CotisationService {
             .collect(
                 Collectors.toMap(c -> c.getMembre().getId(), c -> c, Cotisation::plusPertinente));
 
-    return membres.map(
-        m -> CycleRecapCotisationResponse.from(m, cotisationByMembre.get(m.getId())));
+    return membres.map(m -> cotisationMapper.toRecap(m, cotisationByMembre.get(m.getId())));
   }
 
   // ─── Récapitulatif total par membre ───────────────────────────────────────
@@ -792,7 +800,7 @@ public class CotisationServiceImpl implements CotisationService {
         membreRepository.findByTontine_IdAndStatutNotAndDeletedAtIsNull(
             tontineId, MembreStatut.SORTI, pageable);
     if (membres.isEmpty()) {
-      return membres.map(m -> MembreTotalCotisationResponse.from(m, BigDecimal.ZERO, 0L));
+      return membres.map(m -> cotisationMapper.toTotal(m, BigDecimal.ZERO, 0L));
     }
 
     List<UUID> membreIds = membres.getContent().stream().map(TontineMembre::getId).toList();
@@ -805,7 +813,7 @@ public class CotisationServiceImpl implements CotisationService {
           Object[] row = totauxByMembre.get(m.getId());
           BigDecimal total = row != null ? (BigDecimal) row[1] : BigDecimal.ZERO;
           long nombre = row != null ? (Long) row[2] : 0L;
-          return MembreTotalCotisationResponse.from(m, total, nombre);
+          return cotisationMapper.toTotal(m, total, nombre);
         });
   }
 

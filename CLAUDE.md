@@ -88,7 +88,7 @@
 | Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
 |----------|---------|------|--------|-------|-------------|-------|
 | `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 filtres `?statut=`, `?q=` (nom, téléphone), `?cycleId=&aPaye=true\|false` (cotisation active ou non sur le cycle ; cycle hors tontine → 404) |
-| `/` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 ajout par **phone** (+ firstName/lastName si numéro inconnu) |
+| `/` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 ajout par **phone** (+ firstName/lastName si numéro inconnu) **ou** par **qrToken** `m_…` (QR scanné, compte existant, numéro jamais exposé) ; exactement un des deux (`MEMBER_IDENTIFIER_REQUIRED`) |
 | `/{membreId}` | DELETE | ❌ | ❌ | ✅² | ✅ | 🔒 soft delete, statut → SORTI |
 | `/{membreId}/statut` | PATCH | ❌ | ❌ | ✅² | ✅ | 🔒 ACTIF / SUSPENDU / SORTI |
 
@@ -140,17 +140,17 @@
 | `/dashboard/users/{id}/enable` | POST | ❌ | ✅ | Réactiver un compte |
 | `/dashboard/users/{id}/roles` | PUT | ❌ | ✅ | Modifier les rôles |
 | `/dashboard/contributions` | GET | ❌ | ✅ | Toutes cotisations (pageable, filtres cumulables `?statut=` `?tontineId=`) |
-| `/my-dashboard` | GET | ✅ | ✅ | Métriques de l'admin pour ses tontines (`tontines` = `PagedModel`) + agrégats globaux : `nombreTontinesGerees`, `montantTotalValide`, `totalMembres`, `totalCotisationsEnAttente/EnRetard`, `totalCollecteToursEnCours`, `totalAttenduToursEnCours` ; par tontine : `gagnantsADesigner` + `cycleEnCours` (`montantCollecte`, `montantEnAttente`, `montantAttendu`, `membresAyantPaye`, `membresEnAttente`, `membresActifs`) |
+| `/my-dashboard` | GET | ✅ | ✅ | Métriques de l'admin pour ses tontines (`tontines` = `PagedModel`) + agrégats globaux : `nombreTontinesGerees`, `montantTotalValide`, `totalMembres`, `totalCotisationsEnAttente/EnRetard`, `totalDemandesEnAttente`, `totalCollecteToursEnCours`, `totalAttenduToursEnCours` ; par tontine : `gagnantsADesigner`, `demandesEnAttente` + `cycleEnCours` (`montantCollecte`, `montantEnAttente`, `montantAttendu`, `membresAyantPaye`, `membresEnAttente`, `membresActifs`) |
 
 ### 🙋 Mon espace (`/v1/me`)
 
 | Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
 |----------|---------|------|--------|-------|-------------|-------|
-| `/summary` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 résumé « Je cotise » : par tontine où je cotise (membership, totaux, tours, tour EN_COURS, `cotisationDue` A_PAYER/EN_ATTENTE/VALIDE, gestionnaire) + totaux et jackpots reçus ; liste non paginée |
+| `/summary` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 résumé « Je cotise » : par tontine où je cotise (membership, totaux, tours, tour EN_COURS, `cotisationDue` A_PAYER/EN_ATTENTE/VALIDE, gestionnaire) + totaux et jackpots reçus ; par tontine `totalJackpotsRecus` / `nombreJackpotsRecus` (0 si rien ; en EVENEMENTIELLE = part de la distribution finale) ; liste non paginée |
 | `/gestion/cotisations` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 paiements de **toutes les tontines que j'ai créées** (file « À valider »), filtres `?statut=` (multi), `?tontineId=`, `?q=` ; pageable |
 | `/gestion/cotisations/valider` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 validation groupée `{cotisationIds}` (1–100) ; chaque cotisation dans sa propre transaction, résultat par id avec `code` d'échec ; toujours 200 |
-| `/jackpots` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 jackpots reçus + `aVenir` (ROTATION : rang, tour et date estimés ; TIRAGE / CHOIX : sans estimation) |
-| `/activite` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 fil cotisations + jackpots (UNION native, tri date DESC imposé), `?mode=COTISE\|GERE`, `?tontineId=`, `?type=`, `?statut=` |
+| `/jackpots` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 reçus (`nature` JACKPOT \| DISTRIBUTION_FINALE, tri date DESC) + `aVenir` (ROTATION : rang, tour et date estimés ; TIRAGE / CHOIX : sans estimation) |
+| `/activite` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 fil cotisations + jackpots + distributions finales `DISTRIBUTION_RECUE` (UNION native, tri date DESC imposé), `?mode=COTISE\|GERE`, `?tontineId=`, `?type=` (répétable : `?type=A&type=B`), `?statut=` |
 | `/qr` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 mon QR : jeton opaque stable `m_…` + url (pas de téléphone) |
 | `/qr/regenerer` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 nouveau jeton, l'ancien → 404 |
 | `/activite/export` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 export CSV du fil (mêmes filtres), `;` + BOM UTF-8, 10 000 lignes max |
@@ -167,7 +167,7 @@
 |----------|---------|-------|-------|
 | `/v1/tontines/{id}/invitation` | POST | créateur, SUPER_ADMIN | code `XXXX-XXXX` + url + qrToken `t_<code>` ; `?regenerer=true` ; tontine BROUILLON/ACTIVE |
 | `/v1/tontines/{id}/invitation` | DELETE | créateur, SUPER_ADMIN | révoque (lien et QR → 404) |
-| `/v1/public/invitations/{code}` | GET | 🌐 public | aperçu minimal sans données des membres ; `placesRestantes`, `ouverte` |
+| `/v1/public/invitations/{code}` | GET | 🌐 public (JWT facultatif) | aperçu minimal sans données des membres ; `placesRestantes`, `ouverte` ; avec JWT valide (`JwtOptionnel`) : `dejaMembre`, `estGestionnaire`, `demandeEnAttente`, `tontineId` (si membre ou gestionnaire) — absents sinon, jamais de 401 |
 | `/v1/invitations/{code}/demandes` | POST | tout auth | demande EN_ATTENTE ; `DEMANDE_DEJA_EN_ATTENTE`, `MEMBER_ALREADY_IN_TONTINE`, `TONTINE_FULL`, `TONTINE_NOT_OPEN` |
 | `/v1/tontines/{id}/demandes/{demandeId}/accepter` | PUT | créateur, SUPER_ADMIN | réutilise l'ajout de membre (`ordreJackpot` optionnel) ; `DEMANDE_NOT_PENDING` |
 | `/v1/tontines/{id}/demandes/{demandeId}/refuser` | PUT | créateur, SUPER_ADMIN | motif optionnel, notification `ADHESION_REFUSEE` |
@@ -176,7 +176,7 @@
 
 | Endpoint | Méthode | Accès | Notes |
 |----------|---------|-------|-------|
-| `/v1/public/config` | GET | 🌐 public | `supportWhatsapp`, `supportEmail`, `versionMinimaleApp` (env `SUPPORT_WHATSAPP`, `SUPPORT_EMAIL`, `APP_VERSION_MINIMALE`) ; champ absent si non configuré |
+| `/v1/public/config` | GET | 🌐 public | `supportWhatsapp`, `supportEmail`, `versionMinimaleApp` (bloquante), `versionRecommandeeApp` (bandeau) — env `SUPPORT_WHATSAPP`, `SUPPORT_EMAIL`, `APP_VERSION_MINIMALE`, `APP_VERSION_RECOMMANDEE` ; champ absent si non configuré ; versions en SemVer strict `X.Y.Z`, sinon le backend refuse de démarrer |
 | `/v1/tontines/{id}/cotisations/export` | GET | créateur, SUPER_ADMIN | export CSV (`format=csv`, `cycleId`, `statut`) |
 | `/v1/code-list/{id}` | DELETE | SUPER_ADMIN | suppression logique ; valeurs système refusées (`CODE_LIST_SYSTEM_VALUE`) ; recréer restaure |
 
@@ -186,7 +186,7 @@
 
 | Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
 |----------|---------|------|--------|-------|-------------|-------|
-| `/` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 notifications paginées (lues + non lues, tri createdAt DESC) ; liens `tontineId`, `cycleId`, `cotisationId`, `membreId` quand ils existent |
+| `/` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 notifications paginées (lues + non lues, tri createdAt DESC) ; liens `tontineId`, `cycleId`, `cotisationId`, `membreId`, `demandeId` (DEMANDE_ADHESION, ADHESION_REFUSEE) quand ils existent |
 | `/unread-count` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 compteur badge cloche |
 | `/{id}/read` | PATCH | ✅ | ✅ | ✅ | ✅ | 🔒 marquer une notification lue (idempotent) |
 | `/read-all` | PATCH | ✅ | ✅ | ✅ | ✅ | 🔒 tout marquer lu en une opération (bulk) |
@@ -333,6 +333,17 @@ private boolean isSuperAdmin(User user) {
 }
 ```
 
+Pour une simple exigence de rôle (sans notion de tontine), utiliser le composant
+`common/security/AccessControl` : `exigerUnRole(keycloakId, UserRole...)` (403 sinon),
+`utilisateur(keycloakId)` (404), `estSuperAdmin(user)`.
+
+### Contrôleurs — aucun traitement
+
+Un contrôleur extrait le `keycloakId`, appelle **un** service et enveloppe sa réponse dans
+`CustomResponse`. Aucun `if`, `try`, accès repository, mapping ou contrôle de droits dans
+un contrôleur. Exports CSV : le service renvoie un `FichierExport`, le contrôleur répond
+avec `CsvExport.reponse(fichier)`.
+
 ---
 
 ## Conventions de code
@@ -350,6 +361,11 @@ private boolean isSuperAdmin(User user) {
   `data` (ex. `PIN_LOCKED` → `data.retryAfterSeconds`). On **ajoute** des valeurs à
   `ErrorCode`, on n'en renomme ni n'en supprime jamais.
 - **Services** : interface dans `service/interfaces/` + impl dans `service/impl/` ; `@Transactional` sur écriture
+- **Mapping** : MapStruct uniquement, un mapper par module dans `<module>/mapper/` (bean Spring
+  injecté dans le service). Pas de méthode statique `from()` / `toEntity()` dans les DTOs.
+  `unmappedTargetPolicy=ERROR` : tout champ de DTO non alimenté fait échouer la compilation —
+  le mapper ou `@Mapping(target = "…", ignore = true)` doit être explicite. Enrichissement après
+  mapping : `@Builder(toBuilder = true)` sur le DTO et méthode `default` dans le mapper.
 - **Phone** : toujours stocké SANS le `+` (normalisé via `PhoneUtils.normalize()` en entrée)
 - **JPQL** : pas de `SELECT DISTINCT` dans les repositories — PostgreSQL gère la déduplication nativement
 
@@ -432,6 +448,39 @@ public class ModuleController {
 
 ---
 
+## Tests
+
+Arborescence imposée de `src/test/java/com/africa/dinthialma_backend/` — **trois répertoires
+à plat, aucun sous-répertoire** :
+
+```
+support/       commun aux deux types : Fixtures, AbstractIntegrationTest, ApiClient, TestDataFactory
+integration/   tous les tests d'intégration   (*IT.java)   → ./mvnw verify (Docker requis)
+service/       tous les tests unitaires       (*Test.java) → ./mvnw test
+```
+
+**`./mvnw clean install`** lance tout : unitaires, puis intégration, puis seuil JaCoCo. **Docker
+obligatoire** : sans Docker démarré, le build échoue (les `*IT` ne sont jamais sautés en silence).
+`-DskipITs` = unitaires seuls · `-DskipTests` = aucun test (Dockerfile).
+**CI GitHub** (`ci-branches.yml`, `docker-publish.yml`) : `./mvnw verify -DskipITs` → tests unitaires
++ seuil JaCoCo à chaque push ; les tests d'intégration ne tournent qu'en local.
+
+- **Unitaires** (`service/`, Mockito + AssertJ) : un fichier par service, dépendances simulées,
+  mappers MapStruct réels (`Mappers.getMapper(...)` en `@Spy`), jeux de données `support/Fixtures`.
+  Les tests étant hors du paquet du service, on ne teste que l'API publique (pas de méthode
+  package-private). Les appels HTTP sortants (Keycloak, WhatsApp, SMS) sont testés contre un
+  faux serveur `HttpServer` local.
+- **Intégration** (`integration/`, Testcontainers PostgreSQL 17 + Keycloak 26) : hériter de
+  `support/AbstractIntegrationTest` (conteneurs partagés, profil `test`, SMS/WhatsApp simulés) ;
+  appels via `ApiClient`, données via `TestDataFactory`. Realm importé depuis
+  `src/test/resources/keycloak/`.
+- Après un déplacement de tests, lancer `./mvnw clean verify` (sinon les anciennes classes
+  compilées de `target/test-classes` sont rejouées en double).
+- **Couverture (JaCoCo)** : `./mvnw verify` échoue si un paquet `*.service`, `*.service.impl`
+  ou `*.security` passe sous **90 % d'instructions** ou **80 % de branches** (tests unitaires).
+  Rapport : `target/site/jacoco/index.html`.
+- Tout nouveau service ou nouvelle règle métier arrive avec ses tests unitaires.
+
 ## Base de données
 
 - **Schéma** : `dinthialma`
@@ -481,8 +530,10 @@ public class ModuleController {
 | V030 | `add_deleted_at_to_la_code_list.sql` | `la_code_list.deleted_at` (suppression logique) |
 | V031 | `add_preferences_to_users.sql` | `users.preferences` JSONB |
 | V032 | `create_invitations_et_demandes_adhesion.sql` | `tontines.code_invitation` (unique) + table `demandes_adhesion` (1 EN_ATTENTE max par personne/tontine) |
+| V033 | `add_demande_id_to_user_notifications.sql` | `user_notifications.demande_id` (lien vers la demande d'adhésion, sans FK) |
+| V034 | `create_distributions_evenementielles.sql` | table `distributions_evenementielles` : part de chaque membre à la clôture finale EVENEMENTIELLE (1 active par tontine/membre) |
 
-Prochaine version disponible : **V033**
+Prochaine version disponible : **V035**
 
 ---
 
@@ -793,6 +844,16 @@ cd docker && docker compose up -d
   B16/B17 invitation par code + demandes d'adhésion (V032)                      ✅
   ⏸ B19 notifications push : EN STAND-BY (non bloquant – in-app + WhatsApp couvrent le
     besoin ; à reprendre avec une lib Web Push + clés VAPID par environnement)
+
+✦ Sprint 9 – Qualité (branche feature/refactor-mapstruct-tests)  🔄 EN REVUE
+  9.1 Contrôleurs sans traitement (AccessControl, InscriptionService, FichierExport)   ✅
+  9.2 Tests d'intégration Testcontainers (37 scénarios)                                ✅
+      → fix : « mot de passe oublié » ne trouvait jamais l'utilisateur
+  9.3 MapStruct pour toutes les conversions entité ↔ DTO                               ✅
+  9.4 Tests unitaires de tous les services (238) + seuil JaCoCo 90 % / 80 %            ✅
+      → fix : unicité de l'e-mail du profil contournée par des espaces
+      → fix : ajout sans nom d'un PRE_ENROLLED au nom vide -> 500
+      → fix : SMS encodé deux fois (service non encore branché)
 ```
 
 ---
@@ -847,6 +908,9 @@ Calcul `computeFinalDistribution()` :
 3. Commission `FRAIS_FIXES_PAR_CYCLE` : répartie proportionnellement au montant cotisé
 4. Commission `FRAIS_ADHESION` : ignorée (ne touche pas le jackpot)
 5. `montantNet` du dernier cycle = cagnotte totale - commission totale (mise à jour)
+6. Part de chaque membre **enregistrée** dans `distributions_evenementielles` (V034, une seule fois par
+   tontine) : reprise dans `/v1/me/summary`, `/v1/me/jackpots` (`DISTRIBUTION_FINALE`) et `/v1/me/activite`
+   (`DISTRIBUTION_RECUE`). Les tontines clôturées avant V034 n'ont pas d'historique enregistré.
 
 Réponse : `CycleResponse.distributionParMembre` (liste `MembreDistributionInfo` : montantCotise, montantCommission, montantNet).
 

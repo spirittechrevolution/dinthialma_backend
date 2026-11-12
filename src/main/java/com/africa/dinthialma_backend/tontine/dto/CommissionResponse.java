@@ -1,7 +1,6 @@
 package com.africa.dinthialma_backend.tontine.dto;
 
 import com.africa.dinthialma_backend.tontine.codeList.CommissionType;
-import com.africa.dinthialma_backend.tontine.entity.TontineCommission;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -39,16 +38,4 @@ public class CommissionResponse {
 
   @Schema(description = "Date de dernière modification")
   private LocalDateTime updatedAt;
-
-  public static CommissionResponse from(TontineCommission commission) {
-    return CommissionResponse.builder()
-        .id(commission.getId())
-        .tontineId(commission.getTontine() != null ? commission.getTontine().getId() : null)
-        .type(commission.getType())
-        .valeur(commission.getValeur())
-        .description(commission.getDescription())
-        .createdAt(commission.getCreatedAt())
-        .updatedAt(commission.getUpdatedAt())
-        .build();
-  }
 }

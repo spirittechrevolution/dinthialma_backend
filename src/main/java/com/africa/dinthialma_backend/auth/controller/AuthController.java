@@ -12,6 +12,7 @@ import com.africa.dinthialma_backend.auth.dto.RegisterResponse;
 import com.africa.dinthialma_backend.auth.dto.ResetPasswordByPhoneRequest;
 import com.africa.dinthialma_backend.auth.dto.SendOtpRequest;
 import com.africa.dinthialma_backend.auth.dto.VerifyOtpRequest;
+import com.africa.dinthialma_backend.auth.service.interfaces.InscriptionService;
 import com.africa.dinthialma_backend.auth.service.interfaces.KeycloakAuthService;
 import com.africa.dinthialma_backend.auth.service.interfaces.LoginService;
 import com.africa.dinthialma_backend.auth.service.interfaces.PasswordResetService;
@@ -32,13 +33,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 /** Contrôleur d'authentification – inscription, connexion, déconnexion, reset, PIN. */
-@Slf4j
 @RestController
 @RequestMapping("/v1/auth")
 @RequiredArgsConstructor
@@ -48,6 +47,7 @@ public class AuthController {
   private final LoginService loginService;
   private final KeycloakAuthService keycloakAuthService;
   private final RegistrationService registrationService;
+  private final InscriptionService inscriptionService;
   private final PasswordResetService passwordResetService;
   private final PinService pinService;
   private final RequestHeaderParser requestHeaderParser;
@@ -196,25 +196,7 @@ public class AuthController {
   })
   public ResponseEntity<CustomResponse> completeRegistration(
       @RequestBody @Valid RegisterCompleteRequest request) throws CustomException {
-    RegisterResponse response = registrationService.completeRegistration(request);
-
-    // Connexion automatique (B13) : APRÈS le commit de l'inscription, pour qu'un échec de
-    // connexion ne puisse jamais annuler un compte déjà créé. Non bloquante.
-    if (request.getClientType() != null) {
-      try {
-        LoginRequest login = new LoginRequest();
-        login.setUsername(response.getPhone());
-        login.setPassword(request.getPassword());
-        login.setClientType(request.getClientType());
-        login.setDeviceInfo(request.getDeviceInfo());
-        response.setTokens(loginService.login(login));
-      } catch (Exception e) {
-        log.warn(
-            "[Register] Connexion automatique impossible pour userId={} : {}",
-            response.getUserId(),
-            e.getMessage());
-      }
-    }
+    RegisterResponse response = inscriptionService.finaliserInscription(request);
 
     return ResponseEntity.status(HttpStatus.CREATED)
         .body(

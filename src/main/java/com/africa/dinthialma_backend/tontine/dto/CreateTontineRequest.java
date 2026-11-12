@@ -60,9 +60,13 @@ public class CreateTontineRequest {
 
   @Schema(
       description =
-          "Ordre de désignation des bénéficiaires (ROTATIVE uniquement)."
-              + " Codes ORDRE_BENEFICIAIRE : FIXE, ALEATOIRE, ROTATION, MANUEL.",
-      example = "FIXE")
+          "Désignation des gagnants (ROTATIVE, obligatoire) : ROTATION (ordre des membres,"
+              + " automatique à la clôture), ALEATOIRE (tirage automatique à la clôture), MANUEL"
+              + " (choisis par le gestionnaire après la clôture), HYBRIDE (à chaque tour, le"
+              + " gestionnaire choisit après la clôture : tirage au sort ou choix manuel)."
+              + " Autre valeur → 400 INVALID_PARAMETER.",
+      allowableValues = {"ROTATION", "ALEATOIRE", "MANUEL", "HYBRIDE"},
+      example = "ROTATION")
   private String ordreBeneficiaire;
 
   @Schema(

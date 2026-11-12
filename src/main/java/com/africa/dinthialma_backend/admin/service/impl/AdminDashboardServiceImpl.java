@@ -1,5 +1,7 @@
 package com.africa.dinthialma_backend.admin.service.impl;
 
+import com.africa.dinthialma_backend.adhesion.codeList.StatutDemande;
+import com.africa.dinthialma_backend.adhesion.repository.DemandeAdhesionRepository;
 import com.africa.dinthialma_backend.admin.dto.AdminUserResponse;
 import com.africa.dinthialma_backend.admin.dto.GlobalDashboardResponse;
 import com.africa.dinthialma_backend.admin.dto.MyDashboardResponse;
@@ -9,6 +11,7 @@ import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
 import com.africa.dinthialma_backend.auth.codeList.UserRole;
 import com.africa.dinthialma_backend.auth.entity.User;
 import com.africa.dinthialma_backend.auth.entity.UserRoleAssignment;
+import com.africa.dinthialma_backend.auth.mapper.UserMapper;
 import com.africa.dinthialma_backend.auth.repository.UserRepository;
 import com.africa.dinthialma_backend.auth.repository.UserRoleAssignmentRepository;
 import com.africa.dinthialma_backend.auth.repository.UserSpecifications;
@@ -21,15 +24,18 @@ import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
+import com.africa.dinthialma_backend.contribution.mapper.CotisationMapper;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
+import com.africa.dinthialma_backend.tontine.codeList.OrdreBeneficiaire;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
+import com.africa.dinthialma_backend.tontine.mapper.TontineMapper;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineSpecifications;
@@ -56,12 +62,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class AdminDashboardServiceImpl implements AdminDashboardService {
 
   private final UserRepository userRepository;
+  private final UserMapper userMapper;
+  private final CotisationMapper cotisationMapper;
+  private final TontineMapper tontineMapper;
   private final UserRoleAssignmentRepository roleRepository;
   private final TontineRepository tontineRepository;
   private final CycleTontineRepository cycleRepository;
   private final TontineMembreRepository membreRepository;
   private final CotisationRepository cotisationRepository;
   private final KeycloakAuthService keycloakAuthService;
+  private final DemandeAdhesionRepository demandeRepository;
 
   // ─── Dashboard global SUPER_ADMIN ─────────────────────────────────────────
 
@@ -148,7 +158,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                 UserSpecifications.role(role),
                 UserSpecifications.recherche(q)),
             pageable)
-        .map(AdminUserResponse::from);
+        .map(userMapper::toAdmin);
   }
 
   @Override
@@ -156,7 +166,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
   public AdminUserResponse getUserDetail(String keycloakId, UUID userId) throws CustomException {
     assertSuperAdmin(keycloakId);
     User user = findUserById(userId);
-    return AdminUserResponse.from(user);
+    return userMapper.toAdmin(user);
   }
 
   @Override
@@ -181,7 +191,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
     }
 
     log.info("Compte désactivé – userId={} par superAdmin={}", userId, caller.getId());
-    return AdminUserResponse.from(target);
+    return userMapper.toAdmin(target);
   }
 
   @Override
@@ -203,7 +213,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
     }
 
     log.info("Compte réactivé – userId={}", userId);
-    return AdminUserResponse.from(target);
+    return userMapper.toAdmin(target);
   }
 
   @Override
@@ -258,7 +268,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         userRepository
             .findByIdAndDeletedAtIsNull(userId)
             .orElseThrow(() -> new NotFoundException(ResponseMessageConstants.AUTH_USER_NOT_FOUND));
-    return AdminUserResponse.from(refreshed);
+    return userMapper.toAdmin(refreshed);
   }
 
   // ─── Listes plateforme SUPER_ADMIN ────────────────────────────────────────
@@ -279,7 +289,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
 
     return tontines.map(
         t ->
-            TontineResponse.from(
+            tontineMapper.toResponse(
                 t, (int) membreRepository.countByTontine_IdAndDeletedAtIsNull(t.getId())));
   }
 
@@ -303,7 +313,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
       cotisations = cotisationRepository.findByDeletedAtIsNull(pageable);
     }
 
-    return cotisations.map(CotisationResponse::from);
+    return cotisations.map(cotisationMapper::toResponse);
   }
 
   // ─── Dashboard ADMIN (créateur tontines) ─────────────────────────────────
@@ -329,6 +339,10 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                 uid))
         .totalCotisationsEnAttente(countCotisationsCreateur(uid, CotisationStatut.EN_ATTENTE))
         .totalCotisationsEnRetard(countCotisationsCreateur(uid, CotisationStatut.EN_RETARD))
+        .totalDemandesEnAttente(
+            demandeRepository
+                .countByTontine_CreePar_IdAndTontine_DeletedAtIsNullAndStatutAndDeletedAtIsNull(
+                    uid, StatutDemande.EN_ATTENTE))
         .totalCollecteToursEnCours(cotisationRepository.sumMontantValideToursEnCoursByCreateur(uid))
         .totalAttenduToursEnCours(computeTotalAttenduToursEnCours(uid))
         .tontines(new PagedModel<>(statsPage))
@@ -424,7 +438,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
     boolean evenementielle = tontine.getTontineType() == TontineType.EVENEMENTIELLE;
     boolean gagnantsADesigner =
         tontine.getTontineType() == TontineType.ROTATIVE
-            && "MANUEL".equals(tontine.getOrdreBeneficiaire())
+            && OrdreBeneficiaire.designationApresCloture(tontine.getOrdreBeneficiaire())
             && cycleRepository.existsTermineSansGagnant(tid);
 
     return MyDashboardResponse.TontineStats.builder()
@@ -446,6 +460,9 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         .montantTotalValide(montantValide)
         .cycleEnCours(cycleInfo)
         .gagnantsADesigner(gagnantsADesigner)
+        .demandesEnAttente(
+            demandeRepository.countByTontine_IdAndStatutAndDeletedAtIsNull(
+                tid, StatutDemande.EN_ATTENTE))
         .build();
   }
 

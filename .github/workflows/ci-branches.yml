@@ -83,10 +83,12 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
+      # Tests unitaires + seuil JaCoCo (90 % / 80 % couche service).
+      # Les tests d'intégration (*IT, Docker) ne tournent qu'en local : -DskipITs.
       - name: Compile & run unit tests
         run: |
           chmod +x mvnw
-          ./mvnw test -DskipTests -B --no-transfer-progress
+          ./mvnw verify -DskipITs -B --no-transfer-progress
 
       - name: Publier les rapports de tests
         if: always()

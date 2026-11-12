@@ -1,7 +1,6 @@
 package com.africa.dinthialma_backend.tontine.dto;
 
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
-import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -13,7 +12,7 @@ import lombok.Getter;
 
 @Schema(description = "Représentation d'un cycle de tontine")
 @Getter
-@Builder
+@Builder(toBuilder = true)
 public class CycleResponse {
 
   @Schema(description = "UUID du cycle")
@@ -66,48 +65,6 @@ public class CycleResponse {
 
   @Schema(description = "Date de dernière modification")
   private LocalDateTime updatedAt;
-
-  public static CycleResponse from(CycleTontine cycle) {
-    return from(cycle, null);
-  }
-
-  public static CycleResponse from(CycleTontine cycle, List<MembreDistributionInfo> distribution) {
-    List<GagnantInfo> gagnantInfos =
-        cycle.getGagnants().stream()
-            .filter(g -> g.getDeletedAt() == null)
-            .map(
-                g -> {
-                  var user = g.getMembre().getUser();
-                  return GagnantInfo.builder()
-                      .membreId(g.getMembre().getId())
-                      .userId(user.getId())
-                      .firstName(user.getFirstName())
-                      .lastName(user.getLastName())
-                      .phone(user.getPhone())
-                      .ordreJackpot(g.getMembre().getOrdreJackpot())
-                      .montantRecu(g.getMontantRecu())
-                      .dateJackpot(g.getMembre().getDateJackpot())
-                      .build();
-                })
-            .toList();
-
-    return CycleResponse.builder()
-        .id(cycle.getId())
-        .tontineId(cycle.getTontine() != null ? cycle.getTontine().getId() : null)
-        .numeroCycle(cycle.getNumeroCycle())
-        .dateDebut(cycle.getDateDebut())
-        .dateFin(cycle.getDateFin())
-        .montantJackpot(cycle.getMontantJackpot())
-        .montantCommission(cycle.getMontantCommission())
-        .montantNet(cycle.getMontantNet())
-        .statut(cycle.getStatut())
-        .dateRemise(cycle.getDateRemise())
-        .gagnants(gagnantInfos)
-        .distributionParMembre(distribution)
-        .createdAt(cycle.getCreatedAt())
-        .updatedAt(cycle.getUpdatedAt())
-        .build();
-  }
 
   @Schema(description = "Informations d'un gagnant du jackpot (ROTATIVE)")
   @Getter

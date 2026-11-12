@@ -43,8 +43,11 @@ public class UpdateTontineRequest {
   private String frequence;
 
   @Schema(
-      description = "Nouvel ordre des bénéficiaires (code ORDRE_BENEFICIAIRE, null = inchangé)",
-      example = "ALEATOIRE")
+      description =
+          "Nouvel ordre des bénéficiaires : ROTATION, ALEATOIRE, MANUEL ou HYBRIDE (null ="
+              + " inchangé ; autre valeur → 400 INVALID_PARAMETER)",
+      allowableValues = {"ROTATION", "ALEATOIRE", "MANUEL", "HYBRIDE"},
+      example = "HYBRIDE")
   private String ordreBeneficiaire;
 
   @Schema(description = "Nouvelle date de démarrage (null = inchangée)", example = "2024-08-01")

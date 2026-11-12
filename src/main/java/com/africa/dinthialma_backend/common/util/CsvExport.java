@@ -3,18 +3,17 @@ package com.africa.dinthialma_backend.common.util;
 import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.ErrorCode;
-import java.nio.charset.StandardCharsets;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
-/** Réponses HTTP des exports CSV (B24). */
+/** Exports CSV (B24) : validation du format (côté service) et exposition HTTP (côté contrôleur). */
 public final class CsvExport {
 
   private CsvExport() {}
 
-  /** Seul le format CSV est pris en charge. */
+  /** Seul le format CSV est pris en charge. Appelé par les services d'export. */
   public static void verifierFormat(String format) throws CustomException {
     if (format == null || !"csv".equalsIgnoreCase(format.trim())) {
       throw new BadRequestException(
@@ -23,12 +22,13 @@ public final class CsvExport {
     }
   }
 
-  public static ResponseEntity<byte[]> reponse(byte[] contenu, String nomFichier) {
+  /** Expose un fichier produit par un service, en pièce jointe. */
+  public static ResponseEntity<byte[]> reponse(FichierExport fichier) {
     return ResponseEntity.ok()
         .header(
             HttpHeaders.CONTENT_DISPOSITION,
-            ContentDisposition.attachment().filename(nomFichier).build().toString())
-        .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
-        .body(contenu);
+            ContentDisposition.attachment().filename(fichier.nomFichier()).build().toString())
+        .contentType(MediaType.parseMediaType(fichier.typeMime()))
+        .body(fichier.contenu());
   }
 }

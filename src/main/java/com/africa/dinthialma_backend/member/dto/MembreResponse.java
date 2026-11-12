@@ -2,7 +2,6 @@ package com.africa.dinthialma_backend.member.dto;
 
 import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
-import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDate;
@@ -66,36 +65,6 @@ public class MembreResponse {
 
   @Schema(description = "Date de dernière modification du statut")
   private LocalDateTime updatedAt;
-
-  public static MembreResponse from(TontineMembre membre) {
-    UserInfo userInfo = null;
-    if (membre.getUser() != null) {
-      var u = membre.getUser();
-      userInfo =
-          UserInfo.builder()
-              .id(u.getId())
-              .firstName(u.getFirstName())
-              .lastName(u.getLastName())
-              .phone(u.getPhone())
-              .email(u.getEmail())
-              .accountStatus(
-                  u.getAccountStatus() != null ? u.getAccountStatus() : AccountStatus.ACTIVE)
-              .build();
-    }
-
-    return MembreResponse.builder()
-        .id(membre.getId())
-        .tontineId(membre.getTontine() != null ? membre.getTontine().getId() : null)
-        .user(userInfo)
-        .ordreJackpot(membre.getOrdreJackpot())
-        .statut(membre.getStatut())
-        .dateAdhesion(membre.getDateAdhesion())
-        .aRecuJackpot(membre.isARecuJackpot())
-        .dateJackpot(membre.getDateJackpot())
-        .createdAt(membre.getCreatedAt())
-        .updatedAt(membre.getUpdatedAt())
-        .build();
-  }
 
   @Schema(description = "Informations résumées de l'utilisateur cotisant")
   @Getter

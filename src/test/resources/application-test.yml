@@ -1,0 +1,37 @@
+# ─── Profil « test » : tests d'intégration Testcontainers ─────────────────────
+# La base PostgreSQL et Keycloak sont fournis par des conteneurs (voir
+# AbstractIntegrationTest) : leurs URL sont injectées dynamiquement.
+
+keycloak:
+  realm: dinthialma
+  client-id: dinthialma-client
+  client-secret: dinthialma-test-secret   # valeur fixée dans keycloak/realm-dinthialma.json
+
+dinthialma:
+  app:
+    url: https://test.dinthialma.local
+  version-minimale-app: 2.0.0
+  version-recommandee-app: 2.1.0
+  bootstrap:
+    enabled: true
+    phone: "+221700000000"
+    password: Bootstrap@Test2026
+    email: superadmin@test.local
+
+# Aucun message réel : SMS et WhatsApp simulés (contenu dans les logs)
+lam:
+  sms:
+    mock: true
+openwa:
+  api-url: http://localhost:1
+  mock: true
+
+app:
+  security:
+    token-encryption-key: cle-de-chiffrement-des-tests-integration!!
+
+logging:
+  level:
+    root: WARN
+    com.africa.dinthialma_backend: INFO
+    org.testcontainers: INFO

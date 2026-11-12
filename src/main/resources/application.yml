@@ -152,7 +152,9 @@ dinthialma:
   support:
     whatsapp: ${SUPPORT_WHATSAPP:}
     email: ${SUPPORT_EMAIL:}
+  # Versions du front, SemVer MAJEUR.MINEUR.CORRECTIF ; mal formées -> le backend refuse de démarrer
   version-minimale-app: ${APP_VERSION_MINIMALE:}
+  version-recommandee-app: ${APP_VERSION_RECOMMANDEE:}
   mail:
     from: ${MAIL_FROM:no-reply@dinthialma.io}
     admin-email: ${ADMIN_EMAIL:admin@dinthialma.io}

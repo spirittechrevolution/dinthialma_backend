@@ -21,6 +21,7 @@ import com.africa.dinthialma_backend.member.dto.AddMembreRequest;
 import com.africa.dinthialma_backend.member.dto.MembreResponse;
 import com.africa.dinthialma_backend.member.dto.UpdateMembreStatutRequest;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
+import com.africa.dinthialma_backend.member.mapper.MembreMapper;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.member.repository.TontineMembreSpecifications;
 import com.africa.dinthialma_backend.member.service.interfaces.MembreService;
@@ -49,6 +50,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class MembreServiceImpl implements MembreService {
 
   private final TontineMembreRepository membreRepository;
+  private final MembreMapper membreMapper;
   private final TontineRepository tontineRepository;
   private final CycleTontineRepository cycleRepository;
   private final UserRepository userRepository;
@@ -68,9 +70,39 @@ public class MembreServiceImpl implements MembreService {
     Tontine tontine = findTontineById(tontineId);
     assertIsCreatorOrSuperAdmin(caller, tontine);
 
-    String phone = PhoneUtils.normalize(request.getPhone());
+    boolean parQr = !estVide(request.getQrToken());
+    if (parQr == !estVide(request.getPhone())) {
+      throw new BadRequestException(
+          ResponseMessageConstants.MEMBER_IDENTIFIER_REQUIRED,
+          ErrorCode.MEMBER_IDENTIFIER_REQUIRED);
+    }
 
     // Résoudre ou créer l'utilisateur cible
+    User targetUser;
+    if (parQr) {
+      targetUser = findUserByQrToken(request.getQrToken().trim());
+    } else {
+      targetUser = resolveByPhone(request, tontine);
+    }
+
+    return ajouter(caller, tontine, tontineId, targetUser, request);
+  }
+
+  /**
+   * Utilisateur désigné par un QR membre ({@code m_…}) ; QR de tontine, inconnu ou révoqué → 404.
+   */
+  private User findUserByQrToken(String qrToken) throws CustomException {
+    if (!qrToken.startsWith("m_")) {
+      throw new NotFoundException(ResponseMessageConstants.QR_NOT_FOUND);
+    }
+    return userRepository
+        .findByQrTokenAndDeletedAtIsNull(qrToken)
+        .orElseThrow(() -> new NotFoundException(ResponseMessageConstants.QR_NOT_FOUND));
+  }
+
+  /** Compte existant (complété si PRE_ENROLLED au nom vide) ou nouveau compte PRE_ENROLLED. */
+  private User resolveByPhone(AddMembreRequest request, Tontine tontine) throws CustomException {
+    String phone = PhoneUtils.normalize(request.getPhone());
     User targetUser;
     var existingUser = userRepository.findByPhoneAndDeletedAtIsNull(phone);
     if (existingUser.isPresent()) {
@@ -88,7 +120,13 @@ public class MembreServiceImpl implements MembreService {
           createPreEnrolledUser(
               phone, request.getFirstName().trim(), request.getLastName().trim(), tontine);
     }
+    return targetUser;
+  }
 
+  /** Ajout effectif : unicité, rang dans la rotation, rôle MEMBER, audit et notification. */
+  private MembreResponse ajouter(
+      User caller, Tontine tontine, UUID tontineId, User targetUser, AddMembreRequest request)
+      throws CustomException {
     // Unicité : un utilisateur ne peut cotiser qu'une fois par tontine
     if (membreRepository.existsByTontine_IdAndUser_IdAndDeletedAtIsNull(
         tontineId, targetUser.getId())) {
@@ -151,7 +189,7 @@ public class MembreServiceImpl implements MembreService {
         tontineId,
         NotificationLiens.membre(saved.getId()));
 
-    return MembreResponse.from(saved);
+    return membreMapper.toResponse(saved);
   }
 
   // ─── Retrait d'un membre ─────────────────────────────────────────────────
@@ -215,7 +253,7 @@ public class MembreServiceImpl implements MembreService {
                 TontineMembreSpecifications.recherche(q),
                 TontineMembreSpecifications.paiementSurCycle(cycleId, aPaye)),
             pageable)
-        .map(MembreResponse::from);
+        .map(membreMapper::toResponse);
   }
 
   // ─── Modification du statut ──────────────────────────────────────────────
@@ -264,7 +302,7 @@ public class MembreServiceImpl implements MembreService {
     }
 
     log.info("Statut membre modifié – membreId={} statut={}", membreId, request.getStatut());
-    return MembreResponse.from(saved);
+    return membreMapper.toResponse(saved);
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -276,11 +314,11 @@ public class MembreServiceImpl implements MembreService {
   private User enrichPreEnrolledIfNeeded(User user, AddMembreRequest request) {
     if (user.getAccountStatus() != AccountStatus.PRE_ENROLLED) return user;
     boolean needsUpdate = false;
-    if (user.getFirstName().isBlank()) {
+    if (estVide(user.getFirstName()) && !estVide(request.getFirstName())) {
       user.setFirstName(request.getFirstName().trim());
       needsUpdate = true;
     }
-    if (user.getLastName().isBlank()) {
+    if (estVide(user.getLastName()) && !estVide(request.getLastName())) {
       user.setLastName(request.getLastName().trim());
       needsUpdate = true;
     }
@@ -292,6 +330,10 @@ public class MembreServiceImpl implements MembreService {
    * par l'admin pour l'affichage immédiat dans la tontine. Envoie un SMS d'invitation (non
    * bloquant).
    */
+  private static boolean estVide(String valeur) {
+    return valeur == null || valeur.isBlank();
+  }
+
   private User createPreEnrolledUser(
       String phone, String firstName, String lastName, Tontine tontine) {
     User user =
