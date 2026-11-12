@@ -87,7 +87,7 @@ public class LaCodeListController {
               + "|------|---------|-------|\n"
               + "| `FREQUENCE_TONTINE` | `JOURNALIERE` · `HEBDOMADAIRE` · `BIMENSUEL` · `MENSUEL`"
               + " · `TRIMESTRIEL` | Fréquence de cotisation lors de la création d'une tontine |\n"
-              + "| `METHODE_PAIEMENT` | `WAVE` · `ORANGE_MONEY` · `FREE_MONEY` · `CASH`"
+              + "| `METHODE_PAIEMENT` | `WAVE` · `ORANGE_MONEY` · `FREE_MONEY` · `PI_SPI` · `CASH`"
               + " | Moyen de paiement d'une cotisation |\n"
               + "| `STATUT_COTISATION` | `EN_ATTENTE` · `VALIDE` · `EN_RETARD`"
               + " | Cycle de vie d'une cotisation |\n"

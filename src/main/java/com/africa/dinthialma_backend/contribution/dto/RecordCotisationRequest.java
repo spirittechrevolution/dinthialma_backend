@@ -35,7 +35,7 @@ public class RecordCotisationRequest {
   @Schema(
       description =
           "Méthode de paiement – code de la liste METHODE_PAIEMENT."
-              + " Exemples : WAVE, ORANGE_MONEY, FREE_MONEY, CASH."
+              + " Exemples : WAVE, ORANGE_MONEY, FREE_MONEY, PI_SPI, CASH."
               + " Voir GET /v1/code-list/type/METHODE_PAIEMENT.",
       example = "WAVE")
   private String methodePaiement;
