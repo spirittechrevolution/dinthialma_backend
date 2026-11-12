@@ -532,8 +532,10 @@ obligatoire** : sans Docker démarré, le build échoue (les `*IT` ne sont jamai
 | V032 | `create_invitations_et_demandes_adhesion.sql` | `tontines.code_invitation` (unique) + table `demandes_adhesion` (1 EN_ATTENTE max par personne/tontine) |
 | V033 | `add_demande_id_to_user_notifications.sql` | `user_notifications.demande_id` (lien vers la demande d'adhésion, sans FK) |
 | V034 | `create_distributions_evenementielles.sql` | table `distributions_evenementielles` : part de chaque membre à la clôture finale EVENEMENTIELLE (1 active par tontine/membre) |
+| V035 | `seed_ordre_beneficiaire_hybride.sql` | Seed ORDRE_BENEFICIAIRE `HYBRIDE` |
+| V036 | `seed_methode_paiement_pi_spi.sql` | Seed METHODE_PAIEMENT `PI_SPI` (PI-SPI, paiement instantané BCEAO) |
 
-Prochaine version disponible : **V035**
+Prochaine version disponible : **V037**
 
 ---
 

@@ -289,7 +289,7 @@ public class OpenApiConfig {
         | Type | Valeurs disponibles | Description |
         |------|---------------------|-------------|
         | `FREQUENCE_TONTINE` | `JOURNALIERE` · `HEBDOMADAIRE` · `BIMENSUEL` · `MENSUEL` · `TRIMESTRIEL` | Rythme de cotisation d'une tontine |
-        | `METHODE_PAIEMENT` | `WAVE` · `ORANGE_MONEY` · `FREE_MONEY` · `CASH` | Moyen de paiement d'une cotisation |
+        | `METHODE_PAIEMENT` | `WAVE` · `ORANGE_MONEY` · `FREE_MONEY` · `PI_SPI` · `CASH` | Moyen de paiement d'une cotisation |
         | `STATUT_COTISATION` | `EN_ATTENTE` · `VALIDE` · `EN_RETARD` | Cycle de vie d'une cotisation |
         | `ORDRE_BENEFICIAIRE` | `ALEATOIRE` · `HYBRIDE` · `MANUEL` · `ROTATION` | Règle de désignation du bénéficiaire |
 
