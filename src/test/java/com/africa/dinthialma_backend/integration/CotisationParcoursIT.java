@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.africa.dinthialma_backend.support.AbstractIntegrationTest;
 import com.africa.dinthialma_backend.support.ApiClient.Reponse;
+import com.africa.dinthialma_backend.support.TestDataFactory;
 import com.africa.dinthialma_backend.support.TestDataFactory.TontineEnCours;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -40,6 +42,44 @@ class CotisationParcoursIT extends AbstractIntegrationTest {
     return StreamSupport.stream(page.path("content").spliterator(), false)
         .map(x -> x.path("id").asText())
         .toList();
+  }
+
+  @Test
+  @DisplayName(
+      "ponctualité (S01) : NON_DECLAREE avant paiement ; encaissement en main propre daté ->"
+          + " A_TEMPS, datePaiement renvoyée")
+  void ponctualite() {
+    TontineEnCours t = donnees.tontineEnCours("Ponctualité");
+    String g = t.gestionnaire().jeton();
+    JsonNode avant =
+        api.get(cotisations(t) + "/recap/" + t.cycleId(), g).data().path("content").get(0);
+    assertThat(avant.path("ponctualite").asText()).isEqualTo("NON_DECLAREE");
+    assertThat(ligneSummary(t).path("cotisationDue").path("ponctualite").asText())
+        .isEqualTo("NON_DECLAREE");
+
+    String hier = LocalDate.now().atTime(7, 30).toString();
+    JsonNode encaissee =
+        TestDataFactory.attendre(
+                api.post(
+                    cotisations(t) + "/admin",
+                    g,
+                    Map.of(
+                        "membreId",
+                        t.membreId(),
+                        "cycleId",
+                        t.cycleId(),
+                        "montant",
+                        MONTANT,
+                        "methodePaiement",
+                        "CASH",
+                        "datePaiement",
+                        hier)),
+                201)
+            .data();
+    assertThat(encaissee.path("ponctualite").asText()).isEqualTo("A_TEMPS");
+    assertThat(encaissee.path("datePaiement").asText()).startsWith(hier.substring(0, 16));
+    assertThat(ligneSummary(t).path("cotisationDue").path("ponctualite").asText())
+        .isEqualTo("A_TEMPS");
   }
 
   @Test
@@ -111,6 +151,7 @@ class CotisationParcoursIT extends AbstractIntegrationTest {
             .orElseThrow();
     assertThat(ligneRecap.path("cotisationId").asText()).isEqualTo(c2.path("id").asText());
     assertThat(ligneRecap.path("statutCotisation").asText()).isEqualTo("EN_ATTENTE");
+    assertThat(ligneRecap.path("ponctualite").asText()).isEqualTo("A_TEMPS");
 
     // Filtres (B07)
     assertThat(ids(api.get(cotisations(t) + "?statut=REFUSE", g).data())).containsExactly(c1Id);

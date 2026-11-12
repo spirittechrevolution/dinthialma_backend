@@ -106,6 +106,10 @@ public class Cotisation extends BaseEntity {
   private LocalDateTime dateRefus;
 
   /** Soft delete. */
+  /** Paiement remis en main propre au gestionnaire : date réelle du paiement (ponctualité). */
+  @Column(name = "date_paiement")
+  private LocalDateTime datePaiement;
+
   @Column(name = "deleted_at")
   private LocalDateTime deletedAt;
 

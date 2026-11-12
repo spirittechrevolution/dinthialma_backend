@@ -160,6 +160,12 @@ public class MyDashboardResponse {
         description = "Demandes d'adhésion EN_ATTENTE sur cette tontine. 0 si aucune.",
         example = "1")
     private long demandesEnAttente;
+
+    @Schema(
+        description =
+            "Demandes de priorité sur le jackpot EN_ATTENTE (à accepter ou refuser). 0 si aucune.",
+        example = "0")
+    private long prioritesEnAttente;
   }
 
   @Schema(description = "Informations résumées du cycle EN_COURS d'une tontine")

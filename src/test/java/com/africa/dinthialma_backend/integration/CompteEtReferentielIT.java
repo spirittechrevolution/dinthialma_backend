@@ -150,6 +150,24 @@ class CompteEtReferentielIT extends AbstractIntegrationTest {
                 .data()
                 .path("tontinesFavorites"))
         .isEmpty();
+
+    // Dernière tontine gérée : la sienne conservée, celle d'un autre ramenée à null sans refus
+    String mienne = donnees.creerTontine(u.jeton(), "Mienne").path("id").asText();
+    String autre = donnees.creerTontine(donnees.inscrire().jeton(), "Autre").path("id").asText();
+    assertThat(
+            api.put("/v1/me/preferences", u.jeton(), Map.of("derniereTontineGeree", mienne))
+                .data()
+                .path("derniereTontineGeree")
+                .asText())
+        .isEqualTo(mienne);
+    Reponse etrangere =
+        api.put(
+            "/v1/me/preferences",
+            u.jeton(),
+            Map.of("derniereTontineGeree", autre, "masquerMontant", true));
+    assertThat(etrangere.statut()).isEqualTo(200);
+    assertThat(etrangere.data().hasNonNull("derniereTontineGeree")).isFalse();
+    assertThat(etrangere.data().path("masquerMontant").asBoolean()).isTrue();
   }
 
   @Test

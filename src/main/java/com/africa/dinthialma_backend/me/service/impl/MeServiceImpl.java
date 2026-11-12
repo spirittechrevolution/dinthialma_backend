@@ -10,12 +10,14 @@ import com.africa.dinthialma_backend.common.util.CsvExport;
 import com.africa.dinthialma_backend.common.util.CsvWriter;
 import com.africa.dinthialma_backend.common.util.FichierExport;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
+import com.africa.dinthialma_backend.contribution.codeList.Ponctualite;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.contribution.mapper.CotisationMapper;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
 import com.africa.dinthialma_backend.contribution.repository.CotisationSpecifications;
 import com.africa.dinthialma_backend.contribution.service.interfaces.CotisationService;
+import com.africa.dinthialma_backend.jackpot.service.interfaces.PrioriteJackpotService;
 import com.africa.dinthialma_backend.me.codeList.ModeActivite;
 import com.africa.dinthialma_backend.me.codeList.StatutCotisationDue;
 import com.africa.dinthialma_backend.me.codeList.TypeActivite;
@@ -52,6 +54,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -80,6 +83,7 @@ public class MeServiceImpl implements MeService {
   private final DistributionEvenementielleRepository distributionRepository;
   private final CotisationService cotisationService;
   private final ActiviteRepository activiteRepository;
+  private final PrioriteJackpotService prioriteService;
 
   // ─── Résumé « Je cotise » ────────────────────────────────────────────────
 
@@ -294,6 +298,7 @@ public class MeServiceImpl implements MeService {
         .dateLimite(cycle.getDateFin())
         .statut(statut)
         .cotisationId(cotisation != null ? cotisation.getId() : null)
+        .ponctualite(Ponctualite.de(cotisation))
         .motifDernierRefus(motifRefus)
         .build();
   }
@@ -400,7 +405,8 @@ public class MeServiceImpl implements MeService {
   /**
    * Estimation alignée sur la désignation à la clôture (CycleServiceImpl.resolveGagnants) : en
    * ROTATION, les {@code nombreGagnants} premiers membres ACTIFS non gagnants par ordreJackpot
-   * (puis date d'adhésion) gagnent le tour clôturé. ALEATOIRE et MANUEL : pas d'estimation.
+   * (puis date d'adhésion) gagnent le tour clôturé, après les priorités accordées. ALEATOIRE,
+   * MANUEL et HYBRIDE : pas d'estimation.
    */
   private MesJackpotsResponse.JackpotAVenir estimerProchainJackpot(Tontine t, TontineMembre moi) {
     List<TontineMembre> actifs =
@@ -431,15 +437,19 @@ public class MeServiceImpl implements MeService {
           .build();
     }
 
+    // Priorités accordées d'abord (elles passent avant l'ordre convenu), puis l'ordre de passage
     List<TontineMembre> eligibles =
-        actifs.stream()
-            .filter(x -> !x.isARecuJackpot())
-            .sorted(
-                Comparator.comparingInt(
-                        (TontineMembre x) ->
-                            x.getOrdreJackpot() != null ? x.getOrdreJackpot() : Integer.MAX_VALUE)
-                    .thenComparing(TontineMembre::getCreatedAt))
-            .toList();
+        new ArrayList<>(prioriteService.prioritairesEligibles(t.getId()));
+    Set<UUID> prioritaires =
+        eligibles.stream().map(TontineMembre::getId).collect(Collectors.toSet());
+    actifs.stream()
+        .filter(x -> !x.isARecuJackpot() && !prioritaires.contains(x.getId()))
+        .sorted(
+            Comparator.comparingInt(
+                    (TontineMembre x) ->
+                        x.getOrdreJackpot() != null ? x.getOrdreJackpot() : Integer.MAX_VALUE)
+                .thenComparing(TontineMembre::getCreatedAt))
+        .forEach(eligibles::add);
     int rang = 1;
     for (TontineMembre x : eligibles) {
       if (x.getId().equals(moi.getId())) break;

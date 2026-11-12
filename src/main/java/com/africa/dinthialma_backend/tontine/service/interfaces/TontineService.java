@@ -3,6 +3,7 @@ package com.africa.dinthialma_backend.tontine.service.interfaces;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.tontine.codeList.RoleFiltreTontine;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
+import com.africa.dinthialma_backend.tontine.dto.ChangerOrdreBeneficiaireRequest;
 import com.africa.dinthialma_backend.tontine.dto.CreateTontineRequest;
 import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.dto.UpdateTontineRequest;
@@ -76,4 +77,13 @@ public interface TontineService {
    * <p>Réservé au créateur, à l'ADMIN et au SUPER_ADMIN.
    */
   TontineResponse suspendTontine(String keycloakId, UUID id) throws CustomException;
+
+  /**
+   * Change la règle de désignation des gagnants (ROTATIVE, BROUILLON / ACTIVE / SUSPENDUE),
+   * effective à la prochaine clôture de tour. Refusé vers un ordre automatique tant qu'un tour
+   * clôturé attend ses gagnants ({@code DESIGNATION_EN_ATTENTE}). Membres actifs notifiés. Créateur
+   * ou SUPER_ADMIN.
+   */
+  TontineResponse changerOrdreBeneficiaire(
+      String keycloakId, UUID id, ChangerOrdreBeneficiaireRequest request) throws CustomException;
 }
