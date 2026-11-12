@@ -621,67 +621,24 @@ public class CycleServiceImpl implements CycleService {
     Tontine tontine = findTontineById(tontineId);
     assertIsCreatorOrSuperAdmin(caller, tontine);
 
-    if (tontine.getTontineType() == TontineType.EVENEMENTIELLE) {
-      throw new BadRequestException(
-          "Les tontines événementielles n'ont pas de bénéficiaire unique – chaque membre récupère sa mise");
-    }
+    CycleTontine cycle = cycleOuvertALaDesignation(tontine, cycleId);
 
-    CycleTontine cycle = findCycleById(tontineId, cycleId);
-
-    if (cycle.getStatut() != CycleStatut.TERMINE) {
-      throw new BadRequestException(
-          "La sélection du bénéficiaire n'est possible que sur un cycle TERMINE");
-    }
-    if (!OrdreBeneficiaire.designationApresCloture(tontine.getOrdreBeneficiaire())) {
-      throw new BadRequestException(
-          "La désignation des gagnants après clôture n'est disponible que pour les tontines"
-              + " avec ordreBeneficiaire = MANUEL ou HYBRIDE");
-    }
-    if (cycleGagnantRepository.existsByCycle_IdAndDeletedAtIsNull(cycleId)) {
-      throw new BadRequestException("Les gagnants ont déjà été désignés pour ce cycle");
-    }
-
-    int nombreGagnants = tontine.getNombreGagnants();
     List<TontineMembre> eligibles =
         membreRepository
             .findByTontine_IdAndStatutAndDeletedAtIsNull(tontineId, MembreStatut.ACTIF)
             .stream()
             .filter(m -> !m.isARecuJackpot())
             .toList();
-
     if (eligibles.isEmpty()) {
       throw new BadRequestException(
           "Aucun membre éligible : tous les membres actifs ont déjà reçu un jackpot");
     }
 
-    List<TontineMembre> choisis;
-
-    if (request.getMembreIds() != null && !request.getMembreIds().isEmpty()) {
-      if (new HashSet<>(request.getMembreIds()).size() != request.getMembreIds().size()) {
-        throw new BadRequestException("Un même membre ne peut pas être désigné deux fois");
-      }
-      choisis = new ArrayList<>();
-      for (UUID membreId : request.getMembreIds()) {
-        TontineMembre m =
-            membreRepository
-                .findByIdAndTontine_IdAndDeletedAtIsNull(membreId, tontineId)
-                .orElseThrow(
-                    () -> new NotFoundException(ResponseMessageConstants.MEMBER_NOT_FOUND));
-        if (m.getStatut() != MembreStatut.ACTIF) {
-          throw new BadRequestException(
-              m.getUser().getFirstName() + " n'est pas un membre actif de cette tontine");
-        }
-        if (m.isARecuJackpot()) {
-          throw new BadRequestException(
-              m.getUser().getFirstName() + " a déjà reçu un jackpot dans cette tontine");
-        }
-        choisis.add(m);
-      }
-    } else {
-      List<TontineMembre> shuffled = new ArrayList<>(eligibles);
-      Collections.shuffle(shuffled);
-      choisis = shuffled.stream().limit(nombreGagnants).toList();
-    }
+    List<UUID> membreIds = request.getMembreIds();
+    List<TontineMembre> choisis =
+        membreIds == null || membreIds.isEmpty()
+            ? tirerAuSort(eligibles, tontine.getNombreGagnants())
+            : membresDesignes(tontineId, membreIds);
 
     BigDecimal montantParGagnant =
         cycle.getMontantNet().divide(BigDecimal.valueOf(choisis.size()), 2, RoundingMode.HALF_UP);
@@ -726,6 +683,64 @@ public class CycleServiceImpl implements CycleService {
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
+
+  /** Tontine ROTATIVE à désignation après clôture, cycle TERMINE et encore sans gagnant. */
+  private CycleTontine cycleOuvertALaDesignation(Tontine tontine, UUID cycleId)
+      throws CustomException {
+    if (tontine.getTontineType() == TontineType.EVENEMENTIELLE) {
+      throw new BadRequestException(
+          "Les tontines événementielles n'ont pas de bénéficiaire unique – chaque membre récupère sa mise");
+    }
+    CycleTontine cycle = findCycleById(tontine.getId(), cycleId);
+    if (cycle.getStatut() != CycleStatut.TERMINE) {
+      throw new BadRequestException(
+          "La sélection du bénéficiaire n'est possible que sur un cycle TERMINE");
+    }
+    if (!OrdreBeneficiaire.designationApresCloture(tontine.getOrdreBeneficiaire())) {
+      throw new BadRequestException(
+          "La désignation des gagnants après clôture n'est disponible que pour les tontines"
+              + " avec ordreBeneficiaire = MANUEL ou HYBRIDE");
+    }
+    if (cycleGagnantRepository.existsByCycle_IdAndDeletedAtIsNull(cycle.getId())) {
+      throw new BadRequestException("Les gagnants ont déjà été désignés pour ce cycle");
+    }
+    return cycle;
+  }
+
+  private static List<TontineMembre> tirerAuSort(List<TontineMembre> eligibles, int nombre) {
+    List<TontineMembre> melanges = new ArrayList<>(eligibles);
+    Collections.shuffle(melanges);
+    return melanges.stream().limit(nombre).toList();
+  }
+
+  /** Membres choisis par le gestionnaire : sans doublon, ACTIF et sans jackpot déjà reçu. */
+  private List<TontineMembre> membresDesignes(UUID tontineId, List<UUID> membreIds)
+      throws CustomException {
+    if (new HashSet<>(membreIds).size() != membreIds.size()) {
+      throw new BadRequestException("Un même membre ne peut pas être désigné deux fois");
+    }
+    List<TontineMembre> choisis = new ArrayList<>();
+    for (UUID membreId : membreIds) {
+      choisis.add(membreDesignable(tontineId, membreId));
+    }
+    return choisis;
+  }
+
+  private TontineMembre membreDesignable(UUID tontineId, UUID membreId) throws CustomException {
+    TontineMembre m =
+        membreRepository
+            .findByIdAndTontine_IdAndDeletedAtIsNull(membreId, tontineId)
+            .orElseThrow(() -> new NotFoundException(ResponseMessageConstants.MEMBER_NOT_FOUND));
+    if (m.getStatut() != MembreStatut.ACTIF) {
+      throw new BadRequestException(
+          m.getUser().getFirstName() + " n'est pas un membre actif de cette tontine");
+    }
+    if (m.isARecuJackpot()) {
+      throw new BadRequestException(
+          m.getUser().getFirstName() + " a déjà reçu un jackpot dans cette tontine");
+    }
+    return m;
+  }
 
   private List<TontineMembre> resolveGagnants(Tontine tontine, UUID tontineId) {
     List<TontineMembre> eligibles =

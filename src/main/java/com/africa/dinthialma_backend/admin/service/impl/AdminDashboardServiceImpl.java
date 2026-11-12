@@ -42,7 +42,6 @@ import com.africa.dinthialma_backend.tontine.repository.TontineSpecifications;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -220,48 +219,20 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
   public AdminUserResponse updateUserRoles(
       String keycloakId, UUID userId, UpdateUserRolesRequest request) throws CustomException {
 
-    User caller = assertSuperAdmin(keycloakId);
+    assertSuperAdmin(keycloakId);
     User target = findUserById(userId);
 
-    Set<UserRole> newRoles = request.getRoles();
-
     // USER est le rôle de base – il ne peut jamais être retiré
-    if (!newRoles.contains(UserRole.USER)) {
-      newRoles.add(UserRole.USER);
-    }
+    Set<UserRole> newRoles = request.getRoles();
+    newRoles.add(UserRole.USER);
 
     List<UserRoleAssignment> currentAssignments = roleRepository.findAllByUserId(target.getId());
-
-    // Ajouter les rôles manquants
-    for (UserRole role : newRoles) {
-      if (!roleRepository.existsByUserIdAndRole(target.getId(), role)) {
-        boolean synced = true;
-        try {
-          keycloakAuthService.assignRole(target.getKeycloakId(), role.getKeycloakRole());
-        } catch (Exception e) {
-          log.warn("Keycloak indisponible, rôle {} non synchronisé : {}", role, e.getMessage());
-          synced = false;
-        }
-        roleRepository.save(
-            UserRoleAssignment.builder().user(target).role(role).syncedToKeycloak(synced).build());
-        log.info("Rôle {} ajouté à userId={}", role, userId);
-      }
-    }
-
-    // Retirer les rôles non souhaités (sauf USER)
-    for (UserRoleAssignment assignment : currentAssignments) {
-      UserRole role = assignment.getRole();
-      if (role == UserRole.USER) continue; // jamais retiré
-      if (!newRoles.contains(role)) {
-        try {
-          keycloakAuthService.removeRole(target.getKeycloakId(), role.getKeycloakRole());
-        } catch (Exception e) {
-          log.warn("Keycloak indisponible, rôle {} non révoqué : {}", role, e.getMessage());
-        }
-        roleRepository.delete(assignment);
-        log.info("Rôle {} retiré de userId={}", role, userId);
-      }
-    }
+    newRoles.stream()
+        .filter(role -> !roleRepository.existsByUserIdAndRole(target.getId(), role))
+        .forEach(role -> ajouterRole(target, role));
+    currentAssignments.stream()
+        .filter(a -> a.getRole() != UserRole.USER && !newRoles.contains(a.getRole()))
+        .forEach(a -> retirerRole(target, a));
 
     // Recharger l'entité pour avoir les rôles à jour
     User refreshed =
@@ -269,6 +240,32 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
             .findByIdAndDeletedAtIsNull(userId)
             .orElseThrow(() -> new NotFoundException(ResponseMessageConstants.AUTH_USER_NOT_FOUND));
     return userMapper.toAdmin(refreshed);
+  }
+
+  /** Ajoute le rôle en base ; l'échec Keycloak est toléré (rôle marqué non synchronisé). */
+  private void ajouterRole(User target, UserRole role) {
+    boolean synced = true;
+    try {
+      keycloakAuthService.assignRole(target.getKeycloakId(), role.getKeycloakRole());
+    } catch (Exception e) {
+      log.warn("Keycloak indisponible, rôle {} non synchronisé : {}", role, e.getMessage());
+      synced = false;
+    }
+    roleRepository.save(
+        UserRoleAssignment.builder().user(target).role(role).syncedToKeycloak(synced).build());
+    log.info("Rôle {} ajouté à userId={}", role, target.getId());
+  }
+
+  /** Retire le rôle en base ; l'échec Keycloak est toléré. */
+  private void retirerRole(User target, UserRoleAssignment assignment) {
+    UserRole role = assignment.getRole();
+    try {
+      keycloakAuthService.removeRole(target.getKeycloakId(), role.getKeycloakRole());
+    } catch (Exception e) {
+      log.warn("Keycloak indisponible, rôle {} non révoqué : {}", role, e.getMessage());
+    }
+    roleRepository.delete(assignment);
+    log.info("Rôle {} retiré de userId={}", role, target.getId());
   }
 
   // ─── Listes plateforme SUPER_ADMIN ────────────────────────────────────────
@@ -382,58 +379,11 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
             tid, CotisationStatut.EN_RETARD);
     var montantValide = cotisationRepository.sumMontantValideByTontine(tid);
 
-    // Cycle EN_COURS
-    MyDashboardResponse.CycleEnCoursInfo cycleInfo = null;
-    Optional<CycleTontine> cycleOpt =
-        cycleRepository.findByTontine_IdAndStatutAndDeletedAtIsNull(tid, CycleStatut.EN_COURS);
-    if (cycleOpt.isPresent()) {
-      CycleTontine cycle = cycleOpt.get();
-      String benefNom = null;
-      UUID benefUserId = null;
-      var premierGagnant =
-          cycle.getGagnants().stream().filter(g -> g.getDeletedAt() == null).findFirst();
-      if (premierGagnant.isPresent() && premierGagnant.get().getMembre().getUser() != null) {
-        User benefUser = premierGagnant.get().getMembre().getUser();
-        benefNom = benefUser.getFirstName() + " " + benefUser.getLastName();
-        benefUserId = benefUser.getId();
-      }
-
-      // Collecte du tour : une requête groupée par statut
-      long payes = 0;
-      long enAttenteTour = 0;
-      BigDecimal collecte = BigDecimal.ZERO;
-      BigDecimal montantEnAttente = BigDecimal.ZERO;
-      for (Object[] row : cotisationRepository.countAndSumByStatutForCycle(cycle.getId())) {
-        CotisationStatut statut = (CotisationStatut) row[0];
-        if (statut == CotisationStatut.VALIDE) {
-          payes = (Long) row[1];
-          collecte = (BigDecimal) row[2];
-        } else if (statut == CotisationStatut.EN_ATTENTE) {
-          enAttenteTour = (Long) row[1];
-          montantEnAttente = (BigDecimal) row[2];
-        }
-      }
-      long actifs =
-          membreRepository.countByTontine_IdAndStatutAndDeletedAtIsNull(tid, MembreStatut.ACTIF);
-      BigDecimal parMembre = tontine.getMontantAttenduParMembre();
-
-      cycleInfo =
-          MyDashboardResponse.CycleEnCoursInfo.builder()
-              .cycleId(cycle.getId())
-              .numeroCycle(cycle.getNumeroCycle())
-              .dateDebut(cycle.getDateDebut())
-              .dateFin(cycle.getDateFin())
-              .beneficiaireNom(benefNom)
-              .beneficiaireUserId(benefUserId)
-              .montantCollecte(collecte)
-              .montantEnAttente(montantEnAttente)
-              .montantAttendu(
-                  parMembre != null ? parMembre.multiply(BigDecimal.valueOf(actifs)) : null)
-              .membresAyantPaye(payes)
-              .membresEnAttente(enAttenteTour)
-              .membresActifs(actifs)
-              .build();
-    }
+    MyDashboardResponse.CycleEnCoursInfo cycleInfo =
+        cycleRepository
+            .findByTontine_IdAndStatutAndDeletedAtIsNull(tid, CycleStatut.EN_COURS)
+            .map(cycle -> cycleEnCoursInfo(tontine, cycle))
+            .orElse(null);
 
     boolean evenementielle = tontine.getTontineType() == TontineType.EVENEMENTIELLE;
     boolean gagnantsADesigner =
@@ -464,6 +414,57 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
             demandeRepository.countByTontine_IdAndStatutAndDeletedAtIsNull(
                 tid, StatutDemande.EN_ATTENTE))
         .build();
+  }
+
+  /** Tour EN_COURS : bénéficiaire éventuel et collecte (une requête groupée par statut). */
+  private MyDashboardResponse.CycleEnCoursInfo cycleEnCoursInfo(
+      Tontine tontine, CycleTontine cycle) {
+    long payes = 0;
+    long enAttenteTour = 0;
+    BigDecimal collecte = BigDecimal.ZERO;
+    BigDecimal montantEnAttente = BigDecimal.ZERO;
+    for (Object[] row : cotisationRepository.countAndSumByStatutForCycle(cycle.getId())) {
+      CotisationStatut statut = (CotisationStatut) row[0];
+      if (statut == CotisationStatut.VALIDE) {
+        payes = (Long) row[1];
+        collecte = (BigDecimal) row[2];
+      } else if (statut == CotisationStatut.EN_ATTENTE) {
+        enAttenteTour = (Long) row[1];
+        montantEnAttente = (BigDecimal) row[2];
+      }
+    }
+    long actifs =
+        membreRepository.countByTontine_IdAndStatutAndDeletedAtIsNull(
+            tontine.getId(), MembreStatut.ACTIF);
+    BigDecimal parMembre = tontine.getMontantAttenduParMembre();
+    User beneficiaire = premierBeneficiaire(cycle);
+
+    return MyDashboardResponse.CycleEnCoursInfo.builder()
+        .cycleId(cycle.getId())
+        .numeroCycle(cycle.getNumeroCycle())
+        .dateDebut(cycle.getDateDebut())
+        .dateFin(cycle.getDateFin())
+        .beneficiaireNom(
+            beneficiaire != null
+                ? beneficiaire.getFirstName() + " " + beneficiaire.getLastName()
+                : null)
+        .beneficiaireUserId(beneficiaire != null ? beneficiaire.getId() : null)
+        .montantCollecte(collecte)
+        .montantEnAttente(montantEnAttente)
+        .montantAttendu(parMembre != null ? parMembre.multiply(BigDecimal.valueOf(actifs)) : null)
+        .membresAyantPaye(payes)
+        .membresEnAttente(enAttenteTour)
+        .membresActifs(actifs)
+        .build();
+  }
+
+  /** Utilisateur du premier gagnant actif du cycle, ou null. */
+  private static User premierBeneficiaire(CycleTontine cycle) {
+    return cycle.getGagnants().stream()
+        .filter(g -> g.getDeletedAt() == null)
+        .findFirst()
+        .map(g -> g.getMembre().getUser())
+        .orElse(null);
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
