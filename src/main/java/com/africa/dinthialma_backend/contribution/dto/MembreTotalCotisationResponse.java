@@ -2,7 +2,6 @@ package com.africa.dinthialma_backend.contribution.dto;
 
 import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
-import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -49,22 +48,4 @@ public class MembreTotalCotisationResponse {
 
   @Schema(description = "Nombre de cotisations validées prises en compte dans le total")
   private long nombreCotisationsValidees;
-
-  public static MembreTotalCotisationResponse from(
-      TontineMembre membre, BigDecimal totalCotise, long nombreCotisationsValidees) {
-    var u = membre.getUser();
-
-    return MembreTotalCotisationResponse.builder()
-        .membreId(membre.getId())
-        .userId(u.getId())
-        .firstName(u.getFirstName())
-        .lastName(u.getLastName())
-        .phone(u.getPhone())
-        .accountStatus(u.getAccountStatus())
-        .statutMembre(membre.getStatut())
-        .ordreJackpot(membre.getOrdreJackpot())
-        .totalCotise(totalCotise != null ? totalCotise : BigDecimal.ZERO)
-        .nombreCotisationsValidees(nombreCotisationsValidees)
-        .build();
-  }
 }

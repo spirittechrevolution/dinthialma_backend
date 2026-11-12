@@ -1,15 +1,12 @@
 package com.africa.dinthialma_backend.common.codelist.controller;
 
-import com.africa.dinthialma_backend.auth.codeList.UserRole;
 import com.africa.dinthialma_backend.common.codelist.dto.LaCodeListDto;
 import com.africa.dinthialma_backend.common.codelist.service.interfaces.LaCodeListService;
 import com.africa.dinthialma_backend.common.constants.Constants;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
-import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
-import com.africa.dinthialma_backend.common.util.RoleGuard;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -22,7 +19,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -66,14 +62,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/v1/code-list")
 @RequiredArgsConstructor
-@Slf4j
 @Tag(name = "CodeList", description = "Référentiels de valeurs persistées (selects frontend)")
 public class LaCodeListController {
 
   /** Types restreints non accessibles via l'endpoint public. */
-  private static final String RESTRICTED_TYPE = "ROLE_INTERNE";
-
   private final LaCodeListService codeListService;
+
   private final RequestHeaderParser requestHeaderParser;
 
   // ── Public ──────────────────────────────────────────────────────
@@ -97,7 +91,7 @@ public class LaCodeListController {
               + " | Moyen de paiement d'une cotisation |\n"
               + "| `STATUT_COTISATION` | `EN_ATTENTE` · `VALIDE` · `EN_RETARD`"
               + " | Cycle de vie d'une cotisation |\n"
-              + "| `ORDRE_BENEFICIAIRE` | `ALEATOIRE` · `MANUEL` · `ROTATION`"
+              + "| `ORDRE_BENEFICIAIRE` | `ALEATOIRE` · `HYBRIDE` · `MANUEL` · `ROTATION`"
               + " | Règle de désignation du bénéficiaire du jackpot |\n\n"
               + "> ⚠️ **`ROLE_INTERNE`** est restreint — utiliser"
               + " `GET /v1/code-list/admin/type/ROLE_INTERNE`.",
@@ -121,21 +115,12 @@ public class LaCodeListController {
           @PathVariable
           String type)
       throws CustomException {
-    if (RESTRICTED_TYPE.equals(type)) {
-      throw new ForbiddenException(
-          "Le type '"
-              + type
-              + "' est restreint. Utiliser GET /v1/code-list/admin/type/"
-              + type
-              + " (ADMIN requis).");
-    }
-    log.info("Code lists par type : {}", type);
     return ResponseEntity.ok(
         new CustomResponse(
             Constants.Message.SUCCESS_BODY,
             Constants.Status.OK,
             ResponseMessageConstants.CODELIST_GET_SUCCESS,
-            codeListService.findAllByType(type).stream().map(LaCodeListDto::from).toList()));
+            codeListService.findPublicByType(type)));
   }
 
   /**
@@ -170,14 +155,13 @@ public class LaCodeListController {
           String type,
       HttpServletRequest httpRequest)
       throws CustomException {
-    RoleGuard.requireAdmin(requestHeaderParser, httpRequest);
-    log.info("Code lists par type (admin) : {}", type);
     return ResponseEntity.ok(
         new CustomResponse(
             Constants.Message.SUCCESS_BODY,
             Constants.Status.OK,
             ResponseMessageConstants.CODELIST_GET_SUCCESS,
-            codeListService.findAllByType(type).stream().map(LaCodeListDto::from).toList()));
+            codeListService.findByTypeAdmin(
+                requestHeaderParser.extractKeycloakId(httpRequest), type)));
   }
 
   // ── Authentifié ─────────────────────────────────────────────────
@@ -205,13 +189,12 @@ public class LaCodeListController {
   public ResponseEntity<CustomResponse> findAll(
       @ParameterObject @PageableDefault(size = 25, sort = "type", direction = Sort.Direction.ASC)
           Pageable pageable) {
-    log.info("Liste paginée des code lists");
     return ResponseEntity.ok(
         new CustomResponse(
             Constants.Message.SUCCESS_BODY,
             Constants.Status.OK,
             ResponseMessageConstants.CODELIST_GET_SUCCESS,
-            codeListService.findAll(pageable).map(LaCodeListDto::from)));
+            codeListService.findAll(pageable)));
   }
 
   @GetMapping("/{id}")
@@ -237,13 +220,12 @@ public class LaCodeListController {
           @PathVariable
           UUID id)
       throws CustomException {
-    log.info("Détail code list id : {}", id);
     return ResponseEntity.ok(
         new CustomResponse(
             Constants.Message.SUCCESS_BODY,
             Constants.Status.OK,
             ResponseMessageConstants.CODELIST_GET_SUCCESS,
-            LaCodeListDto.from(codeListService.findById(id))));
+            codeListService.findById(id)));
   }
 
   // ── Admin ────────────────────────────────────────────────────────
@@ -272,16 +254,13 @@ public class LaCodeListController {
   public ResponseEntity<CustomResponse> create(
       @RequestBody @Valid LaCodeListDto dto, HttpServletRequest httpRequest)
       throws CustomException {
-    RoleGuard.requireAnyRole(
-        requestHeaderParser, httpRequest, UserRole.ADMIN, UserRole.SUPER_ADMIN);
-    log.info("Création code list type={} value={}", dto.getType(), dto.getValue());
     return ResponseEntity.status(HttpStatus.CREATED)
         .body(
             new CustomResponse(
                 Constants.Message.SUCCESS_BODY,
                 Constants.Status.CREATED,
                 ResponseMessageConstants.CODELIST_POST_SUCCESS,
-                LaCodeListDto.from(codeListService.createCodeList(dto.toEntity()))));
+                codeListService.create(requestHeaderParser.extractKeycloakId(httpRequest), dto)));
   }
 
   @PutMapping("/{id}")
@@ -309,15 +288,12 @@ public class LaCodeListController {
       @RequestBody @Valid LaCodeListDto dto,
       HttpServletRequest httpRequest)
       throws CustomException {
-    RoleGuard.requireAnyRole(
-        requestHeaderParser, httpRequest, UserRole.ADMIN, UserRole.SUPER_ADMIN);
-    log.info("Mise à jour code list id : {}", id);
     return ResponseEntity.ok(
         new CustomResponse(
             Constants.Message.SUCCESS_BODY,
             Constants.Status.OK,
             ResponseMessageConstants.CODELIST_PUT_SUCCESS,
-            LaCodeListDto.from(codeListService.updateCodeList(dto.toEntity(), id))));
+            codeListService.update(requestHeaderParser.extractKeycloakId(httpRequest), id, dto)));
   }
 
   @DeleteMapping("/{id}")
@@ -342,8 +318,7 @@ public class LaCodeListController {
       @Parameter(description = "UUID de l'entrée à supprimer") @PathVariable UUID id,
       HttpServletRequest httpRequest)
       throws CustomException {
-    RoleGuard.requireAnyRole(requestHeaderParser, httpRequest, UserRole.SUPER_ADMIN);
-    codeListService.deleteCodeList(id);
+    codeListService.delete(requestHeaderParser.extractKeycloakId(httpRequest), id);
     return ResponseEntity.ok(
         new CustomResponse(
             Constants.Message.SUCCESS_BODY,

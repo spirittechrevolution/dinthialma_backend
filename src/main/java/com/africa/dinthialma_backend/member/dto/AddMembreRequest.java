@@ -1,7 +1,6 @@
 package com.africa.dinthialma_backend.member.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotBlank;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -13,16 +12,27 @@ import lombok.Setter;
             + "2a. Numéro **trouvé** → envoyer uniquement `phone` (+ `ordreJackpot`). "
             + "Le nom est déjà connu du système.\n"
             + "2b. Numéro **introuvable** → envoyer `phone` + `firstName` + `lastName` "
-            + "(+ `ordreJackpot`). Un compte PRE_ENROLLED est créé avec ces informations.")
+            + "(+ `ordreJackpot`). Un compte PRE_ENROLLED est créé avec ces informations.\n\n"
+            + "**Ajout depuis un QR scanné :** envoyer `qrToken` (`m_…`, tel que lu dans le QR)"
+            + " **à la place** de `phone`. Le numéro n'est jamais exposé au gestionnaire avant"
+            + " l'ajout. Exactement un des deux est requis (`MEMBER_IDENTIFIER_REQUIRED`).")
 @Getter
 @Setter
 public class AddMembreRequest {
 
   @Schema(
-      description = "Numéro de téléphone (format international, avec ou sans le +).",
+      description =
+          "Numéro de téléphone (format international, avec ou sans le +)."
+              + " Obligatoire sauf si `qrToken` est fourni.",
       example = "221770000001")
-  @NotBlank
   private String phone;
+
+  @Schema(
+      description =
+          "Jeton du QR membre scanné (`m_…`), alternative à `phone`. QR inconnu ou révoqué"
+              + " → 404. Le compte doit déjà exister (pas de création PRE_ENROLLED par QR).",
+      example = "m_Q2hhbmdlTWVQbGVhc2U")
+  private String qrToken;
 
   @Schema(
       description =

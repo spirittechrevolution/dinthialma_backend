@@ -16,6 +16,7 @@ import com.africa.dinthialma_backend.tontine.dto.CreateCommissionRequest;
 import com.africa.dinthialma_backend.tontine.dto.UpdateCommissionRequest;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.entity.TontineCommission;
+import com.africa.dinthialma_backend.tontine.mapper.CommissionMapper;
 import com.africa.dinthialma_backend.tontine.repository.TontineCommissionRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import com.africa.dinthialma_backend.tontine.service.interfaces.CommissionService;
@@ -36,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class CommissionServiceImpl implements CommissionService {
 
   private final TontineCommissionRepository commissionRepository;
+  private final CommissionMapper commissionMapper;
   private final TontineRepository tontineRepository;
   private final TontineMembreRepository membreRepository;
   private final UserRepository userRepository;
@@ -75,7 +77,7 @@ public class CommissionServiceImpl implements CommissionService {
         tontineId,
         saved.getType(),
         saved.getValeur());
-    return CommissionResponse.from(saved);
+    return commissionMapper.toResponse(saved);
   }
 
   // ─── Lecture ─────────────────────────────────────────────────────────────
@@ -91,7 +93,7 @@ public class CommissionServiceImpl implements CommissionService {
 
     return commissionRepository
         .findByTontine_IdAndDeletedAtIsNull(tontineId, pageable)
-        .map(CommissionResponse::from);
+        .map(commissionMapper::toResponse);
   }
 
   // ─── Mise à jour ─────────────────────────────────────────────────────────
@@ -130,7 +132,7 @@ public class CommissionServiceImpl implements CommissionService {
 
     TontineCommission saved = commissionRepository.save(commission);
     log.info("Commission mise à jour – id={} tontineId={}", commissionId, tontineId);
-    return CommissionResponse.from(saved);
+    return commissionMapper.toResponse(saved);
   }
 
   // ─── Suppression ─────────────────────────────────────────────────────────

@@ -2,9 +2,7 @@ package com.africa.dinthialma_backend.contribution.dto;
 
 import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
-import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
-import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -88,46 +86,4 @@ public class CycleRecapCotisationResponse {
 
   @Schema(description = "Utilisateur ayant enregistré la cotisation (null si aucune)")
   private CotisationResponse.SaisiePar enregistrePar;
-
-  public static CycleRecapCotisationResponse from(TontineMembre membre, Cotisation cotisation) {
-    var u = membre.getUser();
-
-    CycleRecapCotisationResponseBuilder builder =
-        CycleRecapCotisationResponse.builder()
-            .membreId(membre.getId())
-            .userId(u.getId())
-            .firstName(u.getFirstName())
-            .lastName(u.getLastName())
-            .phone(u.getPhone())
-            .accountStatus(u.getAccountStatus())
-            .statutMembre(membre.getStatut())
-            .ordreJackpot(membre.getOrdreJackpot());
-
-    if (cotisation != null) {
-      CotisationResponse.SaisiePar saisieParInfo = null;
-      if (cotisation.getEnregistrePar() != null) {
-        var s = cotisation.getEnregistrePar();
-        saisieParInfo =
-            CotisationResponse.SaisiePar.builder()
-                .id(s.getId())
-                .firstName(s.getFirstName())
-                .lastName(s.getLastName())
-                .phone(s.getPhone())
-                .build();
-      }
-      builder
-          .cotisationId(cotisation.getId())
-          .montant(cotisation.getMontant())
-          .methodePaiement(cotisation.getMethodePaiement())
-          .referenceTransaction(cotisation.getReferenceTransaction())
-          .note(cotisation.getNote())
-          .statutCotisation(cotisation.getStatut())
-          .dateValidation(cotisation.getDateValidation())
-          .motifRefus(cotisation.getMotifRefus())
-          .cotisationCreatedAt(cotisation.getCreatedAt())
-          .enregistrePar(saisieParInfo);
-    }
-
-    return builder.build();
-  }
 }

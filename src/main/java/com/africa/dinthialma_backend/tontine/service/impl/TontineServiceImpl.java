@@ -10,6 +10,7 @@ import com.africa.dinthialma_backend.common.audit.AuditService;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
@@ -17,6 +18,7 @@ import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
+import com.africa.dinthialma_backend.tontine.codeList.OrdreBeneficiaire;
 import com.africa.dinthialma_backend.tontine.codeList.RoleFiltreTontine;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
@@ -25,6 +27,7 @@ import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.dto.UpdateTontineRequest;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
+import com.africa.dinthialma_backend.tontine.mapper.TontineMapper;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineSpecifications;
@@ -54,6 +57,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class TontineServiceImpl implements TontineService {
 
   private final TontineRepository tontineRepository;
+  private final TontineMapper tontineMapper;
   private final CycleTontineRepository cycleRepository;
   private final TontineMembreRepository membreRepository;
   private final UserRepository userRepository;
@@ -101,7 +105,7 @@ public class TontineServiceImpl implements TontineService {
     assignRoleIfAbsent(caller, UserRole.ADMIN);
     auditService.logCreate(caller, "tontines", saved.getId());
     log.info("Tontine créée – id={} type={} par userId={}", saved.getId(), type, caller.getId());
-    return TontineResponse.from(saved, 0, caller.getId(), null);
+    return tontineMapper.toResponse(saved, 0, caller.getId(), null);
   }
 
   // ─── Lecture ─────────────────────────────────────────────────────────────
@@ -158,7 +162,7 @@ public class TontineServiceImpl implements TontineService {
     return tontines.map(
         t -> {
           int count = (int) membreRepository.countByTontine_IdAndDeletedAtIsNull(t.getId());
-          return TontineResponse.from(t, count, uid, mesMemberships.get(t.getId()));
+          return tontineMapper.toResponse(t, count, uid, mesMemberships.get(t.getId()));
         });
   }
 
@@ -206,6 +210,7 @@ public class TontineServiceImpl implements TontineService {
       tontine.setFrequence(request.getFrequence());
     }
     if (request.getOrdreBeneficiaire() != null) {
+      verifierOrdreBeneficiaire(request.getOrdreBeneficiaire());
       auditService.log(
           caller,
           "tontines",
@@ -473,6 +478,7 @@ public class TontineServiceImpl implements TontineService {
         throw new BadRequestException(
             "L'ordre des bénéficiaires est obligatoire pour une tontine rotative");
       }
+      verifierOrdreBeneficiaire(request.getOrdreBeneficiaire());
       if (request.getMontant() == null || request.getMontant().compareTo(BigDecimal.ZERO) <= 0) {
         throw new BadRequestException(
             "Le montant de cotisation est obligatoire pour une tontine rotative");
@@ -484,6 +490,17 @@ public class TontineServiceImpl implements TontineService {
       if (request.getModeCycle() == null) {
         throw new BadRequestException("Le mode de cycle est obligatoire pour une tontine rotative");
       }
+    }
+  }
+
+  private static void verifierOrdreBeneficiaire(String ordre) throws CustomException {
+    if (!OrdreBeneficiaire.estValide(ordre)) {
+      throw new BadRequestException(
+          "Ordre des bénéficiaires inconnu : « "
+              + ordre
+              + " ». Valeurs acceptées : "
+              + OrdreBeneficiaire.VALEURS,
+          ErrorCode.INVALID_PARAMETER);
     }
   }
 
@@ -530,7 +547,7 @@ public class TontineServiceImpl implements TontineService {
         membreRepository
             .findByTontine_IdAndUser_IdAndDeletedAtIsNull(tontine.getId(), caller.getId())
             .orElse(null);
-    return TontineResponse.from(tontine, nombreMembres, caller.getId(), monMembership);
+    return tontineMapper.toResponse(tontine, nombreMembres, caller.getId(), monMembership);
   }
 
   private boolean isSuperAdmin(User user) {

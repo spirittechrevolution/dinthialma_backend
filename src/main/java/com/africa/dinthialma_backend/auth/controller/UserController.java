@@ -1,12 +1,9 @@
 package com.africa.dinthialma_backend.auth.controller;
 
-import com.africa.dinthialma_backend.auth.dto.UserSearchResponse;
-import com.africa.dinthialma_backend.auth.entity.User;
-import com.africa.dinthialma_backend.auth.repository.UserRepository;
+import com.africa.dinthialma_backend.auth.service.interfaces.UserSearchService;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
-import com.africa.dinthialma_backend.common.exception.NotFoundException;
+import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
-import com.africa.dinthialma_backend.common.util.PhoneUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -32,7 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 @SecurityRequirement(name = "bearerAuth")
 public class UserController {
 
-  private final UserRepository userRepository;
+  private final UserSearchService userSearchService;
 
   @GetMapping("/search")
   @Operation(
@@ -60,20 +57,12 @@ public class UserController {
               example = "221770000001")
           @RequestParam
           String phone)
-      throws NotFoundException {
-
-    String normalized = PhoneUtils.normalize(phone);
-    User user =
-        userRepository
-            .findByPhoneAndDeletedAtIsNull(normalized)
-            .orElseThrow(
-                () -> new NotFoundException(ResponseMessageConstants.USER_SEARCH_NOT_FOUND));
-
+      throws CustomException {
     return ResponseEntity.ok(
         new CustomResponse(
             "success",
             200,
             ResponseMessageConstants.USER_SEARCH_FOUND,
-            UserSearchResponse.from(user)));
+            userSearchService.searchByPhone(phone)));
   }
 }

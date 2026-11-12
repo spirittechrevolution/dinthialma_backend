@@ -74,6 +74,8 @@ public enum ErrorCode {
   JACKPOT_POSITION_TAKEN,
   /** Numéro inconnu : prénom et nom obligatoires pour créer le compte pré-inscrit. */
   MEMBER_NAME_REQUIRED,
+  /** Ajout de membre : fournir exactement un identifiant, {@code phone} ou {@code qrToken}. */
+  MEMBER_IDENTIFIER_REQUIRED,
   /**
    * Tontine ROTATIVE ayant atteint son effectif (nombreMembres) : émis à la demande et à
    * l'acceptation d'une adhésion. L'ajout manuel par le gestionnaire n'est pas bloqué.

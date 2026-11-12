@@ -1,9 +1,12 @@
 package com.africa.dinthialma_backend.notification.service;
 
+import java.net.URI;
+import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.util.UriComponentsBuilder;
 
 /**
  * Service SMS – LAfricaMobile (LAMPUSH).
@@ -53,21 +56,25 @@ public class SmsService {
     }
 
     try {
-      String url =
-          apiUrl
-              + "/push/send"
-              + "?account_id="
-              + accountId
-              + "&password="
-              + password
-              + "&to="
-              + to
-              + "&from="
-              + sender
-              + "&msg="
-              + java.net.URLEncoder.encode(message, java.nio.charset.StandardCharsets.UTF_8);
+      // Encodage strict et unique des paramètres (le message contient « : », « + », accents…)
+      URI uri =
+          UriComponentsBuilder.fromUriString(apiUrl + "/push/send")
+              .queryParam("account_id", "{accountId}")
+              .queryParam("password", "{password}")
+              .queryParam("to", "{to}")
+              .queryParam("from", "{from}")
+              .queryParam("msg", "{msg}")
+              .encode()
+              .buildAndExpand(
+                  Map.of(
+                      "accountId", accountId,
+                      "password", password,
+                      "to", to,
+                      "from", sender,
+                      "msg", message))
+              .toUri();
 
-      restClient.get().uri(url).retrieve().toBodilessEntity();
+      restClient.get().uri(uri).retrieve().toBodilessEntity();
       log.info("SMS envoyé à {} – message : {}", to, message);
 
     } catch (Exception e) {

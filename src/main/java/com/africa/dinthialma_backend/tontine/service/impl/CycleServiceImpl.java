@@ -24,6 +24,7 @@ import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
+import com.africa.dinthialma_backend.tontine.codeList.OrdreBeneficiaire;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.dto.BeneficiaireHistoriqueResponse;
@@ -33,10 +34,13 @@ import com.africa.dinthialma_backend.tontine.dto.OpenCycleRequest;
 import com.africa.dinthialma_backend.tontine.dto.SelectionnerBeneficiaireRequest;
 import com.africa.dinthialma_backend.tontine.entity.CycleGagnant;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
+import com.africa.dinthialma_backend.tontine.entity.DistributionEvenementielle;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.entity.TontineCommission;
+import com.africa.dinthialma_backend.tontine.mapper.CycleMapper;
 import com.africa.dinthialma_backend.tontine.repository.CycleGagnantRepository;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
+import com.africa.dinthialma_backend.tontine.repository.DistributionEvenementielleRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineCommissionRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import com.africa.dinthialma_backend.tontine.service.interfaces.CycleService;
@@ -67,6 +71,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class CycleServiceImpl implements CycleService {
 
   private final CycleTontineRepository cycleRepository;
+  private final CycleMapper cycleMapper;
   private final CycleGagnantRepository cycleGagnantRepository;
   private final TontineRepository tontineRepository;
   private final TontineMembreRepository membreRepository;
@@ -78,6 +83,7 @@ public class CycleServiceImpl implements CycleService {
   private final SchedulerService schedulerService;
   private final WhatsappService whatsappService;
   private final NotificationService notificationService;
+  private final DistributionEvenementielleRepository distributionRepository;
 
   // ─── Lecture ─────────────────────────────────────────────────────────────
 
@@ -91,7 +97,7 @@ public class CycleServiceImpl implements CycleService {
 
     return cycleRepository
         .findByTontine_IdAndDeletedAtIsNull(tontineId, pageable)
-        .map(CycleResponse::from);
+        .map(cycleMapper::toResponse);
   }
 
   @Override
@@ -104,7 +110,7 @@ public class CycleServiceImpl implements CycleService {
 
     return cycleRepository
         .findTerminesAvecGagnants(tontineId, CycleStatut.TERMINE, pageable)
-        .map(BeneficiaireHistoriqueResponse::from);
+        .map(cycleMapper::toHistorique);
   }
 
   @Override
@@ -116,7 +122,7 @@ public class CycleServiceImpl implements CycleService {
     assertCanAccess(caller, tontine);
 
     CycleTontine cycle = findCycleById(tontineId, cycleId);
-    return CycleResponse.from(cycle);
+    return cycleMapper.toResponse(cycle);
   }
 
   // ─── Ouverture manuelle ──────────────────────────────────────────────────
@@ -188,7 +194,7 @@ public class CycleServiceImpl implements CycleService {
                     tontineId,
                     NotificationLiens.cycle(saved.getId(), m.getId())));
 
-    return CycleResponse.from(saved);
+    return cycleMapper.toResponse(saved);
   }
 
   // ─── Clôture ─────────────────────────────────────────────────────────────
@@ -343,7 +349,7 @@ public class CycleServiceImpl implements CycleService {
         jackpot,
         totalCommission,
         jackpot.subtract(totalCommission));
-    return CycleResponse.from(cycle);
+    return cycleMapper.toResponse(cycle);
   }
 
   // ─── Clôture EVENEMENTIELLE ──────────────────────────────────────────────
@@ -415,6 +421,7 @@ public class CycleServiceImpl implements CycleService {
         cycleRepository.save(cycle);
       }
 
+      enregistrerDistribution(tontine, cycle, distribution);
       notifyFinalDistribution(tontine, distribution);
 
       // Notifications in-app distribution finale
@@ -463,7 +470,7 @@ public class CycleServiceImpl implements CycleService {
           cycle.getNumeroCycle());
     }
 
-    return CycleResponse.from(cycle, distribution);
+    return cycleMapper.toResponse(cycle, distribution);
   }
 
   /**
@@ -550,6 +557,28 @@ public class CycleServiceImpl implements CycleService {
     return result;
   }
 
+  /** Conserve la part de chaque membre (V034) ; une seule distribution par tontine. */
+  private void enregistrerDistribution(
+      Tontine tontine, CycleTontine cycle, List<MembreDistributionInfo> distribution) {
+    if (distribution.isEmpty()
+        || distributionRepository.existsByTontine_IdAndDeletedAtIsNull(tontine.getId())) {
+      return;
+    }
+    distributionRepository.saveAll(
+        distribution.stream()
+            .map(
+                d ->
+                    DistributionEvenementielle.builder()
+                        .tontine(tontine)
+                        .cycle(cycle)
+                        .membre(membreRepository.getReferenceById(d.getMembreId()))
+                        .montantCotise(d.getMontantCotise())
+                        .montantCommission(d.getMontantCommission())
+                        .montantNet(d.getMontantNet())
+                        .build())
+            .toList());
+  }
+
   private void notifyFinalDistribution(Tontine tontine, List<MembreDistributionInfo> distribution) {
     for (MembreDistributionInfo dist : distribution) {
       try {
@@ -603,10 +632,10 @@ public class CycleServiceImpl implements CycleService {
       throw new BadRequestException(
           "La sélection du bénéficiaire n'est possible que sur un cycle TERMINE");
     }
-    if (!"MANUEL".equals(tontine.getOrdreBeneficiaire())) {
+    if (!OrdreBeneficiaire.designationApresCloture(tontine.getOrdreBeneficiaire())) {
       throw new BadRequestException(
-          "La désignation manuelle des gagnants n'est disponible que pour les tontines"
-              + " avec ordreBeneficiaire = MANUEL");
+          "La désignation des gagnants après clôture n'est disponible que pour les tontines"
+              + " avec ordreBeneficiaire = MANUEL ou HYBRIDE");
     }
     if (cycleGagnantRepository.existsByCycle_IdAndDeletedAtIsNull(cycleId)) {
       throw new BadRequestException("Les gagnants ont déjà été désignés pour ce cycle");
@@ -693,7 +722,7 @@ public class CycleServiceImpl implements CycleService {
       log.warn("Notif WA admin (jackpot manuel) non envoyée : {}", e.getMessage());
     }
 
-    return CycleResponse.from(cycle);
+    return cycleMapper.toResponse(cycle);
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────

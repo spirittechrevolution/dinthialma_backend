@@ -24,7 +24,16 @@ public interface AdhesionService {
   void revoquerInvitation(String keycloakId, UUID tontineId) throws CustomException;
 
   /** Aperçu public (sans authentification) d'une tontine par son code. 404 si inconnu. */
-  InvitationApercuResponse apercu(String code) throws CustomException;
+  /**
+   * Aperçu public d'une invitation ; {@code keycloakId} facultatif (null = anonyme) enrichit la
+   * réponse de la relation de l'appelant à la tontine.
+   */
+  InvitationApercuResponse apercu(String code, String keycloakId) throws CustomException;
+
+  /** Aperçu anonyme. */
+  default InvitationApercuResponse apercu(String code) throws CustomException {
+    return apercu(code, null);
+  }
 
   /** Demande à rejoindre la tontine du code. Notifie le gestionnaire. */
   DemandeAdhesionResponse creerDemande(

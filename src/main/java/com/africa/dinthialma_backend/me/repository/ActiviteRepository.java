@@ -3,6 +3,7 @@ package com.africa.dinthialma_backend.me.repository;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -63,9 +64,25 @@ public interface ActiviteRepository extends Repository<Cotisation, UUID> {
           + " WHERE g.deleted_at IS NULL AND cy.deleted_at IS NULL AND t.deleted_at IS NULL"
           + "   AND ((:gere = true AND t.cree_par = :userId)"
           + "     OR (:gere = false AND m.user_id = :userId))"
+          + " UNION ALL"
+          + " SELECT d.id AS id, 'DISTRIBUTION_RECUE' AS type,"
+          + "   CAST(COALESCE(CAST(cy.date_remise AS timestamp), d.created_at) AS timestamp)"
+          + "     AS date_evenement,"
+          + "   d.montant_net AS montant, 'GAIN' AS sens, NULL AS statut,"
+          + "   t.id AS tontine_id, t.nom AS tontine_nom, cy.id AS cycle_id,"
+          + "   cy.numero_cycle AS numero_cycle, NULL AS cotisation_id, m.id AS membre_id,"
+          + "   u.first_name AS membre_prenom, u.last_name AS membre_nom"
+          + " FROM dinthialma.distributions_evenementielles d"
+          + " JOIN dinthialma.cycles_tontine cy ON cy.id = d.cycle_id"
+          + " JOIN dinthialma.tontines t ON t.id = d.tontine_id"
+          + " JOIN dinthialma.tontine_membres m ON m.id = d.membre_id"
+          + " JOIN dinthialma.users u ON u.id = m.user_id"
+          + " WHERE d.deleted_at IS NULL AND t.deleted_at IS NULL"
+          + "   AND ((:gere = true AND t.cree_par = :userId)"
+          + "     OR (:gere = false AND m.user_id = :userId))"
           + " ) a"
           + " WHERE (CAST(:tontineId AS uuid) IS NULL OR a.tontine_id = CAST(:tontineId AS uuid))"
-          + "   AND (CAST(:type AS varchar) IS NULL OR a.type = CAST(:type AS varchar))"
+          + "   AND (:filtrerType = false OR a.type IN (:types))"
           + "   AND (CAST(:statut AS varchar) IS NULL OR a.statut = CAST(:statut AS varchar))";
 
   @Query(
@@ -84,7 +101,8 @@ public interface ActiviteRepository extends Repository<Cotisation, UUID> {
       @Param("userId") UUID userId,
       @Param("gere") boolean gere,
       @Param("tontineId") UUID tontineId,
-      @Param("type") String type,
+      @Param("filtrerType") boolean filtrerType,
+      @Param("types") Collection<String> types,
       @Param("statut") String statut,
       Pageable pageable);
 

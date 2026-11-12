@@ -17,6 +17,7 @@ import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.common.util.OtpUtils;
+import com.africa.dinthialma_backend.common.util.PhoneUtils;
 import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
@@ -46,7 +47,7 @@ public class PasswordResetServiceImpl implements PasswordResetService {
   @Override
   @Transactional
   public void sendForgotPasswordOtp(SendOtpRequest request) throws CustomException {
-    String phone = request.getPhone().trim();
+    String phone = PhoneUtils.normalize(request.getPhone().trim());
     log.debug("Demande OTP reset mot de passe pour : {}", phone);
 
     // Anti-énumération : ne jamais révéler si le numéro existe
@@ -86,7 +87,7 @@ public class PasswordResetServiceImpl implements PasswordResetService {
   @Override
   @Transactional
   public void verifyForgotPasswordOtp(VerifyOtpRequest request) throws CustomException {
-    String phone = request.getPhone().trim();
+    String phone = PhoneUtils.normalize(request.getPhone().trim());
     log.debug("Vérification OTP reset mot de passe pour : {}", phone);
 
     OtpVerification otp =
@@ -120,7 +121,7 @@ public class PasswordResetServiceImpl implements PasswordResetService {
   @Override
   @Transactional
   public void resetPassword(ResetPasswordByPhoneRequest request) throws CustomException {
-    String phone = request.getPhone().trim();
+    String phone = PhoneUtils.normalize(request.getPhone().trim());
     log.debug("Reset mot de passe pour : {}", phone);
 
     // Vérifier que l'OTP a été validé (vérifié + pas consommé)

@@ -46,6 +46,12 @@ public class MyDashboardResponse {
   private long totalCotisationsEnRetard;
 
   @Schema(
+      description =
+          "Demandes d'adhésion EN_ATTENTE sur toutes mes tontines (badge « À valider »). 0 si aucune.",
+      example = "2")
+  private long totalDemandesEnAttente;
+
+  @Schema(
       description = "Somme VALIDÉE sur les tours EN_COURS de toutes les tontines gérées, en FCFA",
       example = "40000")
   private BigDecimal totalCollecteToursEnCours;
@@ -149,6 +155,11 @@ public class MyDashboardResponse {
                 + " gagnants",
         example = "false")
     private boolean gagnantsADesigner;
+
+    @Schema(
+        description = "Demandes d'adhésion EN_ATTENTE sur cette tontine. 0 si aucune.",
+        example = "1")
+    private long demandesEnAttente;
   }
 
   @Schema(description = "Informations résumées du cycle EN_COURS d'une tontine")

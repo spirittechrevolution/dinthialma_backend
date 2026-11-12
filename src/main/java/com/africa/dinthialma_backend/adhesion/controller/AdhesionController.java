@@ -9,6 +9,7 @@ import com.africa.dinthialma_backend.adhesion.service.interfaces.AdhesionService
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.response.CustomResponse;
+import com.africa.dinthialma_backend.common.security.JwtOptionnel;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -47,6 +48,7 @@ public class AdhesionController {
 
   private final AdhesionService adhesionService;
   private final RequestHeaderParser headerParser;
+  private final JwtOptionnel jwtOptionnel;
 
   // ─── B16 : invitation ────────────────────────────────────────────────────
 
@@ -98,11 +100,15 @@ public class AdhesionController {
   @Operation(
       summary = "Aperçu public d'une invitation",
       description =
-          "🌐 Public (sans JWT).\n\n"
+          "🌐 Public (JWT facultatif).\n\n"
               + "Infos minimales pour la page d'invitation : nom, type, montant, fréquence,"
               + " événement, places restantes, prénom du gestionnaire et `ouverte`. Aucune donnée"
               + " des membres. Code insensible à la casse, tiret facultatif. Code inconnu ou"
-              + " révoqué → 404.")
+              + " révoqué → 404.\n\n"
+              + "**Avec un JWT valide** (en-tête `Authorization: Bearer …`) : ajoute"
+              + " `dejaMembre`, `estGestionnaire`, `demandeEnAttente` et `tontineId` (ce dernier"
+              + " seulement si membre ou gestionnaire). Sans JWT, ou JWT expiré / invalide :"
+              + " ces champs sont absents et la réponse reste celle d'un visiteur (jamais de 401).")
   @ApiResponses({
     @ApiResponse(
         responseCode = "200",
@@ -110,13 +116,14 @@ public class AdhesionController {
         content = @Content(schema = @Schema(implementation = InvitationApercuResponse.class))),
     @ApiResponse(responseCode = "404", description = "Invitation introuvable ou révoquée"),
   })
-  public ResponseEntity<CustomResponse> apercu(@PathVariable String code) throws CustomException {
+  public ResponseEntity<CustomResponse> apercu(
+      @PathVariable String code, HttpServletRequest httpRequest) throws CustomException {
     return ResponseEntity.ok(
         new CustomResponse(
             SUCCESS,
             OK,
             ResponseMessageConstants.INVITATION_SUCCESS,
-            adhesionService.apercu(code)));
+            adhesionService.apercu(code, jwtOptionnel.keycloakId(httpRequest).orElse(null))));
   }
 
   // ─── B17 : demandes ──────────────────────────────────────────────────────

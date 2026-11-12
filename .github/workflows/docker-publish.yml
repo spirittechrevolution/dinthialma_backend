@@ -57,8 +57,18 @@ jobs:
           distribution: temurin
           cache: maven
 
-      - name: Compile & test
-        run: chmod +x mvnw && ./mvnw test -DskipTests -B --no-transfer-progress
+      # Tests unitaires + seuil JaCoCo ; tests d'intégration (*IT, Docker) en local uniquement
+      - name: Compile & run unit tests
+        run: chmod +x mvnw && ./mvnw verify -DskipITs -B --no-transfer-progress
+
+      - name: Publier les rapports de tests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ github.run_id }}
+          path: '**/target/surefire-reports/*.xml'
+          if-no-files-found: ignore
+          retention-days: 7
 
   # ═══════════════════════════════════════════════════════════════
   # STAGE 3 – Build & Push Docker Hub

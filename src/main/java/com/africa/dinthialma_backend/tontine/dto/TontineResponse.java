@@ -1,12 +1,10 @@
 package com.africa.dinthialma_backend.tontine.dto;
 
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
-import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.MonRoleTontine;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
-import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -17,7 +15,7 @@ import lombok.Getter;
 
 @Schema(description = "Représentation complète d'une tontine")
 @Getter
-@Builder
+@Builder(toBuilder = true)
 public class TontineResponse {
 
   @Schema(description = "UUID de la tontine")
@@ -111,59 +109,6 @@ public class TontineResponse {
 
   @Schema(description = "Date de dernière modification")
   private LocalDateTime updatedAt;
-
-  /**
-   * Construit la réponse enrichie de la relation de l'appelant avec la tontine.
-   *
-   * @param callerId UUID de l'utilisateur appelant
-   * @param monMembership membership de l'appelant dans cette tontine (null s'il ne cotise pas)
-   */
-  public static TontineResponse from(
-      Tontine tontine, int nombreMembresActuels, UUID callerId, TontineMembre monMembership) {
-    boolean createur =
-        tontine.getCreePar() != null && tontine.getCreePar().getId().equals(callerId);
-    TontineResponse response = from(tontine, nombreMembresActuels);
-    response.monRole = MonRoleTontine.of(createur, monMembership != null);
-    if (monMembership != null) {
-      response.monMembreId = monMembership.getId();
-      response.monStatutMembre = monMembership.getStatut();
-    }
-    return response;
-  }
-
-  /** Réponse sans relation de l'appelant (listes plateforme SUPER_ADMIN). */
-  public static TontineResponse from(Tontine tontine, int nombreMembresActuels) {
-    return TontineResponse.builder()
-        .id(tontine.getId())
-        .tontineType(tontine.getTontineType())
-        .nom(tontine.getNom())
-        .description(tontine.getDescription())
-        .montant(tontine.getMontant())
-        .frequence(tontine.getFrequence())
-        .ordreBeneficiaire(tontine.getOrdreBeneficiaire())
-        .modeCycle(tontine.getModeCycle())
-        .dateDebut(tontine.getDateDebut())
-        .nombreMembres(tontine.getNombreMembres())
-        .nombreGagnants(tontine.getNombreGagnants())
-        .nombreMembresActuels(nombreMembresActuels)
-        .statut(tontine.getStatut())
-        .dateEcheance(tontine.getDateEcheance())
-        .nomEvenement(tontine.getNomEvenement())
-        .montantLibre(tontine.isMontantLibre())
-        .montantMinimum(tontine.getMontantMinimum())
-        .creePar(
-            tontine.getCreePar() != null
-                ? CreateurInfo.builder()
-                    .id(tontine.getCreePar().getId())
-                    .firstName(tontine.getCreePar().getFirstName())
-                    .lastName(tontine.getCreePar().getLastName())
-                    .phone(tontine.getCreePar().getPhone())
-                    .build()
-                : null)
-        .createdAt(tontine.getCreatedAt())
-        .updatedAt(tontine.getUpdatedAt())
-        .build();
-  }
 
   @Schema(description = "Informations résumées du créateur de la tontine")
   @Getter
