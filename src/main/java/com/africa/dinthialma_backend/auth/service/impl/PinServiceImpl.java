@@ -1,5 +1,6 @@
 package com.africa.dinthialma_backend.auth.service.impl;
 
+import com.africa.dinthialma_backend.auth.codeList.ClientType;
 import com.africa.dinthialma_backend.auth.dto.LoginResponse;
 import com.africa.dinthialma_backend.auth.dto.PinLoginRequest;
 import com.africa.dinthialma_backend.auth.dto.PinResetRequest;
@@ -102,43 +103,7 @@ public class PinServiceImpl implements PinService {
             .findByPhone(phone)
             .orElseThrow(() -> new NotFoundException(ResponseMessageConstants.AUTH_USER_NOT_FOUND));
 
-    // Vérifier que le compte est actif
-    if (!user.isActive()) {
-      log.warn("Tentative de connexion PIN sur compte désactivé – userId={}", user.getId());
-      throw new UnAuthorizedException(
-          ResponseMessageConstants.AUTH_ACCOUNT_DISABLED, ErrorCode.ACCOUNT_DISABLED);
-    }
-
-    // Vérifier que le PIN est configuré
-    if (user.getPinHash() == null) {
-      throw new BadRequestException(
-          ResponseMessageConstants.AUTH_PIN_NOT_CONFIGURED, ErrorCode.PIN_NOT_CONFIGURED);
-    }
-
-    // Vérifier l'expiration du PIN (90 jours)
-    if (user.getPinCreatedAt() != null) {
-      long daysOld = ChronoUnit.DAYS.between(user.getPinCreatedAt(), LocalDateTime.now());
-      if (daysOld >= Constants.Pin.EXPIRY_DAYS) {
-        log.warn("PIN expiré pour userId={} ({}j)", user.getId(), daysOld);
-        throw new BadRequestException(
-            "Votre code PIN a expiré après "
-                + Constants.Pin.EXPIRY_DAYS
-                + " jours. Veuillez en configurer un nouveau via l'option 'Réinitialiser mon PIN'.",
-            ErrorCode.PIN_EXPIRED);
-      }
-    }
-
-    // Vérifier le verrouillage
-    if (user.getPinLockedUntil() != null
-        && LocalDateTime.now().isBefore(user.getPinLockedUntil())) {
-      long minutesLeft =
-          ChronoUnit.MINUTES.between(LocalDateTime.now(), user.getPinLockedUntil()) + 1;
-      log.warn("PIN verrouillé pour userId={} – encore {} min", user.getId(), minutesLeft);
-      throw new TooManyRequestsException(
-          String.format(ResponseMessageConstants.AUTH_PIN_LOCKED, minutesLeft),
-          ErrorCode.PIN_LOCKED,
-          Math.max(1, ChronoUnit.SECONDS.between(LocalDateTime.now(), user.getPinLockedUntil())));
-    }
+    verifierPinUtilisable(user);
 
     // Valider le PIN
     if (!ARGON2.matches(request.getPin(), user.getPinHash())) {
@@ -150,32 +115,7 @@ public class PinServiceImpl implements PinService {
     user.setPinAttempts(0);
     user.setPinLockedUntil(null);
 
-    // Récupérer la session active pour ce type de client ; fallback sur n'importe quelle session
-    // active si le clientType demandé n'en a pas (ex. premier login WEB, PIN tenté en MOBILE)
-    Optional<UserSession> sessionOpt =
-        userSessionService.findActiveSession(user.getId(), request.getClientType());
-
-    if (sessionOpt.isEmpty()) {
-      sessionOpt = userSessionService.findAnyActiveSession(user.getId());
-      sessionOpt.ifPresent(
-          s ->
-              log.info(
-                  "Session fallback utilisée – userId={} sessionClientType={} requestedClientType={}",
-                  user.getId(),
-                  s.getClientType(),
-                  request.getClientType()));
-    }
-
-    if (sessionOpt.isEmpty()) {
-      log.warn(
-          "Aucune session active pour userId={} clientType={}",
-          user.getId(),
-          request.getClientType());
-      throw new UnAuthorizedException(
-          ResponseMessageConstants.AUTH_SESSION_NOT_FOUND, ErrorCode.PIN_SESSION_EXPIRED);
-    }
-
-    UserSession session = sessionOpt.get();
+    UserSession session = sessionPourPin(user, request.getClientType());
     boolean isFallback = !session.getClientType().equals(request.getClientType());
 
     // Déchiffrer le refresh token et appeler Keycloak
@@ -199,15 +139,7 @@ public class PinServiceImpl implements PinService {
     // Ne JAMAIS donner le même token à deux sessions — la première qui l'utilise
     // invalide l'autre côté Keycloak (rotation ON).
     if (isFallback) {
-      try {
-        userSessionService.revokeSession(session.getId());
-        log.info(
-            "[PIN] Session source révoquée après fallback – {} → {}",
-            session.getClientType(),
-            request.getClientType());
-      } catch (CustomException e) {
-        log.warn("[PIN] Impossible de révoquer la session source : {}", e.getMessage());
-      }
+      revoquerSessionSource(session, request.getClientType());
     }
 
     // Créer / renouveler uniquement la session pour le clientType demandé
@@ -219,6 +151,94 @@ public class PinServiceImpl implements PinService {
     log.info(
         "Connexion PIN réussie – userId={} clientType={}", user.getId(), request.getClientType());
     return newTokens;
+  }
+
+  /** Compte actif, PIN configuré, non expiré (90 jours) et non verrouillé. */
+  private void verifierPinUtilisable(User user) throws CustomException {
+    // Vérifier que le compte est actif
+    if (!user.isActive()) {
+      log.warn("Tentative de connexion PIN sur compte désactivé – userId={}", user.getId());
+      throw new UnAuthorizedException(
+          ResponseMessageConstants.AUTH_ACCOUNT_DISABLED, ErrorCode.ACCOUNT_DISABLED);
+    }
+
+    // Vérifier que le PIN est configuré
+    if (user.getPinHash() == null) {
+      throw new BadRequestException(
+          ResponseMessageConstants.AUTH_PIN_NOT_CONFIGURED, ErrorCode.PIN_NOT_CONFIGURED);
+    }
+
+    verifierPinNonExpire(user);
+
+    // Vérifier le verrouillage
+    if (user.getPinLockedUntil() != null
+        && LocalDateTime.now().isBefore(user.getPinLockedUntil())) {
+      long minutesLeft =
+          ChronoUnit.MINUTES.between(LocalDateTime.now(), user.getPinLockedUntil()) + 1;
+      log.warn("PIN verrouillé pour userId={} – encore {} min", user.getId(), minutesLeft);
+      throw new TooManyRequestsException(
+          String.format(ResponseMessageConstants.AUTH_PIN_LOCKED, minutesLeft),
+          ErrorCode.PIN_LOCKED,
+          Math.max(1, ChronoUnit.SECONDS.between(LocalDateTime.now(), user.getPinLockedUntil())));
+    }
+  }
+
+  private void verifierPinNonExpire(User user) throws CustomException {
+    if (user.getPinCreatedAt() == null) {
+      return;
+    }
+    long daysOld = ChronoUnit.DAYS.between(user.getPinCreatedAt(), LocalDateTime.now());
+    if (daysOld >= Constants.Pin.EXPIRY_DAYS) {
+      log.warn("PIN expiré pour userId={} ({}j)", user.getId(), daysOld);
+      throw new BadRequestException(
+          "Votre code PIN a expiré après "
+              + Constants.Pin.EXPIRY_DAYS
+              + " jours. Veuillez en configurer un nouveau via l'option 'Réinitialiser mon PIN'.",
+          ErrorCode.PIN_EXPIRED);
+    }
+  }
+
+  /**
+   * Session active pour ce type de client ; fallback sur n'importe quelle session active si le
+   * clientType demandé n'en a pas (ex. premier login WEB, PIN tenté en MOBILE).
+   */
+  private UserSession sessionPourPin(User user, ClientType clientType) throws CustomException {
+    Optional<UserSession> sessionOpt =
+        userSessionService.findActiveSession(user.getId(), clientType);
+    if (sessionOpt.isPresent()) {
+      return sessionOpt.get();
+    }
+    UserSession fallback =
+        userSessionService
+            .findAnyActiveSession(user.getId())
+            .orElseThrow(
+                () -> {
+                  log.warn(
+                      "Aucune session active pour userId={} clientType={}",
+                      user.getId(),
+                      clientType);
+                  return new UnAuthorizedException(
+                      ResponseMessageConstants.AUTH_SESSION_NOT_FOUND,
+                      ErrorCode.PIN_SESSION_EXPIRED);
+                });
+    log.info(
+        "Session fallback utilisée – userId={} sessionClientType={} requestedClientType={}",
+        user.getId(),
+        fallback.getClientType(),
+        clientType);
+    return fallback;
+  }
+
+  private void revoquerSessionSource(UserSession session, ClientType clientType) {
+    try {
+      userSessionService.revokeSession(session.getId());
+      log.info(
+          "[PIN] Session source révoquée après fallback – {} → {}",
+          session.getClientType(),
+          clientType);
+    } catch (CustomException e) {
+      log.warn("[PIN] Impossible de révoquer la session source : {}", e.getMessage());
+    }
   }
 
   // ─── Réinitialisation PIN via OTP ─────────────────────────────────

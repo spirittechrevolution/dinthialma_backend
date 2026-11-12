@@ -41,6 +41,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -180,106 +182,121 @@ public class TontineServiceImpl implements TontineService {
       throw new BadRequestException("La tontine ne peut être modifiée qu'en statut BROUILLON");
     }
 
-    if (request.getNom() != null) {
-      auditService.log(caller, "tontines", id, "nom", tontine.getNom(), request.getNom().trim());
-      tontine.setNom(request.getNom().trim());
-    }
-    if (request.getDescription() != null) {
-      auditService.log(
-          caller,
-          "tontines",
-          id,
-          "description",
-          tontine.getDescription(),
-          request.getDescription());
-      tontine.setDescription(request.getDescription());
-    }
-    if (request.getMontant() != null) {
-      auditService.log(
-          caller,
-          "tontines",
-          id,
-          "montant",
-          tontine.getMontant().toPlainString(),
-          request.getMontant().toPlainString());
-      tontine.setMontant(request.getMontant());
-    }
-    if (request.getFrequence() != null) {
-      auditService.log(
-          caller, "tontines", id, "frequence", tontine.getFrequence(), request.getFrequence());
-      tontine.setFrequence(request.getFrequence());
-    }
-    if (request.getOrdreBeneficiaire() != null) {
-      verifierOrdreBeneficiaire(request.getOrdreBeneficiaire());
-      auditService.log(
-          caller,
-          "tontines",
-          id,
-          "ordreBeneficiaire",
-          tontine.getOrdreBeneficiaire(),
-          request.getOrdreBeneficiaire());
-      tontine.setOrdreBeneficiaire(request.getOrdreBeneficiaire());
-    }
-    if (request.getDateDebut() != null) {
-      auditService.log(
-          caller,
-          "tontines",
-          id,
-          "dateDebut",
-          tontine.getDateDebut().toString(),
-          request.getDateDebut().toString());
-      tontine.setDateDebut(request.getDateDebut());
-    }
-    if (request.getNombreMembres() != null) {
-      auditService.log(
-          caller,
-          "tontines",
-          id,
-          "nombreMembres",
-          String.valueOf(tontine.getNombreMembres()),
-          String.valueOf(request.getNombreMembres()));
-      tontine.setNombreMembres(request.getNombreMembres());
-    }
-    if (request.getNombreGagnants() != null) {
-      auditService.log(
-          caller,
-          "tontines",
-          id,
-          "nombreGagnants",
-          String.valueOf(tontine.getNombreGagnants()),
-          String.valueOf(request.getNombreGagnants()));
-      tontine.setNombreGagnants(request.getNombreGagnants());
-    }
-
-    // Champs EVENEMENTIELLE
+    appliquerChampsCommuns(caller, tontine, request);
     if (tontine.getTontineType() == TontineType.EVENEMENTIELLE) {
-      if (request.getDateEcheance() != null) {
-        if (!request.getDateEcheance().isAfter(tontine.getDateDebut())) {
-          throw new BadRequestException(
-              "La date d'échéance doit être postérieure à la date de début");
-        }
-        auditService.log(
-            caller,
-            "tontines",
-            id,
-            "dateEcheance",
-            tontine.getDateEcheance() != null ? tontine.getDateEcheance().toString() : null,
-            request.getDateEcheance().toString());
-        tontine.setDateEcheance(request.getDateEcheance());
-      }
-      if (request.getNomEvenement() != null) {
-        tontine.setNomEvenement(request.getNomEvenement());
-      }
-      if (request.getMontantMinimum() != null) {
-        tontine.setMontantMinimum(request.getMontantMinimum());
-      }
-      if (request.getMontantLibre() != null) {
-        tontine.setMontantLibre(request.getMontantLibre());
-      }
+      appliquerChampsEvenementielle(caller, tontine, request);
     }
 
     Tontine saved = tontineRepository.save(tontine);
     return toResponse(saved, caller);
+  }
+
+  private void appliquerChampsCommuns(User caller, Tontine tontine, UpdateTontineRequest request)
+      throws CustomException {
+    String nom = request.getNom() != null ? request.getNom().trim() : null;
+    modifier(caller, tontine, "nom", tontine.getNom(), nom, String::valueOf, tontine::setNom);
+    modifier(
+        caller,
+        tontine,
+        "description",
+        tontine.getDescription(),
+        request.getDescription(),
+        String::valueOf,
+        tontine::setDescription);
+    modifier(
+        caller,
+        tontine,
+        "montant",
+        tontine.getMontant(),
+        request.getMontant(),
+        BigDecimal::toPlainString,
+        tontine::setMontant);
+    modifier(
+        caller,
+        tontine,
+        "frequence",
+        tontine.getFrequence(),
+        request.getFrequence(),
+        String::valueOf,
+        tontine::setFrequence);
+    if (request.getOrdreBeneficiaire() != null) {
+      verifierOrdreBeneficiaire(request.getOrdreBeneficiaire());
+    }
+    modifier(
+        caller,
+        tontine,
+        "ordreBeneficiaire",
+        tontine.getOrdreBeneficiaire(),
+        request.getOrdreBeneficiaire(),
+        String::valueOf,
+        tontine::setOrdreBeneficiaire);
+    modifier(
+        caller,
+        tontine,
+        "dateDebut",
+        tontine.getDateDebut(),
+        request.getDateDebut(),
+        LocalDate::toString,
+        tontine::setDateDebut);
+    modifier(
+        caller,
+        tontine,
+        "nombreMembres",
+        tontine.getNombreMembres(),
+        request.getNombreMembres(),
+        String::valueOf,
+        tontine::setNombreMembres);
+    modifier(
+        caller,
+        tontine,
+        "nombreGagnants",
+        tontine.getNombreGagnants(),
+        request.getNombreGagnants(),
+        String::valueOf,
+        tontine::setNombreGagnants);
+  }
+
+  private void appliquerChampsEvenementielle(
+      User caller, Tontine tontine, UpdateTontineRequest request) throws CustomException {
+    LocalDate echeance = request.getDateEcheance();
+    if (echeance != null && !echeance.isAfter(tontine.getDateDebut())) {
+      throw new BadRequestException("La date d'échéance doit être postérieure à la date de début");
+    }
+    modifier(
+        caller,
+        tontine,
+        "dateEcheance",
+        tontine.getDateEcheance(),
+        echeance,
+        LocalDate::toString,
+        tontine::setDateEcheance);
+    if (request.getNomEvenement() != null) {
+      tontine.setNomEvenement(request.getNomEvenement());
+    }
+    if (request.getMontantMinimum() != null) {
+      tontine.setMontantMinimum(request.getMontantMinimum());
+    }
+    if (request.getMontantLibre() != null) {
+      tontine.setMontantLibre(request.getMontantLibre());
+    }
+  }
+
+  /** Champ non null dans la requête : trace l'ancienne et la nouvelle valeur, puis l'affecte. */
+  private <T> void modifier(
+      User caller,
+      Tontine tontine,
+      String champ,
+      T ancienne,
+      T nouvelle,
+      Function<T, String> texte,
+      Consumer<T> affecter) {
+    if (nouvelle == null) {
+      return;
+    }
+    String ancienTexte = ancienne != null ? texte.apply(ancienne) : null;
+    auditService.log(
+        caller, "tontines", tontine.getId(), champ, ancienTexte, texte.apply(nouvelle));
+    affecter.accept(nouvelle);
   }
 
   // ─── Suppression ─────────────────────────────────────────────────────────
@@ -458,39 +475,48 @@ public class TontineServiceImpl implements TontineService {
   private void validateCreateRequest(CreateTontineRequest request, TontineType type)
       throws CustomException {
     if (type == TontineType.EVENEMENTIELLE) {
-      if (request.getDateEcheance() == null) {
-        throw new BadRequestException(
-            "La date d'échéance est obligatoire pour une tontine événementielle");
-      }
-      if (!request.getDateEcheance().isAfter(request.getDateDebut())) {
-        throw new BadRequestException(
-            "La date d'échéance doit être postérieure à la date de début");
-      }
-      if (!request.isMontantLibre()
-          && (request.getMontant() == null
-              || request.getMontant().compareTo(BigDecimal.ZERO) <= 0)) {
-        throw new BadRequestException(
-            "Le montant fixe de cotisation est obligatoire quand montantLibre=false");
-      }
+      validerCreationEvenementielle(request);
     } else {
-      // ROTATIVE
-      if (request.getOrdreBeneficiaire() == null || request.getOrdreBeneficiaire().isBlank()) {
-        throw new BadRequestException(
-            "L'ordre des bénéficiaires est obligatoire pour une tontine rotative");
-      }
-      verifierOrdreBeneficiaire(request.getOrdreBeneficiaire());
-      if (request.getMontant() == null || request.getMontant().compareTo(BigDecimal.ZERO) <= 0) {
-        throw new BadRequestException(
-            "Le montant de cotisation est obligatoire pour une tontine rotative");
-      }
-      if (request.getNombreMembres() == null || request.getNombreMembres() < 2) {
-        throw new BadRequestException(
-            "Le nombre de membres doit être au minimum 2 pour une tontine rotative");
-      }
-      if (request.getModeCycle() == null) {
-        throw new BadRequestException("Le mode de cycle est obligatoire pour une tontine rotative");
-      }
+      validerCreationRotative(request);
     }
+  }
+
+  private static void validerCreationEvenementielle(CreateTontineRequest request)
+      throws CustomException {
+    if (request.getDateEcheance() == null) {
+      throw new BadRequestException(
+          "La date d'échéance est obligatoire pour une tontine événementielle");
+    }
+    if (!request.getDateEcheance().isAfter(request.getDateDebut())) {
+      throw new BadRequestException("La date d'échéance doit être postérieure à la date de début");
+    }
+    if (!request.isMontantLibre() && !estStrictementPositif(request.getMontant())) {
+      throw new BadRequestException(
+          "Le montant fixe de cotisation est obligatoire quand montantLibre=false");
+    }
+  }
+
+  private static void validerCreationRotative(CreateTontineRequest request) throws CustomException {
+    if (request.getOrdreBeneficiaire() == null || request.getOrdreBeneficiaire().isBlank()) {
+      throw new BadRequestException(
+          "L'ordre des bénéficiaires est obligatoire pour une tontine rotative");
+    }
+    verifierOrdreBeneficiaire(request.getOrdreBeneficiaire());
+    if (!estStrictementPositif(request.getMontant())) {
+      throw new BadRequestException(
+          "Le montant de cotisation est obligatoire pour une tontine rotative");
+    }
+    if (request.getNombreMembres() == null || request.getNombreMembres() < 2) {
+      throw new BadRequestException(
+          "Le nombre de membres doit être au minimum 2 pour une tontine rotative");
+    }
+    if (request.getModeCycle() == null) {
+      throw new BadRequestException("Le mode de cycle est obligatoire pour une tontine rotative");
+    }
+  }
+
+  private static boolean estStrictementPositif(BigDecimal montant) {
+    return montant != null && montant.compareTo(BigDecimal.ZERO) > 0;
   }
 
   private static void verifierOrdreBeneficiaire(String ordre) throws CustomException {

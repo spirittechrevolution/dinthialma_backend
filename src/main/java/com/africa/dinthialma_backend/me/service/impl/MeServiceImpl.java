@@ -43,6 +43,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -105,30 +106,53 @@ public class MeServiceImpl implements MeService {
           .build();
     }
 
+    AgregatsSummary agregats = chargerAgregats(memberships);
+    List<MeSummaryResponse.TontineCotisant> lignes =
+        memberships.stream().map(m -> ligneTontine(m, agregats)).toList();
+
+    BigDecimal totalValide = BigDecimal.ZERO;
+    BigDecimal totalEnAttente = BigDecimal.ZERO;
+    long nombreDues = 0;
+    BigDecimal montantDu = BigDecimal.ZERO;
+    for (MeSummaryResponse.TontineCotisant ligne : lignes) {
+      totalValide = totalValide.add(ligne.getTotalCotiseValide());
+      totalEnAttente = totalEnAttente.add(ligne.getTotalEnAttente());
+      MeSummaryResponse.CotisationDue due = ligne.getCotisationDue();
+      if (due != null && due.getStatut() == StatutCotisationDue.A_PAYER) {
+        nombreDues++;
+        montantDu = montantDu.add(zeroSiNul(due.getMontant()));
+      }
+    }
+
+    return MeSummaryResponse.builder()
+        .totalCotiseValide(totalValide)
+        .totalEnAttente(totalEnAttente)
+        .totalJackpotsRecus(totalJackpots)
+        .nombreCotisationsDues(nombreDues)
+        .montantDu(montantDu)
+        .tontines(lignes)
+        .build();
+  }
+
+  /**
+   * Agrégats du résumé, chargés en un nombre fixe de requêtes quel que soit le nombre de tontines.
+   */
+  private record AgregatsSummary(
+      Map<UUID, Map<CotisationStatut, Object[]>> statsParMembre,
+      Map<UUID, Object[]> jackpotsParMembre,
+      Map<UUID, Long> toursParTontine,
+      Map<UUID, CycleTontine> cycleEnCoursParTontine,
+      Map<UUID, Cotisation> cotisationEnCoursParMembre) {}
+
+  private AgregatsSummary chargerAgregats(List<TontineMembre> memberships) {
     List<UUID> membreIds = memberships.stream().map(TontineMembre::getId).toList();
     List<UUID> tontineIds = memberships.stream().map(m -> m.getTontine().getId()).toList();
 
-    // Agrégats en 4 requêtes, quel que soit le nombre de tontines
     Map<UUID, Map<CotisationStatut, Object[]>> statsParMembre = new HashMap<>();
     for (Object[] row : cotisationRepository.countAndSumByMembreAndStatut(membreIds)) {
       statsParMembre
           .computeIfAbsent((UUID) row[0], k -> new EnumMap<>(CotisationStatut.class))
           .put((CotisationStatut) row[1], row);
-    }
-
-    Map<UUID, Object[]> jackpotsParMembre = new HashMap<>();
-    for (Object[] row : gagnantRepository.sumAndCountByMembreIds(membreIds)) {
-      jackpotsParMembre.put((UUID) row[0], row);
-    }
-    // Tontines événementielles : la distribution finale compte comme « jackpot reçu »
-    for (Object[] row : distributionRepository.sumAndCountByMembreIds(membreIds)) {
-      jackpotsParMembre.merge(
-          (UUID) row[0],
-          row,
-          (a, b) ->
-              new Object[] {
-                a[0], ((BigDecimal) a[1]).add((BigDecimal) b[1]), (Long) a[2] + (Long) b[2]
-              });
     }
 
     Map<UUID, Long> toursParTontine = new HashMap<>();
@@ -142,95 +166,97 @@ public class MeServiceImpl implements MeService {
             .stream()
             .collect(Collectors.toMap(c -> c.getTontine().getId(), c -> c, (a, b) -> a));
 
-    List<UUID> cycleEnCoursIds =
-        cycleEnCoursParTontine.values().stream().map(CycleTontine::getId).toList();
-    Map<UUID, Cotisation> cotisationEnCoursParMembre =
-        cycleEnCoursIds.isEmpty()
-            ? Map.of()
-            : cotisationRepository
-                .findByCycle_IdInAndMembre_IdInAndDeletedAtIsNull(cycleEnCoursIds, membreIds)
-                .stream()
-                .collect(
-                    Collectors.toMap(
-                        c -> c.getMembre().getId(), c -> c, Cotisation::plusPertinente));
+    return new AgregatsSummary(
+        statsParMembre,
+        jackpotsParMembre(membreIds),
+        toursParTontine,
+        cycleEnCoursParTontine,
+        cotisationsEnCours(cycleEnCoursParTontine.values(), membreIds));
+  }
 
-    BigDecimal totalValide = BigDecimal.ZERO;
-    BigDecimal totalEnAttente = BigDecimal.ZERO;
-    long nombreDues = 0;
-    BigDecimal montantDu = BigDecimal.ZERO;
-    List<MeSummaryResponse.TontineCotisant> lignes = new ArrayList<>();
-
-    for (TontineMembre m : memberships) {
-      Tontine t = m.getTontine();
-      Map<CotisationStatut, Object[]> stats = statsParMembre.getOrDefault(m.getId(), Map.of());
-      BigDecimal valide = montant(stats.get(CotisationStatut.VALIDE));
-      BigDecimal enAttente = montant(stats.get(CotisationStatut.EN_ATTENTE));
-      totalValide = totalValide.add(valide);
-      totalEnAttente = totalEnAttente.add(enAttente);
-
-      CycleTontine cycle = cycleEnCoursParTontine.get(t.getId());
-      MeSummaryResponse.CotisationDue due =
-          buildCotisationDue(t, m, cycle, cotisationEnCoursParMembre.get(m.getId()));
-      if (due != null && due.getStatut() == StatutCotisationDue.A_PAYER) {
-        nombreDues++;
-        if (due.getMontant() != null) montantDu = montantDu.add(due.getMontant());
-      }
-
-      User gestionnaire = t.getCreePar();
-      lignes.add(
-          MeSummaryResponse.TontineCotisant.builder()
-              .tontineId(t.getId())
-              .nom(t.getNom())
-              .tontineType(t.getTontineType())
-              .statut(t.getStatut())
-              .frequence(t.getFrequence())
-              .nomEvenement(t.getNomEvenement())
-              .dateEcheance(t.getDateEcheance())
-              .monMembreId(m.getId())
-              .monStatutMembre(m.getStatut())
-              .ordreJackpot(m.getOrdreJackpot())
-              .aRecuJackpot(m.isARecuJackpot())
-              .totalCotiseValide(valide)
-              .totalEnAttente(enAttente)
-              .totalJackpotsRecus(
-                  jackpotsParMembre.containsKey(m.getId())
-                      ? (BigDecimal) jackpotsParMembre.get(m.getId())[1]
-                      : BigDecimal.ZERO)
-              .nombreJackpotsRecus(
-                  jackpotsParMembre.containsKey(m.getId())
-                      ? (Long) jackpotsParMembre.get(m.getId())[2]
-                      : 0L)
-              .toursPayes(nombre(stats.get(CotisationStatut.VALIDE)))
-              .toursTotal(toursParTontine.getOrDefault(t.getId(), 0L))
-              .cycleEnCours(
-                  cycle == null
-                      ? null
-                      : MeSummaryResponse.CycleEnCours.builder()
-                          .cycleId(cycle.getId())
-                          .numeroCycle(cycle.getNumeroCycle())
-                          .dateDebut(cycle.getDateDebut())
-                          .dateFin(cycle.getDateFin())
-                          .build())
-              .cotisationDue(due)
-              .gestionnaire(
-                  gestionnaire == null
-                      ? null
-                      : MeSummaryResponse.Gestionnaire.builder()
-                          .id(gestionnaire.getId())
-                          .firstName(gestionnaire.getFirstName())
-                          .lastName(gestionnaire.getLastName())
-                          .phone(gestionnaire.getPhone())
-                          .build())
-              .build());
+  /** [membreId, montant, nombre] : jackpots ROTATIVE + distribution finale EVENEMENTIELLE. */
+  private Map<UUID, Object[]> jackpotsParMembre(List<UUID> membreIds) {
+    Map<UUID, Object[]> jackpots = new HashMap<>();
+    for (Object[] row : gagnantRepository.sumAndCountByMembreIds(membreIds)) {
+      jackpots.put((UUID) row[0], row);
     }
+    for (Object[] row : distributionRepository.sumAndCountByMembreIds(membreIds)) {
+      jackpots.merge(
+          (UUID) row[0],
+          row,
+          (a, b) ->
+              new Object[] {
+                a[0], ((BigDecimal) a[1]).add((BigDecimal) b[1]), (Long) a[2] + (Long) b[2]
+              });
+    }
+    return jackpots;
+  }
 
-    return MeSummaryResponse.builder()
-        .totalCotiseValide(totalValide)
-        .totalEnAttente(totalEnAttente)
-        .totalJackpotsRecus(totalJackpots)
-        .nombreCotisationsDues(nombreDues)
-        .montantDu(montantDu)
-        .tontines(lignes)
+  private Map<UUID, Cotisation> cotisationsEnCours(
+      Collection<CycleTontine> cyclesEnCours, List<UUID> membreIds) {
+    if (cyclesEnCours.isEmpty()) {
+      return Map.of();
+    }
+    List<UUID> cycleIds = cyclesEnCours.stream().map(CycleTontine::getId).toList();
+    return cotisationRepository
+        .findByCycle_IdInAndMembre_IdInAndDeletedAtIsNull(cycleIds, membreIds)
+        .stream()
+        .collect(Collectors.toMap(c -> c.getMembre().getId(), c -> c, Cotisation::plusPertinente));
+  }
+
+  private MeSummaryResponse.TontineCotisant ligneTontine(
+      TontineMembre m, AgregatsSummary agregats) {
+    Tontine t = m.getTontine();
+    Map<CotisationStatut, Object[]> stats =
+        agregats.statsParMembre().getOrDefault(m.getId(), Map.of());
+    Object[] jackpots = agregats.jackpotsParMembre().get(m.getId());
+    CycleTontine cycle = agregats.cycleEnCoursParTontine().get(t.getId());
+    return MeSummaryResponse.TontineCotisant.builder()
+        .tontineId(t.getId())
+        .nom(t.getNom())
+        .tontineType(t.getTontineType())
+        .statut(t.getStatut())
+        .frequence(t.getFrequence())
+        .nomEvenement(t.getNomEvenement())
+        .dateEcheance(t.getDateEcheance())
+        .monMembreId(m.getId())
+        .monStatutMembre(m.getStatut())
+        .ordreJackpot(m.getOrdreJackpot())
+        .aRecuJackpot(m.isARecuJackpot())
+        .totalCotiseValide(montant(stats.get(CotisationStatut.VALIDE)))
+        .totalEnAttente(montant(stats.get(CotisationStatut.EN_ATTENTE)))
+        .totalJackpotsRecus(jackpots != null ? (BigDecimal) jackpots[1] : BigDecimal.ZERO)
+        .nombreJackpotsRecus(jackpots != null ? (Long) jackpots[2] : 0L)
+        .toursPayes(nombre(stats.get(CotisationStatut.VALIDE)))
+        .toursTotal(agregats.toursParTontine().getOrDefault(t.getId(), 0L))
+        .cycleEnCours(cycleEnCours(cycle))
+        .cotisationDue(
+            buildCotisationDue(t, m, cycle, agregats.cotisationEnCoursParMembre().get(m.getId())))
+        .gestionnaire(gestionnaire(t.getCreePar()))
+        .build();
+  }
+
+  private static MeSummaryResponse.CycleEnCours cycleEnCours(CycleTontine cycle) {
+    if (cycle == null) {
+      return null;
+    }
+    return MeSummaryResponse.CycleEnCours.builder()
+        .cycleId(cycle.getId())
+        .numeroCycle(cycle.getNumeroCycle())
+        .dateDebut(cycle.getDateDebut())
+        .dateFin(cycle.getDateFin())
+        .build();
+  }
+
+  private static MeSummaryResponse.Gestionnaire gestionnaire(User gestionnaire) {
+    if (gestionnaire == null) {
+      return null;
+    }
+    return MeSummaryResponse.Gestionnaire.builder()
+        .id(gestionnaire.getId())
+        .firstName(gestionnaire.getFirstName())
+        .lastName(gestionnaire.getLastName())
+        .phone(gestionnaire.getPhone())
         .build();
   }
 
