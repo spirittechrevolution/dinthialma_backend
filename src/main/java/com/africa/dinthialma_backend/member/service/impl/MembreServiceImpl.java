@@ -278,11 +278,11 @@ public class MembreServiceImpl implements MembreService {
   private User enrichPreEnrolledIfNeeded(User user, AddMembreRequest request) {
     if (user.getAccountStatus() != AccountStatus.PRE_ENROLLED) return user;
     boolean needsUpdate = false;
-    if (user.getFirstName().isBlank()) {
+    if (estVide(user.getFirstName()) && !estVide(request.getFirstName())) {
       user.setFirstName(request.getFirstName().trim());
       needsUpdate = true;
     }
-    if (user.getLastName().isBlank()) {
+    if (estVide(user.getLastName()) && !estVide(request.getLastName())) {
       user.setLastName(request.getLastName().trim());
       needsUpdate = true;
     }
@@ -294,6 +294,10 @@ public class MembreServiceImpl implements MembreService {
    * par l'admin pour l'affichage immédiat dans la tontine. Envoie un SMS d'invitation (non
    * bloquant).
    */
+  private static boolean estVide(String valeur) {
+    return valeur == null || valeur.isBlank();
+  }
+
   private User createPreEnrolledUser(
       String phone, String firstName, String lastName, Tontine tontine) {
     User user =
