@@ -480,7 +480,7 @@ class CycleServiceImplTest {
       assertThat(r.getDistributionParMembre()).hasSize(2);
       CycleResponse.MembreDistributionInfo awa =
           r.getDistributionParMembre().stream()
-              .filter(d -> d.getMembreId().equals(membres.get(0).getId()))
+              .filter(d -> d.getMembreId().equals(membres.getFirst().getId()))
               .findFirst()
               .orElseThrow();
       assertThat(awa.getMontantCotise()).isEqualByComparingTo("2000");
