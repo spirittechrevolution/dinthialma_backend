@@ -161,6 +161,7 @@ class SecuriteEtErreursIT extends AbstractIntegrationTest {
       Reponse r = api.get("/v1/public/config", null);
       assertThat(r.statut()).isEqualTo(200);
       assertThat(r.data().path("versionMinimaleApp").asText()).isEqualTo("2.0.0");
+      assertThat(r.data().path("versionRecommandeeApp").asText()).isEqualTo("2.1.0");
       assertThat(r.data().has("supportWhatsapp")).isFalse();
       assertThat(r.data().has("supportEmail")).isFalse();
     }

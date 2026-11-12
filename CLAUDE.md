@@ -176,7 +176,7 @@
 
 | Endpoint | Méthode | Accès | Notes |
 |----------|---------|-------|-------|
-| `/v1/public/config` | GET | 🌐 public | `supportWhatsapp`, `supportEmail`, `versionMinimaleApp` (env `SUPPORT_WHATSAPP`, `SUPPORT_EMAIL`, `APP_VERSION_MINIMALE`) ; champ absent si non configuré |
+| `/v1/public/config` | GET | 🌐 public | `supportWhatsapp`, `supportEmail`, `versionMinimaleApp` (bloquante), `versionRecommandeeApp` (bandeau) — env `SUPPORT_WHATSAPP`, `SUPPORT_EMAIL`, `APP_VERSION_MINIMALE`, `APP_VERSION_RECOMMANDEE` ; champ absent si non configuré ; versions en SemVer strict `X.Y.Z`, sinon le backend refuse de démarrer |
 | `/v1/tontines/{id}/cotisations/export` | GET | créateur, SUPER_ADMIN | export CSV (`format=csv`, `cycleId`, `statut`) |
 | `/v1/code-list/{id}` | DELETE | SUPER_ADMIN | suppression logique ; valeurs système refusées (`CODE_LIST_SYSTEM_VALUE`) ; recréer restaure |
 

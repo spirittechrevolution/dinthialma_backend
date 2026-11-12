@@ -163,11 +163,50 @@ class InscriptionEtRechercheServiceTest {
     @DisplayName("valeurs renseignées rognées, valeurs vides -> null")
     void valeurs() {
       PublicConfigResponse r =
-          new PublicConfigServiceImpl(" +221770000000 ", "  ", "2.0.0").getConfig();
+          new PublicConfigServiceImpl(" +221770000000 ", "  ", " 2.0.0 ", "2.1.0").getConfig();
       assertThat(r.getSupportWhatsapp()).isEqualTo("+221770000000");
       assertThat(r.getSupportEmail()).isNull();
       assertThat(r.getVersionMinimaleApp()).isEqualTo("2.0.0");
-      assertThat(new PublicConfigServiceImpl(null, null, null).getConfig().getVersionMinimaleApp())
+      assertThat(r.getVersionRecommandeeApp()).isEqualTo("2.1.0");
+      PublicConfigResponse vide = new PublicConfigServiceImpl(null, null, null, " ").getConfig();
+      assertThat(vide.getVersionMinimaleApp()).isNull();
+      assertThat(vide.getVersionRecommandeeApp()).isNull();
+    }
+
+    @Test
+    @DisplayName("version mal formée (non SemVer strict) -> démarrage refusé, message explicite")
+    void versionMalFormee() {
+      for (String v : new String[] {"1.0", "v1.0.0", "1.0.0-beta", "01.0.0", "1.0.0.0", "abc"}) {
+        assertThatThrownBy(() -> new PublicConfigServiceImpl(null, null, v, null))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("APP_VERSION_MINIMALE");
+        assertThatThrownBy(() -> new PublicConfigServiceImpl(null, null, null, v))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("APP_VERSION_RECOMMANDEE");
+      }
+    }
+
+    @Test
+    @DisplayName(
+        "recommandée inférieure à la minimale -> refusé ; comparaison numérique (1.10.0 > 1.9.0)")
+    void coherence() {
+      assertThatThrownBy(() -> new PublicConfigServiceImpl(null, null, "1.10.0", "1.9.0"))
+          .isInstanceOf(IllegalStateException.class)
+          .hasMessageContaining("supérieure ou égale");
+      assertThat(
+              new PublicConfigServiceImpl(null, null, "1.9.0", "1.10.0")
+                  .getConfig()
+                  .getVersionRecommandeeApp())
+          .isEqualTo("1.10.0");
+      assertThat(
+              new PublicConfigServiceImpl(null, null, "0.0.1", "0.0.1")
+                  .getConfig()
+                  .getVersionMinimaleApp())
+          .isEqualTo("0.0.1");
+      assertThat(
+              new PublicConfigServiceImpl(null, null, null, "0.1.0")
+                  .getConfig()
+                  .getVersionMinimaleApp())
           .isNull();
     }
   }

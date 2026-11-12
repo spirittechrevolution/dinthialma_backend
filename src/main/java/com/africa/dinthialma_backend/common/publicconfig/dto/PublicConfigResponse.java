@@ -15,6 +15,21 @@ public class PublicConfigResponse {
   @Schema(description = "Email du support", nullable = true)
   private String supportEmail;
 
-  @Schema(description = "Version minimale de l'app supportée", example = "2.0.0", nullable = true)
+  @Schema(
+      description =
+          "Version minimale du front (SemVer MAJEUR.MINEUR.CORRECTIF). Version du front"
+              + " strictement inférieure → écran bloquant « Mise à jour requise ». Absent → aucun"
+              + " contrôle.",
+      example = "1.0.0",
+      nullable = true)
   private String versionMinimaleApp;
+
+  @Schema(
+      description =
+          "Version recommandée du front (SemVer, ≥ versionMinimaleApp). Version du front"
+              + " strictement inférieure → simple bandeau « Nouvelle version disponible », non"
+              + " bloquant. Absent → aucun bandeau.",
+      example = "1.2.0",
+      nullable = true)
+  private String versionRecommandeeApp;
 }

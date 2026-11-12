@@ -11,6 +11,7 @@ dinthialma:
   app:
     url: https://test.dinthialma.local
   version-minimale-app: 2.0.0
+  version-recommandee-app: 2.1.0
   bootstrap:
     enabled: true
     phone: "+221700000000"
