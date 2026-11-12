@@ -360,7 +360,9 @@ class CycleServiceImplTest {
     }
 
     @Test
-    @DisplayName("2 gagnants : net partagé ; mode AUTOMATIQUE : cycle suivant activé")
+    @DisplayName(
+        "2 gagnants : net partagé en francs entiers, somme exacte (3 001 -> 1 501 + 1 500) ;"
+            + " mode AUTOMATIQUE : cycle suivant activé")
     void plusieursGagnantsEtSuivant() throws Exception {
       tontine.setNombreGagnants(2);
       tontine.setModeCycle(ModeCycle.AUTOMATIQUE);
@@ -383,8 +385,9 @@ class CycleServiceImplTest {
       CycleResponse r = service.closeCycle(kc, tontine.getId(), cycle.getId());
 
       assertThat(r.getGagnants())
-          .hasSize(2)
-          .allSatisfy(g -> assertThat(g.getMontantRecu()).isEqualByComparingTo("1500.50"));
+          .extracting(CycleResponse.GagnantInfo::getMontantRecu)
+          .usingElementComparator(BigDecimal::compareTo)
+          .containsExactly(new BigDecimal("1501"), new BigDecimal("1500"));
       assertThat(suivant.getStatut()).isEqualTo(CycleStatut.EN_COURS);
       assertThat(apres.getStatut()).isEqualTo(CycleStatut.EN_ATTENTE);
     }
@@ -403,6 +406,44 @@ class CycleServiceImplTest {
       CycleTontine c2 = cycleConnu(2, CycleStatut.EN_COURS);
       assertThat(service.closeCycle(kc, tontine.getId(), c2.getId()).getGagnants()).isEmpty();
       verify(schedulerService, times(1)).annoncerGagnants(any(), any());
+    }
+
+    @Test
+    @DisplayName(
+        "PAIEMENT_EN_RETARD : « déclaré à temps, non validé » si déclarée avant l'échéance,"
+            + " « n'a pas cotisé » sinon")
+    void texteRetardSelonPonctualite() throws Exception {
+      List<TontineMembre> membres = membresActifs(2);
+      CycleTontine c = cycleConnu(1, CycleStatut.EN_COURS);
+      Cotisation aTemps = cotisation(membres.get(0), c, CotisationStatut.EN_ATTENTE, "1000");
+      Cotisation tardive = cotisation(membres.get(1), c, CotisationStatut.EN_ATTENTE, "1000");
+      tardive.setCreatedAt(c.getDateFin().plusDays(1).atTime(8, 0));
+      when(cotisationRepository.findByCycle_IdAndStatutAndDeletedAtIsNull(
+              c.getId(), CotisationStatut.VALIDE))
+          .thenReturn(List.of());
+      when(cotisationRepository.findByCycle_IdAndStatutAndDeletedAtIsNull(
+              c.getId(), CotisationStatut.EN_ATTENTE))
+          .thenReturn(List.of(aTemps, tardive));
+
+      service.closeCycle(kc, tontine.getId(), c.getId());
+
+      verify(notificationService)
+          .notify(
+              eq(gestionnaire.getId()),
+              eq(NotificationType.PAIEMENT_EN_RETARD),
+              anyString(),
+              org.mockito.ArgumentMatchers.contains("déclaré son paiement à temps"),
+              eq(tontine.getId()),
+              any());
+      verify(notificationService)
+          .notify(
+              eq(gestionnaire.getId()),
+              eq(NotificationType.PAIEMENT_EN_RETARD),
+              anyString(),
+              org.mockito.ArgumentMatchers.contains("n'a pas cotisé"),
+              eq(tontine.getId()),
+              any());
+      assertThat(aTemps.getStatut()).isEqualTo(CotisationStatut.EN_RETARD);
     }
 
     @Test
@@ -519,6 +560,33 @@ class CycleServiceImplTest {
               anyString(),
               eq(tontine.getId()),
               any());
+    }
+
+    @Test
+    @DisplayName(
+        "distribution : commissions en francs entiers, somme exacte (100 F / 3 -> 34+33+33)")
+    void distributionSommeExacte() throws Exception {
+      List<TontineMembre> membres = membresActifs(3);
+      CycleTontine c1 = cycleConnu(1, CycleStatut.EN_COURS);
+      when(cycleRepository.findByTontine_IdAndDeletedAtIsNullOrderByNumeroCycleAsc(tontine.getId()))
+          .thenReturn(List.of(c1));
+      when(cotisationRepository.findByTontine_IdAndStatutAndDeletedAtIsNull(
+              tontine.getId(), CotisationStatut.VALIDE))
+          .thenReturn(
+              membres.stream()
+                  .map(m -> cotisation(m, c1, CotisationStatut.VALIDE, "1000"))
+                  .toList());
+      when(commissionRepository.findByTontine_IdAndDeletedAtIsNull(tontine.getId()))
+          .thenReturn(List.of(commission(CommissionType.FRAIS_FIXES_PAR_CYCLE, "100")));
+
+      CycleResponse r = service.closeCycle(kc, tontine.getId(), c1.getId());
+
+      assertThat(r.getDistributionParMembre())
+          .extracting(CycleResponse.MembreDistributionInfo::getMontantCommission)
+          .usingElementComparator(BigDecimal::compareTo)
+          .containsExactly(new BigDecimal("34"), new BigDecimal("33"), new BigDecimal("33"));
+      assertThat(r.getMontantCommission()).isEqualByComparingTo("100");
+      assertThat(r.getMontantNet()).isEqualByComparingTo("2900");
     }
 
     @Test

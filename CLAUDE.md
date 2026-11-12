@@ -100,7 +100,7 @@
 | `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 ¹MEMBER voit les siennes seulement ; filtres `?cycleId=`, `?membreId=` (admin uniquement, ignoré pour MEMBER), `?statut=` (multi) et `?q=` (nom, téléphone, référence) — filtre tontine toujours appliqué |
 | `/{id}` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
 | `/` | POST | ❌ | ✅¹ | ❌ | ✅ | 🔒 le cotisant enregistre son paiement |
-| `/admin` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 saisie admin pour n'importe quel membre (y compris PRE_ENROLLED), créée directement VALIDE |
+| `/admin` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 saisie admin pour n'importe quel membre (y compris PRE_ENROLLED), créée directement VALIDE ; `datePaiement` optionnelle (≤ maintenant, ≥ début du tour) pour la ponctualité |
 | `/{id}` | PATCH | ❌ | ❌ | ✅² | ✅ | 🔒 correction (champs non-null) : EN_ATTENTE ou VALIDE + cycle EN_COURS ; refusé si cycle TERMINE ou EN_RETARD |
 | `/{id}/valider` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 EN_ATTENTE → VALIDE |
 | `/{id}/refuser` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 EN_ATTENTE → REFUSE, `motif` obligatoire ; notifie le membre (`COTISATION_REFUSEE`) ; le membre peut redéclarer sur le même cycle |
@@ -387,6 +387,14 @@ avec `CsvExport.reponse(fichier)`.
   le mapper ou `@Mapping(target = "…", ignore = true)` doit être explicite. Enrichissement après
   mapping : `@Builder(toBuilder = true)` sur le DTO et méthode `default` dans le mapper.
 - **Phone** : toujours stocké SANS le `+` (normalisé via `PhoneUtils.normalize()` en entrée)
+- **Montants** (S02) : francs CFA entiers ; tout arrondi ou partage passe par `common/util/Montants`
+  (`arrondir`, `pourcentage`, `repartir`, `repartirAuProrata` : somme des parts = total exact, le
+  franc de reste aux premiers). Jamais de `divide(…, 2, …)` sur un montant. Colonnes `scale 2`
+  conservées (valeurs entières). Les tours clôturés avant S02 ne sont pas recalculés.
+- **Ponctualité ≠ statut** (S01) : `CotisationStatut.EN_RETARD` = « non validée à la clôture du
+  tour » (sens historique, inchangé). « Payé à temps ? » = `Ponctualite.de(cotisation)`
+  (`A_TEMPS` | `EN_RETARD` | `NON_DECLAREE`) : `datePaiement` sinon `createdAt`, comparée à
+  l'échéance du tour (fin du jour `dateFin` en attendant B26) ; une cotisation REFUSE ne compte pas.
 - **JPQL** : pas de `SELECT DISTINCT` dans les repositories — PostgreSQL gère la déduplication nativement
 
 ### Pagination — pattern standard
@@ -555,8 +563,9 @@ obligatoire** : sans Docker démarré, le build échoue (les `*IT` ne sont jamai
 | V035 | `seed_ordre_beneficiaire_hybride.sql` | Seed ORDRE_BENEFICIAIRE `HYBRIDE` |
 | V036 | `seed_methode_paiement_pi_spi.sql` | Seed METHODE_PAIEMENT `PI_SPI` (PI-SPI, paiement instantané BCEAO) |
 | V037 | `create_priorites_jackpot.sql` | table `priorites_jackpot` (statut, origine, motif, cycle servi) ; 1 priorité active (EN_ATTENTE/ACCEPTEE) max par membership |
+| V038 | `add_date_paiement_to_cotisations.sql` | `cotisations.date_paiement` (paiement remis en main propre, compte pour la ponctualité) |
 
-Prochaine version disponible : **V038**
+Prochaine version disponible : **V039**
 
 ---
 
@@ -892,6 +901,13 @@ cd docker && docker compose up -d
   10.3 Priorités de jackpot : demande membre / attribution directe (V037)            ✅
   10.4 GAGNANTS_A_DESIGNER à la clôture MANUEL / HYBRIDE ; TOUR_PROCHE et estimation
        /v1/me/jackpots tenant compte des priorités                                   ✅
+
+✦ Sprint 11 – Socles du lot « réalité des tontines » (branche feature/socles-ponctualite-montants)
+  S01 Ponctualité distincte du statut : `ponctualite` dans CotisationResponse, recap par tour,
+      cotisationDue ; `datePaiement` à l'encaissement admin (V038) ; texte PAIEMENT_EN_RETARD  ✅
+  S02 Montants en francs entiers, partages exacts (Montants) : clôture, désignation,
+      distribution finale                                                            ✅
+      → fix : 1 000 F entre 3 gagnants donnait 333,33 × 3 = 999,99 F (centime perdu)
 ```
 
 ---

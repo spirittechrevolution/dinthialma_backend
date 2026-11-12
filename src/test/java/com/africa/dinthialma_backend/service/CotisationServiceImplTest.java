@@ -20,12 +20,14 @@ import com.africa.dinthialma_backend.auth.entity.User;
 import com.africa.dinthialma_backend.auth.repository.UserRepository;
 import com.africa.dinthialma_backend.auth.repository.UserRoleAssignmentRepository;
 import com.africa.dinthialma_backend.common.audit.AuditService;
+import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.common.util.FichierExport;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
+import com.africa.dinthialma_backend.contribution.codeList.Ponctualite;
 import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.CycleRecapCotisationResponse;
@@ -325,6 +327,28 @@ class CotisationServiceImplTest {
 
       verify(notificationService, never()).notify(any(), any(), any(), any(), any(), any());
       verify(whatsappService).send(eq(awa.getPhone()), contains("Inscrivez-vous"));
+    }
+
+    @Test
+    @DisplayName(
+        "paiement remis en main propre : datePaiement enregistrée et prise pour la ponctualité ;"
+            + " avant le début du tour -> 400")
+    void datePaiement() throws Exception {
+      AdminRecordCotisationRequest hier = saisie("1000", null);
+      hier.setDatePaiement(cycle.getDateFin().atTime(23, 0));
+      CotisationResponse r =
+          service.adminRecordCotisation(gestionnaire.getKeycloakId(), tontine.getId(), hier);
+      assertThat(r.getDatePaiement()).isEqualTo(cycle.getDateFin().atTime(23, 0));
+      assertThat(r.getPonctualite()).isEqualTo(Ponctualite.A_TEMPS);
+
+      AdminRecordCotisationRequest tropTot = saisie("1000", null);
+      tropTot.setDatePaiement(cycle.getDateDebut().minusDays(1).atStartOfDay());
+      assertThatThrownBy(
+              () ->
+                  service.adminRecordCotisation(
+                      gestionnaire.getKeycloakId(), tontine.getId(), tropTot))
+          .isInstanceOf(BadRequestException.class)
+          .satisfies(e -> code(e, ErrorCode.INVALID_PARAMETER));
     }
 
     @Test

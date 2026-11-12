@@ -1,5 +1,6 @@
 package com.africa.dinthialma_backend.me.dto;
 
+import com.africa.dinthialma_backend.contribution.codeList.Ponctualite;
 import com.africa.dinthialma_backend.me.codeList.StatutCotisationDue;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
@@ -186,6 +187,11 @@ public class MeSummaryResponse {
 
     @Schema(description = "UUID de ma cotisation sur ce tour – null si A_PAYER", nullable = true)
     private UUID cotisationId;
+
+    @Schema(
+        description = "Ponctualité de ma cotisation sur ce tour (NON_DECLAREE si A_PAYER)",
+        allowableValues = {"A_TEMPS", "EN_RETARD", "NON_DECLAREE"})
+    private Ponctualite ponctualite;
 
     @Schema(
         description = "A_PAYER après un refus : motif du dernier refus sur ce tour (null sinon)",

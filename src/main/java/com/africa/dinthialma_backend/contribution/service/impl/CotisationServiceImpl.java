@@ -232,6 +232,7 @@ public class CotisationServiceImpl implements CotisationService {
     }
 
     validateMontantCotisation(tontine, request.getMontant());
+    verifierDatePaiement(request.getDatePaiement(), cycle);
 
     Cotisation cotisation =
         Cotisation.builder()
@@ -242,6 +243,7 @@ public class CotisationServiceImpl implements CotisationService {
             .methodePaiement(request.getMethodePaiement())
             .referenceTransaction(request.getReferenceTransaction())
             .note(request.getNote())
+            .datePaiement(request.getDatePaiement())
             .enregistrePar(admin)
             .statut(CotisationStatut.VALIDE)
             .validePar(admin)
@@ -857,6 +859,17 @@ public class CotisationServiceImpl implements CotisationService {
    *   <li>ROTATIVE → aucune validation ici (montant libre en pratique).
    * </ul>
    */
+  /**
+   * Paiement remis en main propre : pas avant le début du tour (le futur est refusé par @Valid).
+   */
+  private static void verifierDatePaiement(LocalDateTime datePaiement, CycleTontine cycle)
+      throws CustomException {
+    if (datePaiement != null && datePaiement.isBefore(cycle.getDateDebut().atStartOfDay())) {
+      throw new BadRequestException(
+          "datePaiement ne peut pas précéder le début du tour", ErrorCode.INVALID_PARAMETER);
+    }
+  }
+
   private void validateMontantCotisation(Tontine tontine, BigDecimal montant)
       throws CustomException {
     if (tontine.getTontineType() != TontineType.EVENEMENTIELLE) return;

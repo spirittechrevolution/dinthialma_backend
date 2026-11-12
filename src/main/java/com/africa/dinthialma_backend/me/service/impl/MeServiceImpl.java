@@ -10,6 +10,7 @@ import com.africa.dinthialma_backend.common.util.CsvExport;
 import com.africa.dinthialma_backend.common.util.CsvWriter;
 import com.africa.dinthialma_backend.common.util.FichierExport;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
+import com.africa.dinthialma_backend.contribution.codeList.Ponctualite;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.contribution.mapper.CotisationMapper;
@@ -297,6 +298,7 @@ public class MeServiceImpl implements MeService {
         .dateLimite(cycle.getDateFin())
         .statut(statut)
         .cotisationId(cotisation != null ? cotisation.getId() : null)
+        .ponctualite(Ponctualite.de(cotisation))
         .motifDernierRefus(motifRefus)
         .build();
   }
