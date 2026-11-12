@@ -333,6 +333,17 @@ private boolean isSuperAdmin(User user) {
 }
 ```
 
+Pour une simple exigence de rôle (sans notion de tontine), utiliser le composant
+`common/security/AccessControl` : `exigerUnRole(keycloakId, UserRole...)` (403 sinon),
+`utilisateur(keycloakId)` (404), `estSuperAdmin(user)`.
+
+### Contrôleurs — aucun traitement
+
+Un contrôleur extrait le `keycloakId`, appelle **un** service et enveloppe sa réponse dans
+`CustomResponse`. Aucun `if`, `try`, accès repository, mapping ou contrôle de droits dans
+un contrôleur. Exports CSV : le service renvoie un `FichierExport`, le contrôleur répond
+avec `CsvExport.reponse(fichier)`.
+
 ---
 
 ## Conventions de code
@@ -350,6 +361,11 @@ private boolean isSuperAdmin(User user) {
   `data` (ex. `PIN_LOCKED` → `data.retryAfterSeconds`). On **ajoute** des valeurs à
   `ErrorCode`, on n'en renomme ni n'en supprime jamais.
 - **Services** : interface dans `service/interfaces/` + impl dans `service/impl/` ; `@Transactional` sur écriture
+- **Mapping** : MapStruct uniquement, un mapper par module dans `<module>/mapper/` (bean Spring
+  injecté dans le service). Pas de méthode statique `from()` / `toEntity()` dans les DTOs.
+  `unmappedTargetPolicy=ERROR` : tout champ de DTO non alimenté fait échouer la compilation —
+  le mapper ou `@Mapping(target = "…", ignore = true)` doit être explicite. Enrichissement après
+  mapping : `@Builder(toBuilder = true)` sur le DTO et méthode `default` dans le mapper.
 - **Phone** : toujours stocké SANS le `+` (normalisé via `PhoneUtils.normalize()` en entrée)
 - **JPQL** : pas de `SELECT DISTINCT` dans les repositories — PostgreSQL gère la déduplication nativement
 
@@ -431,6 +447,24 @@ public class ModuleController {
 ```
 
 ---
+
+## Tests
+
+| Type | Emplacement | Nommage | Commande |
+|------|-------------|---------|----------|
+| Unitaires (Mockito + AssertJ) | `src/test/java/<module>/service/…` | `*Test` | `./mvnw test` |
+| Intégration (Testcontainers : PostgreSQL 17 + Keycloak 26) | `src/test/java/…/integration/` | `*IT` | `./mvnw verify` (Docker requis) |
+
+- **Unitaires** : un fichier par service, dépendances simulées, mappers MapStruct réels
+  (`Mappers.getMapper(...)` en `@Spy`). Jeux de données : `support/Fixtures`. Les appels HTTP
+  sortants (Keycloak, WhatsApp, SMS) sont testés contre un faux serveur `HttpServer` local.
+- **Intégration** : hériter de `integration/support/AbstractIntegrationTest` (conteneurs
+  partagés, profil `test`, SMS/WhatsApp simulés) ; appels via `ApiClient`, données via
+  `TestDataFactory`. Realm Keycloak importé depuis `src/test/resources/keycloak/`.
+- **Couverture (JaCoCo)** : `./mvnw verify` échoue si un paquet `*.service`, `*.service.impl`
+  ou `*.security` passe sous **90 % d'instructions** ou **80 % de branches** (tests unitaires).
+  Rapport : `target/site/jacoco/index.html`.
+- Tout nouveau service ou nouvelle règle métier arrive avec ses tests unitaires.
 
 ## Base de données
 
@@ -793,6 +827,16 @@ cd docker && docker compose up -d
   B16/B17 invitation par code + demandes d'adhésion (V032)                      ✅
   ⏸ B19 notifications push : EN STAND-BY (non bloquant – in-app + WhatsApp couvrent le
     besoin ; à reprendre avec une lib Web Push + clés VAPID par environnement)
+
+✦ Sprint 9 – Qualité (branche feature/refactor-mapstruct-tests)  🔄 EN REVUE
+  9.1 Contrôleurs sans traitement (AccessControl, InscriptionService, FichierExport)   ✅
+  9.2 Tests d'intégration Testcontainers (37 scénarios)                                ✅
+      → fix : « mot de passe oublié » ne trouvait jamais l'utilisateur
+  9.3 MapStruct pour toutes les conversions entité ↔ DTO                               ✅
+  9.4 Tests unitaires de tous les services (238) + seuil JaCoCo 90 % / 80 %            ✅
+      → fix : unicité de l'e-mail du profil contournée par des espaces
+      → fix : ajout sans nom d'un PRE_ENROLLED au nom vide -> 500
+      → fix : SMS encodé deux fois (service non encore branché)
 ```
 
 ---
