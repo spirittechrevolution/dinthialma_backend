@@ -60,6 +60,13 @@ public class MesJackpotsResponse {
 
     @Schema(description = "Montant net reçu, en FCFA", example = "57000")
     private BigDecimal montantRecu;
+
+    @Schema(
+        description =
+            "JACKPOT (tour d'une tontine ROTATIVE) ou DISTRIBUTION_FINALE (part reçue à la clôture"
+                + " d'une tontine EVENEMENTIELLE : mise moins commission)",
+        example = "JACKPOT")
+    private String nature;
   }
 
   @Schema(description = "Estimation de mon prochain jackpot dans une tontine")

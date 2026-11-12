@@ -34,9 +34,11 @@ import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
+import com.africa.dinthialma_backend.tontine.entity.DistributionEvenementielle;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.CycleGagnantRepository;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
+import com.africa.dinthialma_backend.tontine.repository.DistributionEvenementielleRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -74,6 +76,7 @@ public class MeServiceImpl implements MeService {
   private final TontineMembreRepository membreRepository;
   private final CycleTontineRepository cycleRepository;
   private final CycleGagnantRepository gagnantRepository;
+  private final DistributionEvenementielleRepository distributionRepository;
   private final CotisationService cotisationService;
   private final ActiviteRepository activiteRepository;
 
@@ -87,7 +90,9 @@ public class MeServiceImpl implements MeService {
         membreRepository
             .findByUser_IdAndDeletedAtIsNullAndTontine_DeletedAtIsNullOrderByCreatedAtDesc(
                 caller.getId());
-    BigDecimal totalJackpots = gagnantRepository.sumMontantRecuByUserId(caller.getId());
+    BigDecimal totalJackpots =
+        zeroSiNul(gagnantRepository.sumMontantRecuByUserId(caller.getId()))
+            .add(zeroSiNul(distributionRepository.sumMontantNetByUserId(caller.getId())));
 
     if (memberships.isEmpty()) {
       return MeSummaryResponse.builder()
@@ -114,6 +119,16 @@ public class MeServiceImpl implements MeService {
     Map<UUID, Object[]> jackpotsParMembre = new HashMap<>();
     for (Object[] row : gagnantRepository.sumAndCountByMembreIds(membreIds)) {
       jackpotsParMembre.put((UUID) row[0], row);
+    }
+    // Tontines événementielles : la distribution finale compte comme « jackpot reçu »
+    for (Object[] row : distributionRepository.sumAndCountByMembreIds(membreIds)) {
+      jackpotsParMembre.merge(
+          (UUID) row[0],
+          row,
+          (a, b) ->
+              new Object[] {
+                a[0], ((BigDecimal) a[1]).add((BigDecimal) b[1]), (Long) a[2] + (Long) b[2]
+              });
     }
 
     Map<UUID, Long> toursParTontine = new HashMap<>();
@@ -257,6 +272,10 @@ public class MeServiceImpl implements MeService {
         .build();
   }
 
+  private static BigDecimal zeroSiNul(BigDecimal valeur) {
+    return valeur != null ? valeur : BigDecimal.ZERO;
+  }
+
   private static BigDecimal montant(Object[] row) {
     return row != null ? (BigDecimal) row[3] : BigDecimal.ZERO;
   }
@@ -307,9 +326,27 @@ public class MeServiceImpl implements MeService {
                       .numeroCycle(c.getNumeroCycle())
                       .dateRemise(c.getDateRemise() != null ? c.getDateRemise() : c.getDateFin())
                       .montantRecu(g.getMontantRecu())
+                      .nature("JACKPOT")
                       .build();
                 })
-            .toList();
+            .collect(Collectors.toCollection(ArrayList::new));
+    for (DistributionEvenementielle d : distributionRepository.findRecuesByUserId(caller.getId())) {
+      CycleTontine c = d.getCycle();
+      recus.add(
+          MesJackpotsResponse.JackpotRecu.builder()
+              .tontineId(d.getTontine().getId())
+              .tontineNom(d.getTontine().getNom())
+              .cycleId(c.getId())
+              .numeroCycle(c.getNumeroCycle())
+              .dateRemise(c.getDateRemise() != null ? c.getDateRemise() : c.getDateFin())
+              .montantRecu(d.getMontantNet())
+              .nature("DISTRIBUTION_FINALE")
+              .build());
+    }
+    recus.sort(
+        Comparator.comparing(
+            MesJackpotsResponse.JackpotRecu::getDateRemise,
+            Comparator.nullsLast(Comparator.reverseOrder())));
     BigDecimal totalRecu =
         recus.stream()
             .map(MesJackpotsResponse.JackpotRecu::getMontantRecu)

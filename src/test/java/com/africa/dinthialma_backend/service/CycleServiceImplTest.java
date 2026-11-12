@@ -43,11 +43,13 @@ import com.africa.dinthialma_backend.tontine.dto.OpenCycleRequest;
 import com.africa.dinthialma_backend.tontine.dto.SelectionnerBeneficiaireRequest;
 import com.africa.dinthialma_backend.tontine.entity.CycleGagnant;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
+import com.africa.dinthialma_backend.tontine.entity.DistributionEvenementielle;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.entity.TontineCommission;
 import com.africa.dinthialma_backend.tontine.mapper.CycleMapper;
 import com.africa.dinthialma_backend.tontine.repository.CycleGagnantRepository;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
+import com.africa.dinthialma_backend.tontine.repository.DistributionEvenementielleRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineCommissionRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import com.africa.dinthialma_backend.tontine.service.impl.CycleServiceImpl;
@@ -64,6 +66,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mapstruct.factory.Mappers;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -88,6 +91,7 @@ class CycleServiceImplTest {
   @Mock private SchedulerService schedulerService;
   @Mock private WhatsappService whatsappService;
   @Mock private NotificationService notificationService;
+  @Mock private DistributionEvenementielleRepository distributionRepository;
   @InjectMocks private CycleServiceImpl service;
 
   private User gestionnaire;
@@ -489,6 +493,20 @@ class CycleServiceImplTest {
       assertThat(awa.getMontantCommission()).isEqualByComparingTo("275");
       assertThat(awa.getMontantNet()).isEqualByComparingTo("1725");
       assertThat(r.getMontantJackpot()).isEqualByComparingTo("3000");
+
+      // V034 : une ligne par membre distribué, montants identiques à la réponse
+      ArgumentCaptor<List<DistributionEvenementielle>> lignes = ArgumentCaptor.forClass(List.class);
+      verify(distributionRepository).saveAll(lignes.capture());
+      assertThat(lignes.getValue()).hasSize(2);
+      DistributionEvenementielle ligneAwa =
+          lignes.getValue().stream()
+              .filter(l -> l.getMontantCotise().compareTo(new BigDecimal("2000")) == 0)
+              .findFirst()
+              .orElseThrow();
+      assertThat(ligneAwa.getMontantCommission()).isEqualByComparingTo("275");
+      assertThat(ligneAwa.getMontantNet()).isEqualByComparingTo("1725");
+      assertThat(ligneAwa.getTontine()).isSameAs(tontine);
+      assertThat(ligneAwa.getCycle()).isSameAs(c2);
       verify(whatsappService, times(2))
           .sendDistributionFinale(any(), eq(tontine.getNom()), any(), any());
       verify(notificationService, times(3))
@@ -499,6 +517,24 @@ class CycleServiceImplTest {
               anyString(),
               eq(tontine.getId()),
               any());
+    }
+
+    @Test
+    @DisplayName("distribution déjà enregistrée pour la tontine : aucune seconde écriture")
+    void distributionDejaEnregistree() throws Exception {
+      List<TontineMembre> membres = membresActifs(1);
+      CycleTontine c = cycleConnu(1, CycleStatut.EN_COURS);
+      when(cycleRepository.findByTontine_IdAndDeletedAtIsNullOrderByNumeroCycleAsc(tontine.getId()))
+          .thenReturn(List.of(c));
+      when(cotisationRepository.findByTontine_IdAndStatutAndDeletedAtIsNull(
+              tontine.getId(), CotisationStatut.VALIDE))
+          .thenReturn(List.of(cotisation(membres.get(0), c, CotisationStatut.VALIDE, "500")));
+      when(distributionRepository.existsByTontine_IdAndDeletedAtIsNull(tontine.getId()))
+          .thenReturn(true);
+
+      assertThat(service.closeCycle(kc, tontine.getId(), c.getId()).getDistributionParMembre())
+          .hasSize(1);
+      verify(distributionRepository, never()).saveAll(any());
     }
 
     @Test
@@ -516,6 +552,7 @@ class CycleServiceImplTest {
       CycleResponse r = service.closeCycle(kc, tontine.getId(), c.getId());
 
       assertThat(r.getDistributionParMembre()).isEmpty();
+      verify(distributionRepository, never()).saveAll(any());
       verify(notificationService)
           .notify(
               eq(gestionnaire.getId()),

@@ -26,6 +26,9 @@ public interface ActiviteMapper {
 
   /** Libellé prêt à afficher : « Cotisation Famille · tour 5 » / « Jackpot Famille · tour 5 ». */
   default String libelle(ActiviteRow row) {
+    if ("DISTRIBUTION_RECUE".equals(row.getType())) {
+      return "Distribution finale " + row.getTontineNom();
+    }
     String prefixe = "JACKPOT_RECU".equals(row.getType()) ? "Jackpot " : "Cotisation ";
     return prefixe + row.getTontineNom() + " · tour " + row.getNumeroCycle();
   }

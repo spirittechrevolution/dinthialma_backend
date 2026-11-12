@@ -27,7 +27,10 @@ public class MeSummaryResponse {
   @Schema(description = "Total de mes cotisations EN_ATTENTE de validation, en FCFA")
   private BigDecimal totalEnAttente;
 
-  @Schema(description = "Total des jackpots que j'ai reçus, toutes tontines, en FCFA")
+  @Schema(
+      description =
+          "Total que j'ai reçu, toutes tontines, en FCFA : jackpots (ROTATIVE) + distributions"
+              + " finales (EVENEMENTIELLE)")
   private BigDecimal totalJackpotsRecus;
 
   @Schema(description = "Nombre de cotisations du tour en cours restant A_PAYER", example = "2")
@@ -102,12 +105,16 @@ public class MeSummaryResponse {
 
     @Schema(
         description =
-            "Total des jackpots reçus dans cette tontine (FCFA). 0 si aucun ; toujours 0 pour une"
-                + " tontine EVENEMENTIELLE (pas de jackpot : chaque membre récupère sa mise).",
+            "Total reçu dans cette tontine (FCFA) : jackpots (ROTATIVE) ou part de la"
+                + " distribution finale (EVENEMENTIELLE, mise moins commission). 0 si rien.",
         example = "50000")
     private BigDecimal totalJackpotsRecus;
 
-    @Schema(description = "Nombre de jackpots reçus dans cette tontine. 0 si aucun.", example = "1")
+    @Schema(
+        description =
+            "Nombre de jackpots reçus (ROTATIVE) ou 1 si la distribution finale est faite"
+                + " (EVENEMENTIELLE). 0 si rien.",
+        example = "1")
     private long nombreJackpotsRecus;
 
     @Schema(description = "Nombre de tours où ma cotisation est VALIDÉE", example = "4")

@@ -146,11 +146,11 @@
 
 | Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
 |----------|---------|------|--------|-------|-------------|-------|
-| `/summary` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 résumé « Je cotise » : par tontine où je cotise (membership, totaux, tours, tour EN_COURS, `cotisationDue` A_PAYER/EN_ATTENTE/VALIDE, gestionnaire) + totaux et jackpots reçus ; par tontine `totalJackpotsRecus` / `nombreJackpotsRecus` (0 si aucun, toujours 0 en EVENEMENTIELLE) ; liste non paginée |
+| `/summary` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 résumé « Je cotise » : par tontine où je cotise (membership, totaux, tours, tour EN_COURS, `cotisationDue` A_PAYER/EN_ATTENTE/VALIDE, gestionnaire) + totaux et jackpots reçus ; par tontine `totalJackpotsRecus` / `nombreJackpotsRecus` (0 si rien ; en EVENEMENTIELLE = part de la distribution finale) ; liste non paginée |
 | `/gestion/cotisations` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 paiements de **toutes les tontines que j'ai créées** (file « À valider »), filtres `?statut=` (multi), `?tontineId=`, `?q=` ; pageable |
 | `/gestion/cotisations/valider` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 validation groupée `{cotisationIds}` (1–100) ; chaque cotisation dans sa propre transaction, résultat par id avec `code` d'échec ; toujours 200 |
-| `/jackpots` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 jackpots reçus + `aVenir` (ROTATION : rang, tour et date estimés ; TIRAGE / CHOIX : sans estimation) |
-| `/activite` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 fil cotisations + jackpots (UNION native, tri date DESC imposé), `?mode=COTISE\|GERE`, `?tontineId=`, `?type=` (répétable : `?type=A&type=B`), `?statut=` |
+| `/jackpots` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 reçus (`nature` JACKPOT \| DISTRIBUTION_FINALE, tri date DESC) + `aVenir` (ROTATION : rang, tour et date estimés ; TIRAGE / CHOIX : sans estimation) |
+| `/activite` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 fil cotisations + jackpots + distributions finales `DISTRIBUTION_RECUE` (UNION native, tri date DESC imposé), `?mode=COTISE\|GERE`, `?tontineId=`, `?type=` (répétable : `?type=A&type=B`), `?statut=` |
 | `/qr` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 mon QR : jeton opaque stable `m_…` + url (pas de téléphone) |
 | `/qr/regenerer` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 nouveau jeton, l'ancien → 404 |
 | `/activite/export` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 export CSV du fil (mêmes filtres), `;` + BOM UTF-8, 10 000 lignes max |
@@ -531,8 +531,9 @@ obligatoire** : sans Docker démarré, le build échoue (les `*IT` ne sont jamai
 | V031 | `add_preferences_to_users.sql` | `users.preferences` JSONB |
 | V032 | `create_invitations_et_demandes_adhesion.sql` | `tontines.code_invitation` (unique) + table `demandes_adhesion` (1 EN_ATTENTE max par personne/tontine) |
 | V033 | `add_demande_id_to_user_notifications.sql` | `user_notifications.demande_id` (lien vers la demande d'adhésion, sans FK) |
+| V034 | `create_distributions_evenementielles.sql` | table `distributions_evenementielles` : part de chaque membre à la clôture finale EVENEMENTIELLE (1 active par tontine/membre) |
 
-Prochaine version disponible : **V034**
+Prochaine version disponible : **V035**
 
 ---
 
@@ -907,6 +908,9 @@ Calcul `computeFinalDistribution()` :
 3. Commission `FRAIS_FIXES_PAR_CYCLE` : répartie proportionnellement au montant cotisé
 4. Commission `FRAIS_ADHESION` : ignorée (ne touche pas le jackpot)
 5. `montantNet` du dernier cycle = cagnotte totale - commission totale (mise à jour)
+6. Part de chaque membre **enregistrée** dans `distributions_evenementielles` (V034, une seule fois par
+   tontine) : reprise dans `/v1/me/summary`, `/v1/me/jackpots` (`DISTRIBUTION_FINALE`) et `/v1/me/activite`
+   (`DISTRIBUTION_RECUE`). Les tontines clôturées avant V034 n'ont pas d'historique enregistré.
 
 Réponse : `CycleResponse.distributionParMembre` (liste `MembreDistributionInfo` : montantCotise, montantCommission, montantNet).
 

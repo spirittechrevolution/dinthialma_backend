@@ -45,9 +45,11 @@ import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.entity.CycleGagnant;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
+import com.africa.dinthialma_backend.tontine.entity.DistributionEvenementielle;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.CycleGagnantRepository;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
+import com.africa.dinthialma_backend.tontine.repository.DistributionEvenementielleRepository;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -87,6 +89,7 @@ class MeServiceImplTest {
   @Mock private CycleGagnantRepository gagnantRepository;
   @Mock private CotisationService cotisationService;
   @Mock private ActiviteRepository activiteRepository;
+  @Mock private DistributionEvenementielleRepository distributionRepository;
   @InjectMocks private MeServiceImpl service;
 
   private User moi;
@@ -239,6 +242,97 @@ class MeServiceImplTest {
     }
   }
 
+  @Nested
+  @DisplayName("distribution finale événementielle (V034)")
+  class DistributionFinale {
+
+    @Test
+    @DisplayName("résumé : distribution comptée comme reçu de la tontine et dans le total global")
+    void resume() throws Exception {
+      Tontine evt = Fixtures.tontine(gestionnaire);
+      evt.setTontineType(TontineType.EVENEMENTIELLE);
+      Tontine rotative = Fixtures.tontine(gestionnaire);
+      TontineMembre mEvt = Fixtures.membre(evt, moi, 1);
+      TontineMembre mRot = Fixtures.membre(rotative, moi, 1);
+      mesAdhesions(mEvt, mRot);
+      when(gagnantRepository.sumMontantRecuByUserId(moi.getId()))
+          .thenReturn(new BigDecimal("4000"));
+      when(distributionRepository.sumMontantNetByUserId(moi.getId()))
+          .thenReturn(new BigDecimal("1725"));
+      when(gagnantRepository.sumAndCountByMembreIds(anyList()))
+          .thenReturn(List.<Object[]>of(new Object[] {mRot.getId(), new BigDecimal("4000"), 1L}));
+      when(distributionRepository.sumAndCountByMembreIds(anyList()))
+          .thenReturn(List.<Object[]>of(new Object[] {mEvt.getId(), new BigDecimal("1725"), 1L}));
+
+      MeSummaryResponse r = service.getSummary(kc);
+
+      assertThat(r.getTotalJackpotsRecus()).isEqualByComparingTo("5725");
+      assertThat(r.getTontines().get(0).getTotalJackpotsRecus()).isEqualByComparingTo("1725");
+      assertThat(r.getTontines().get(0).getNombreJackpotsRecus()).isEqualTo(1);
+      assertThat(r.getTontines().get(1).getTotalJackpotsRecus()).isEqualByComparingTo("4000");
+    }
+
+    @Test
+    @DisplayName(
+        "résumé : jackpot et distribution sur la même adhésion additionnés ; sommes nulles -> 0")
+    void fusionEtNuls() throws Exception {
+      TontineMembre m = Fixtures.membre(Fixtures.tontine(gestionnaire), moi, 1);
+      mesAdhesions(m);
+      when(gagnantRepository.sumAndCountByMembreIds(anyList()))
+          .thenReturn(List.<Object[]>of(new Object[] {m.getId(), new BigDecimal("100"), 1L}));
+      when(distributionRepository.sumAndCountByMembreIds(anyList()))
+          .thenReturn(List.<Object[]>of(new Object[] {m.getId(), new BigDecimal("50"), 1L}));
+
+      MeSummaryResponse r = service.getSummary(kc);
+
+      assertThat(r.getTotalJackpotsRecus()).isEqualByComparingTo("0");
+      assertThat(r.getTontines().get(0).getTotalJackpotsRecus()).isEqualByComparingTo("150");
+      assertThat(r.getTontines().get(0).getNombreJackpotsRecus()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName(
+        "mes jackpots : distribution listée (nature DISTRIBUTION_FINALE), total et tri par date")
+    void mesJackpots() throws Exception {
+      Tontine rotative = Fixtures.tontine(gestionnaire);
+      CycleTontine tour = Fixtures.cycle(rotative, 1, CycleStatut.TERMINE);
+      tour.setDateRemise(LocalDate.of(2026, 1, 15));
+      Tontine evt = Fixtures.tontine(gestionnaire);
+      evt.setTontineType(TontineType.EVENEMENTIELLE);
+      CycleTontine dernier = Fixtures.cycle(evt, 4, CycleStatut.TERMINE);
+      dernier.setDateRemise(LocalDate.of(2026, 6, 30));
+      when(gagnantRepository.findRecusByUserId(moi.getId()))
+          .thenReturn(
+              List.of(
+                  CycleGagnant.builder()
+                      .cycle(tour)
+                      .membre(Fixtures.membre(rotative, moi, 1))
+                      .montantRecu(new BigDecimal("4000"))
+                      .build()));
+      when(distributionRepository.findRecuesByUserId(moi.getId()))
+          .thenReturn(
+              List.of(
+                  DistributionEvenementielle.builder()
+                      .tontine(evt)
+                      .cycle(dernier)
+                      .membre(Fixtures.membre(evt, moi, 1))
+                      .montantCotise(new BigDecimal("2000"))
+                      .montantCommission(new BigDecimal("275"))
+                      .montantNet(new BigDecimal("1725"))
+                      .build()));
+      mesAdhesions();
+
+      MesJackpotsResponse r = service.getJackpots(kc);
+
+      assertThat(r.getTotalRecu()).isEqualByComparingTo("5725");
+      assertThat(r.getRecus())
+          .extracting(MesJackpotsResponse.JackpotRecu::getNature)
+          .containsExactly("DISTRIBUTION_FINALE", "JACKPOT");
+      assertThat(r.getRecus().get(0).getMontantRecu()).isEqualByComparingTo("1725");
+      assertThat(r.getRecus().get(0).getNumeroCycle()).isEqualTo(4);
+    }
+  }
+
   @Test
   @DisplayName("file « À valider » : page des cotisations des tontines que je gère")
   @SuppressWarnings("unchecked")
@@ -293,7 +387,7 @@ class MeServiceImplTest {
       assertThat(r.getTotalRecu()).isEqualByComparingTo("4000");
       assertThat(r.getRecus())
           .extracting(MesJackpotsResponse.JackpotRecu::getDateRemise)
-          .containsExactly(LocalDate.of(2026, 2, 1), c2.getDateFin());
+          .containsExactly(c2.getDateFin(), LocalDate.of(2026, 2, 1)); // plus récent d'abord
       assertThat(r.getAVenir()).isEmpty();
     }
 

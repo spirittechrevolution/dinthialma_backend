@@ -33,11 +33,13 @@ import com.africa.dinthialma_backend.tontine.dto.OpenCycleRequest;
 import com.africa.dinthialma_backend.tontine.dto.SelectionnerBeneficiaireRequest;
 import com.africa.dinthialma_backend.tontine.entity.CycleGagnant;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
+import com.africa.dinthialma_backend.tontine.entity.DistributionEvenementielle;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.entity.TontineCommission;
 import com.africa.dinthialma_backend.tontine.mapper.CycleMapper;
 import com.africa.dinthialma_backend.tontine.repository.CycleGagnantRepository;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
+import com.africa.dinthialma_backend.tontine.repository.DistributionEvenementielleRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineCommissionRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import com.africa.dinthialma_backend.tontine.service.interfaces.CycleService;
@@ -80,6 +82,7 @@ public class CycleServiceImpl implements CycleService {
   private final SchedulerService schedulerService;
   private final WhatsappService whatsappService;
   private final NotificationService notificationService;
+  private final DistributionEvenementielleRepository distributionRepository;
 
   // ─── Lecture ─────────────────────────────────────────────────────────────
 
@@ -417,6 +420,7 @@ public class CycleServiceImpl implements CycleService {
         cycleRepository.save(cycle);
       }
 
+      enregistrerDistribution(tontine, cycle, distribution);
       notifyFinalDistribution(tontine, distribution);
 
       // Notifications in-app distribution finale
@@ -550,6 +554,28 @@ public class CycleServiceImpl implements CycleService {
     }
 
     return result;
+  }
+
+  /** Conserve la part de chaque membre (V034) ; une seule distribution par tontine. */
+  private void enregistrerDistribution(
+      Tontine tontine, CycleTontine cycle, List<MembreDistributionInfo> distribution) {
+    if (distribution.isEmpty()
+        || distributionRepository.existsByTontine_IdAndDeletedAtIsNull(tontine.getId())) {
+      return;
+    }
+    distributionRepository.saveAll(
+        distribution.stream()
+            .map(
+                d ->
+                    DistributionEvenementielle.builder()
+                        .tontine(tontine)
+                        .cycle(cycle)
+                        .membre(membreRepository.getReferenceById(d.getMembreId()))
+                        .montantCotise(d.getMontantCotise())
+                        .montantCommission(d.getMontantCommission())
+                        .montantNet(d.getMontantNet())
+                        .build())
+            .toList());
   }
 
   private void notifyFinalDistribution(Tontine tontine, List<MembreDistributionInfo> distribution) {

@@ -227,6 +227,23 @@ class DomaineEtAdministrationIT extends AbstractIntegrationTest {
     assertThat(distribution).hasSize(1);
     assertThat(distribution.get(0).path("montantCotise").asDouble()).isEqualTo(1000);
     assertThat(distribution.get(0).path("montantNet").asDouble()).isEqualTo(1000);
+
+    // V034 : la distribution est conservée dans l'historique du membre
+    JsonNode ligne = api.get("/v1/me/summary", m.jeton()).data();
+    assertThat(ligne.path("totalJackpotsRecus").asDouble()).isEqualTo(1000);
+    assertThat(ligne.path("tontines").get(0).path("totalJackpotsRecus").asDouble()).isEqualTo(1000);
+    assertThat(ligne.path("tontines").get(0).path("nombreJackpotsRecus").asLong()).isEqualTo(1);
+    JsonNode recu = api.get("/v1/me/jackpots", m.jeton()).data().path("recus").get(0);
+    assertThat(recu.path("nature").asText()).isEqualTo("DISTRIBUTION_FINALE");
+    assertThat(recu.path("montantRecu").asDouble()).isEqualTo(1000);
+    assertThat(recu.path("cycleId").asText()).isEqualTo(c2);
+    JsonNode activite =
+        api.get("/v1/me/activite?type=DISTRIBUTION_RECUE", m.jeton()).data().path("content");
+    assertThat(activite).hasSize(1);
+    assertThat(activite.get(0).path("montant").asDouble()).isEqualTo(1000);
+    assertThat(activite.get(0).path("sens").asText()).isEqualTo("GAIN");
+    assertThat(activite.get(0).path("libelle").asText())
+        .isEqualTo("Distribution finale Tabaski test");
   }
 
   @Test
