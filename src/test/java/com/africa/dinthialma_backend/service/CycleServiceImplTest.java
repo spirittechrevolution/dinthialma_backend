@@ -25,6 +25,7 @@ import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
+import com.africa.dinthialma_backend.jackpot.service.interfaces.PrioriteJackpotService;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
@@ -92,6 +93,7 @@ class CycleServiceImplTest {
   @Mock private WhatsappService whatsappService;
   @Mock private NotificationService notificationService;
   @Mock private DistributionEvenementielleRepository distributionRepository;
+  @Mock private PrioriteJackpotService prioriteService;
   @InjectMocks private CycleServiceImpl service;
 
   private User gestionnaire;
@@ -791,6 +793,112 @@ class CycleServiceImplTest {
       supprime.setDeletedAt(LocalDateTime.now());
       cycle.setGagnants(new ArrayList<>(List.of(actif, supprime)));
       assertThat(service.getCycle(kc, tontine.getId(), cycle.getId()).getGagnants()).hasSize(1);
+    }
+  }
+
+  @Nested
+  @DisplayName("priorités de jackpot : un membre dans le besoin passe en premier")
+  class Priorites {
+
+    @Test
+    @DisplayName("ROTATION : le prioritaire gagne avant l'ordre de passage ; priorité servie")
+    void rotation() throws Exception {
+      List<TontineMembre> membres = membresActifs(3);
+      when(prioriteService.prioritairesEligibles(tontine.getId()))
+          .thenReturn(List.of(membres.get(2)));
+      CycleTontine c = cycleConnu(1, CycleStatut.EN_COURS);
+
+      CycleResponse r = service.closeCycle(kc, tontine.getId(), c.getId());
+
+      assertThat(r.getGagnants())
+          .extracting(CycleResponse.GagnantInfo::getMembreId)
+          .containsExactly(membres.get(2).getId());
+      verify(prioriteService).marquerServies(c, List.of(membres.get(2)));
+    }
+
+    @Test
+    @DisplayName("ALEATOIRE, 2 gagnants : le prioritaire + un tiré au sort parmi les autres")
+    void aleatoire() throws Exception {
+      List<TontineMembre> membres = membresActifs(4);
+      tontine.setOrdreBeneficiaire("ALEATOIRE");
+      tontine.setNombreGagnants(2);
+      when(prioriteService.prioritairesEligibles(tontine.getId()))
+          .thenReturn(List.of(membres.get(3)));
+      CycleTontine c = cycleConnu(1, CycleStatut.EN_COURS);
+
+      CycleResponse r = service.closeCycle(kc, tontine.getId(), c.getId());
+
+      assertThat(r.getGagnants()).hasSize(2);
+      assertThat(r.getGagnants().get(0).getMembreId()).isEqualTo(membres.get(3).getId());
+      assertThat(r.getGagnants().get(1).getMembreId()).isNotEqualTo(membres.get(3).getId());
+    }
+
+    @Test
+    @DisplayName("HYBRIDE : clôture -> GAGNANTS_A_DESIGNER au gestionnaire ; tirage -> prioritaire")
+    void hybride() throws Exception {
+      List<TontineMembre> membres = membresActifs(3);
+      tontine.setOrdreBeneficiaire("HYBRIDE");
+      CycleTontine c = cycleConnu(1, CycleStatut.EN_COURS);
+
+      assertThat(service.closeCycle(kc, tontine.getId(), c.getId()).getGagnants()).isEmpty();
+      verify(notificationService)
+          .notify(
+              eq(gestionnaire.getId()),
+              eq(NotificationType.GAGNANTS_A_DESIGNER),
+              anyString(),
+              anyString(),
+              eq(tontine.getId()),
+              any());
+      verify(prioriteService, never()).prioritairesEligibles(any());
+
+      c.setMontantNet(new BigDecimal("3000"));
+      when(prioriteService.prioritairesEligibles(tontine.getId()))
+          .thenReturn(List.of(membres.get(1)));
+      CycleResponse r =
+          service.selectionnerBeneficiaire(
+              kc, tontine.getId(), c.getId(), new SelectionnerBeneficiaireRequest());
+      assertThat(r.getGagnants())
+          .extracting(CycleResponse.GagnantInfo::getMembreId)
+          .containsExactly(membres.get(1).getId());
+      verify(prioriteService).marquerServies(c, List.of(membres.get(1)));
+    }
+
+    @Test
+    @DisplayName("HYBRIDE sans éligible : pas de notification GAGNANTS_A_DESIGNER")
+    void hybrideSansEligible() throws Exception {
+      membresActifs(2).forEach(m -> m.setARecuJackpot(true));
+      tontine.setOrdreBeneficiaire("HYBRIDE");
+      CycleTontine c = cycleConnu(1, CycleStatut.EN_COURS);
+
+      service.closeCycle(kc, tontine.getId(), c.getId());
+
+      verify(notificationService, never())
+          .notify(
+              any(),
+              eq(NotificationType.GAGNANTS_A_DESIGNER),
+              anyString(),
+              anyString(),
+              any(),
+              any());
+    }
+
+    @Test
+    @DisplayName("choix explicite du gestionnaire : priorités des membres choisis servies")
+    void choixExplicite() throws Exception {
+      List<TontineMembre> membres = membresActifs(2);
+      tontine.setOrdreBeneficiaire("MANUEL");
+      when(membreRepository.findByIdAndTontine_IdAndDeletedAtIsNull(
+              membres.get(0).getId(), tontine.getId()))
+          .thenReturn(Optional.of(membres.get(0)));
+      CycleTontine c = cycleConnu(1, CycleStatut.TERMINE);
+      c.setMontantNet(new BigDecimal("2000"));
+      SelectionnerBeneficiaireRequest choix = new SelectionnerBeneficiaireRequest();
+      choix.setMembreIds(List.of(membres.get(0).getId()));
+
+      service.selectionnerBeneficiaire(kc, tontine.getId(), c.getId(), choix);
+
+      verify(prioriteService).marquerServies(c, List.of(membres.get(0)));
+      verify(prioriteService, never()).prioritairesEligibles(any());
     }
   }
 }

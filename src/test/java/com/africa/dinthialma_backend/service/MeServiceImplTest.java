@@ -25,6 +25,7 @@ import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.contribution.mapper.CotisationMapper;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
 import com.africa.dinthialma_backend.contribution.service.interfaces.CotisationService;
+import com.africa.dinthialma_backend.jackpot.service.interfaces.PrioriteJackpotService;
 import com.africa.dinthialma_backend.me.codeList.ModeActivite;
 import com.africa.dinthialma_backend.me.codeList.StatutCotisationDue;
 import com.africa.dinthialma_backend.me.codeList.TypeActivite;
@@ -90,6 +91,7 @@ class MeServiceImplTest {
   @Mock private CotisationService cotisationService;
   @Mock private ActiviteRepository activiteRepository;
   @Mock private DistributionEvenementielleRepository distributionRepository;
+  @Mock private PrioriteJackpotService prioriteService;
   @InjectMocks private MeServiceImpl service;
 
   private User moi;
@@ -426,6 +428,30 @@ class MeServiceImplTest {
       assertThat(a.getNumeroCycleEstime()).isEqualTo(4);
       assertThat(a.getDateEstimee()).isEqualTo(cycles.get(3).getDateFin());
       assertThat(a.getMontantEstime()).isEqualByComparingTo("4000");
+    }
+
+    @Test
+    @DisplayName("ROTATION avec priorité accordée : le prioritaire passe devant, mon rang recule")
+    void rotationAvecPriorite() throws Exception {
+      Tontine t = Fixtures.tontine(gestionnaire);
+      TontineMembre mien = Fixtures.membre(t, moi, 1);
+      TontineMembre prioritaire = Fixtures.membre(t, Fixtures.user("Besoin"), 3);
+      mesAdhesions(mien);
+      when(gagnantRepository.findRecusByUserId(moi.getId())).thenReturn(List.of());
+      when(membreRepository.findByTontine_IdAndStatutAndDeletedAtIsNull(
+              t.getId(), MembreStatut.ACTIF))
+          .thenReturn(List.of(mien, prioritaire));
+      when(prioriteService.prioritairesEligibles(t.getId())).thenReturn(List.of(prioritaire));
+      when(cycleRepository.findByTontine_IdAndDeletedAtIsNullOrderByNumeroCycleAsc(t.getId()))
+          .thenReturn(
+              List.of(
+                  Fixtures.cycle(t, 1, CycleStatut.EN_COURS),
+                  Fixtures.cycle(t, 2, CycleStatut.EN_ATTENTE)));
+
+      MesJackpotsResponse.JackpotAVenir a = service.getJackpots(kc).getAVenir().get(0);
+
+      assertThat(a.getPosition()).isEqualTo(2);
+      assertThat(a.getNumeroCycleEstime()).isEqualTo(2);
     }
 
     @Test

@@ -2,6 +2,7 @@ package com.africa.dinthialma_backend.notification.service;
 
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
+import com.africa.dinthialma_backend.jackpot.service.interfaces.PrioriteJackpotService;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
@@ -46,6 +47,7 @@ public class SchedulerService {
   private final CycleGagnantRepository cycleGagnantRepository;
   private final TontineMembreRepository membreRepository;
   private final NotificationService notificationService;
+  private final PrioriteJackpotService prioriteService;
 
   // ─── Rappel quotidien ─────────────────────────────────────────────────────
 
@@ -232,30 +234,51 @@ public class SchedulerService {
                   NotificationLiens.cycle(cycle.getId(), null));
             });
 
-    // Prochain jackpot ROTATION dans 3 jours → notification in-app futur bénéficiaire
+    // Jackpot dans 3 jours (désignation automatique) → notification in-app au futur bénéficiaire
     cycleRepository
         .findByStatutAndDateFinAndDeletedAtIsNull(CycleStatut.EN_COURS, dans3Jours)
         .stream()
-        .filter(
-            cycle ->
-                cycle.getTontine().getTontineType() == TontineType.ROTATIVE
-                    && "ROTATION".equals(cycle.getTontine().getOrdreBeneficiaire()))
-        .forEach(
-            cycle -> {
-              Tontine tontine = cycle.getTontine();
-              membreRepository
-                  .findByTontine_IdAndOrdreJackpotAndStatutAndDeletedAtIsNull(
-                      tontine.getId(), cycle.getNumeroCycle(), MembreStatut.ACTIF)
-                  .ifPresent(
-                      membre ->
-                          notificationService.notify(
-                              membre.getUser().getId(),
-                              NotificationType.TOUR_PROCHE,
-                              "Votre tour arrive dans 3 jours",
-                              "Vous recevrez le jackpot de " + tontine.getNom(),
-                              tontine.getId(),
-                              NotificationLiens.cycle(cycle.getId(), membre.getId())));
-            });
+        .filter(cycle -> designationAutomatique(cycle.getTontine()))
+        .forEach(this::notifierTourProche);
+  }
+
+  private static boolean designationAutomatique(Tontine tontine) {
+    return tontine.getTontineType() == TontineType.ROTATIVE
+        && ("ROTATION".equals(tontine.getOrdreBeneficiaire())
+            || "ALEATOIRE".equals(tontine.getOrdreBeneficiaire()));
+  }
+
+  /**
+   * Priorités accordées : leurs bénéficiaires passent en premier à la clôture. Sinon, en ROTATION,
+   * le membre dont l'ordre de passage correspond au tour.
+   */
+  private void notifierTourProche(CycleTontine cycle) {
+    Tontine tontine = cycle.getTontine();
+    List<TontineMembre> prioritaires =
+        prioriteService.prioritairesEligibles(tontine.getId()).stream()
+            .limit(Math.max(1, tontine.getNombreGagnants()))
+            .toList();
+    if (!prioritaires.isEmpty()) {
+      prioritaires.forEach(m -> notifierTourProche(cycle, m));
+      return;
+    }
+    if ("ROTATION".equals(tontine.getOrdreBeneficiaire())) {
+      membreRepository
+          .findByTontine_IdAndOrdreJackpotAndStatutAndDeletedAtIsNull(
+              tontine.getId(), cycle.getNumeroCycle(), MembreStatut.ACTIF)
+          .ifPresent(m -> notifierTourProche(cycle, m));
+    }
+  }
+
+  private void notifierTourProche(CycleTontine cycle, TontineMembre membre) {
+    Tontine tontine = cycle.getTontine();
+    notificationService.notify(
+        membre.getUser().getId(),
+        NotificationType.TOUR_PROCHE,
+        "Votre tour arrive dans 3 jours",
+        "Vous recevrez le jackpot de " + tontine.getNom(),
+        tontine.getId(),
+        NotificationLiens.cycle(cycle.getId(), membre.getId()));
   }
 
   // ─── Annonce gagnants ────────────────────────────────────────────────────

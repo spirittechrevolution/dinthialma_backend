@@ -6,6 +6,7 @@ import com.africa.dinthialma_backend.common.response.CustomResponse;
 import com.africa.dinthialma_backend.common.util.RequestHeaderParser;
 import com.africa.dinthialma_backend.tontine.codeList.RoleFiltreTontine;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
+import com.africa.dinthialma_backend.tontine.dto.ChangerOrdreBeneficiaireRequest;
 import com.africa.dinthialma_backend.tontine.dto.CreateTontineRequest;
 import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.dto.UpdateTontineRequest;
@@ -30,6 +31,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -331,5 +333,26 @@ public class TontineController {
 
     return ResponseEntity.ok(
         new CustomResponse(SUCCESS, OK, ResponseMessageConstants.TONTINE_SUSPENDED, response));
+  }
+
+  @PatchMapping("/{id}/ordre-beneficiaire")
+  @Operation(
+      summary = "Changer l'ordre des bénéficiaires (y compris en cours de tontine)",
+      description =
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN. Tontine ROTATIVE BROUILLON, ACTIVE ou"
+              + " SUSPENDUE. Effet à la prochaine clôture de tour ; les gagnants déjà désignés ne"
+              + " changent pas. Vers ROTATION ou ALEATOIRE : refusé (409 `DESIGNATION_EN_ATTENTE`)"
+              + " tant qu'un tour clôturé attend ses gagnants. Membres actifs notifiés"
+              + " (`ORDRE_BENEFICIAIRE_MODIFIE`).")
+  public ResponseEntity<CustomResponse> changerOrdreBeneficiaire(
+      @PathVariable UUID id,
+      @RequestBody @Valid ChangerOrdreBeneficiaireRequest request,
+      HttpServletRequest httpRequest)
+      throws CustomException {
+    String keycloakId = headerParser.extractKeycloakId(httpRequest);
+    TontineResponse response = tontineService.changerOrdreBeneficiaire(keycloakId, id, request);
+    return ResponseEntity.ok(
+        new CustomResponse(
+            SUCCESS, OK, ResponseMessageConstants.ORDRE_BENEFICIAIRE_UPDATED, response));
   }
 }

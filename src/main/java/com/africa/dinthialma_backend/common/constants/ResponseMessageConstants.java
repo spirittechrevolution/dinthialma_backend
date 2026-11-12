@@ -138,6 +138,18 @@ public final class ResponseMessageConstants {
   public static final String DEMANDE_ACCEPTED = "Demande acceptée : le membre a été ajouté";
   public static final String DEMANDE_REFUSED = "Demande refusée";
   public static final String DEMANDE_NOT_FOUND = "Demande d'adhésion introuvable";
+
+  // Priorités de jackpot / ordre des bénéficiaires
+  public static final String PRIORITE_CREATED = "Demande de priorité envoyée au gestionnaire";
+  public static final String PRIORITE_ATTRIBUEE =
+      "Priorité attribuée : le membre recevra le prochain jackpot";
+  public static final String PRIORITE_LIST_SUCCESS = "Priorités de jackpot récupérées avec succès";
+  public static final String PRIORITE_ACCEPTED =
+      "Priorité acceptée : le membre recevra le prochain jackpot";
+  public static final String PRIORITE_REFUSED = "Priorité refusée";
+  public static final String PRIORITE_CANCELLED = "Priorité annulée";
+  public static final String PRIORITE_NOT_FOUND = "Priorité de jackpot introuvable";
+  public static final String ORDRE_BENEFICIAIRE_UPDATED = "Ordre des bénéficiaires mis à jour";
   public static final String ME_GESTION_COTISATIONS_SUCCESS =
       "Paiements de mes tontines gérées récupérés avec succès";
 

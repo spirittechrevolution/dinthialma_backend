@@ -14,6 +14,7 @@ import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
+import com.africa.dinthialma_backend.jackpot.service.interfaces.PrioriteJackpotService;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
@@ -55,6 +56,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -84,6 +86,7 @@ public class CycleServiceImpl implements CycleService {
   private final WhatsappService whatsappService;
   private final NotificationService notificationService;
   private final DistributionEvenementielleRepository distributionRepository;
+  private final PrioriteJackpotService prioriteService;
 
   // ─── Lecture ─────────────────────────────────────────────────────────────
 
@@ -290,6 +293,7 @@ public class CycleServiceImpl implements CycleService {
       }
 
       cycle.setGagnants(savedGagnants);
+      prioriteService.marquerServies(cycle, gagnantsMembres);
       schedulerService.annoncerGagnants(cycle, savedGagnants);
 
       // Notification in-app jackpot : gagnant(s) + admin
@@ -316,6 +320,10 @@ public class CycleServiceImpl implements CycleService {
             tontineId,
             NotificationLiens.cycle(cycle.getId(), g.getMembre().getId()));
       }
+    }
+
+    if (savedGagnants.isEmpty()) {
+      notifierGagnantsADesigner(tontine, cycle);
     }
 
     cotisationRepository
@@ -623,12 +631,7 @@ public class CycleServiceImpl implements CycleService {
 
     CycleTontine cycle = cycleOuvertALaDesignation(tontine, cycleId);
 
-    List<TontineMembre> eligibles =
-        membreRepository
-            .findByTontine_IdAndStatutAndDeletedAtIsNull(tontineId, MembreStatut.ACTIF)
-            .stream()
-            .filter(m -> !m.isARecuJackpot())
-            .toList();
+    List<TontineMembre> eligibles = eligibles(tontineId);
     if (eligibles.isEmpty()) {
       throw new BadRequestException(
           "Aucun membre éligible : tous les membres actifs ont déjà reçu un jackpot");
@@ -637,7 +640,7 @@ public class CycleServiceImpl implements CycleService {
     List<UUID> membreIds = request.getMembreIds();
     List<TontineMembre> choisis =
         membreIds == null || membreIds.isEmpty()
-            ? tirerAuSort(eligibles, tontine.getNombreGagnants())
+            ? prioritairesPuis(tontineId, melanger(eligibles), tontine.getNombreGagnants())
             : membresDesignes(tontineId, membreIds);
 
     BigDecimal montantParGagnant =
@@ -658,6 +661,7 @@ public class CycleServiceImpl implements CycleService {
     }
 
     cycle.setGagnants(savedGagnants);
+    prioriteService.marquerServies(cycle, choisis);
 
     log.info(
         "Gagnants jackpot désignés (MANUEL) – cycleId={} nb={} tontineId={}",
@@ -707,10 +711,60 @@ public class CycleServiceImpl implements CycleService {
     return cycle;
   }
 
-  private static List<TontineMembre> tirerAuSort(List<TontineMembre> eligibles, int nombre) {
-    List<TontineMembre> melanges = new ArrayList<>(eligibles);
+  /** Membres ACTIFS n'ayant pas encore reçu de jackpot. */
+  private List<TontineMembre> eligibles(UUID tontineId) {
+    return membreRepository
+        .findByTontine_IdAndStatutAndDeletedAtIsNull(tontineId, MembreStatut.ACTIF)
+        .stream()
+        .filter(m -> !m.isARecuJackpot())
+        .toList();
+  }
+
+  private static List<TontineMembre> melanger(List<TontineMembre> membres) {
+    List<TontineMembre> melanges = new ArrayList<>(membres);
     Collections.shuffle(melanges);
-    return melanges.stream().limit(nombre).toList();
+    return melanges;
+  }
+
+  private static List<TontineMembre> parOrdreDePassage(List<TontineMembre> membres) {
+    return membres.stream()
+        .sorted(
+            Comparator.comparingInt(
+                    (TontineMembre m) ->
+                        m.getOrdreJackpot() != null ? m.getOrdreJackpot() : Integer.MAX_VALUE)
+                .thenComparing(TontineMembre::getCreatedAt))
+        .toList();
+  }
+
+  /**
+   * Les {@code nombre} premiers gagnants : priorités accordées d'abord (ordre d'acceptation), puis
+   * les autres éligibles dans l'ordre de la règle convenue.
+   */
+  private List<TontineMembre> prioritairesPuis(
+      UUID tontineId, List<TontineMembre> selonRegle, int nombre) {
+    List<TontineMembre> file = new ArrayList<>(prioriteService.prioritairesEligibles(tontineId));
+    Set<UUID> prioritaires = file.stream().map(TontineMembre::getId).collect(Collectors.toSet());
+    selonRegle.stream().filter(m -> !prioritaires.contains(m.getId())).forEach(file::add);
+    return file.stream().limit(nombre).toList();
+  }
+
+  /** Tour clôturé en MANUEL / HYBRIDE avec des éligibles : le gestionnaire doit désigner. */
+  private void notifierGagnantsADesigner(Tontine tontine, CycleTontine cycle) {
+    if (!OrdreBeneficiaire.designationApresCloture(tontine.getOrdreBeneficiaire())
+        || eligibles(tontine.getId()).isEmpty()) {
+      return;
+    }
+    notificationService.notify(
+        tontine.getCreePar().getId(),
+        NotificationType.GAGNANTS_A_DESIGNER,
+        "Gagnants à désigner",
+        "Le tour #"
+            + cycle.getNumeroCycle()
+            + " de "
+            + tontine.getNom()
+            + " est clôturé : désignez le ou les gagnants (tirage au sort ou choix).",
+        tontine.getId(),
+        NotificationLiens.cycle(cycle.getId(), null));
   }
 
   /** Membres choisis par le gestionnaire : sans doublon, ACTIF et sans jackpot déjà reçu. */
@@ -742,35 +796,24 @@ public class CycleServiceImpl implements CycleService {
     return m;
   }
 
+  /**
+   * Gagnants désignés automatiquement à la clôture : priorités accordées d'abord, puis la règle
+   * (ROTATION : ordre de passage ; ALEATOIRE : tirage). MANUEL / HYBRIDE : aucun, le gestionnaire
+   * désigne ensuite.
+   */
   private List<TontineMembre> resolveGagnants(Tontine tontine, UUID tontineId) {
-    List<TontineMembre> eligibles =
-        membreRepository
-            .findByTontine_IdAndStatutAndDeletedAtIsNull(tontineId, MembreStatut.ACTIF)
-            .stream()
-            .filter(m -> !m.isARecuJackpot())
-            .toList();
-
-    if (eligibles.isEmpty()) return List.of();
-
-    int n = Math.min(tontine.getNombreGagnants(), eligibles.size());
-
-    return switch (tontine.getOrdreBeneficiaire()) {
-      case "ROTATION" ->
-          eligibles.stream()
-              .sorted(
-                  Comparator.comparingInt(
-                          (TontineMembre m) ->
-                              m.getOrdreJackpot() != null ? m.getOrdreJackpot() : Integer.MAX_VALUE)
-                      .thenComparing(TontineMembre::getCreatedAt))
-              .limit(n)
-              .toList();
-      case "ALEATOIRE" -> {
-        List<TontineMembre> shuffled = new ArrayList<>(eligibles);
-        Collections.shuffle(shuffled);
-        yield shuffled.stream().limit(n).toList();
-      }
-      default -> List.of(); // MANUEL
-    };
+    String ordre = tontine.getOrdreBeneficiaire();
+    boolean automatique = "ROTATION".equals(ordre) || "ALEATOIRE".equals(ordre);
+    if (!automatique) {
+      return List.of();
+    }
+    List<TontineMembre> eligibles = eligibles(tontineId);
+    if (eligibles.isEmpty()) {
+      return List.of();
+    }
+    List<TontineMembre> selonRegle =
+        "ROTATION".equals(ordre) ? parOrdreDePassage(eligibles) : melanger(eligibles);
+    return prioritairesPuis(tontineId, selonRegle, tontine.getNombreGagnants());
   }
 
   private void activateNextCycle(UUID tontineId, int nextNum) {

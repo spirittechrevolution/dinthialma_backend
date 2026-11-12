@@ -17,6 +17,7 @@ import com.africa.dinthialma_backend.auth.entity.User;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
+import com.africa.dinthialma_backend.jackpot.service.interfaces.PrioriteJackpotService;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
@@ -55,6 +56,7 @@ class SchedulerServiceTest {
   @Mock private CycleGagnantRepository gagnantRepository;
   @Mock private TontineMembreRepository membreRepository;
   @Mock private NotificationService notificationService;
+  @Mock private PrioriteJackpotService prioriteService;
   @InjectMocks private SchedulerService scheduler;
 
   private User gestionnaire;
@@ -230,6 +232,54 @@ class SchedulerServiceTest {
     verify(membreRepository, never())
         .findByTontine_IdAndOrdreJackpotAndStatutAndDeletedAtIsNull(
             eq(aleatoire.getId()), anyInt(), any());
+  }
+
+  @Test
+  @DisplayName(
+      "tours proches avec priorité accordée : TOUR_PROCHE au prioritaire (ROTATION et ALEATOIRE),"
+          + " pas au membre de l'ordre ; HYBRIDE ignoré")
+  void toursProchesAvecPriorite() {
+    Tontine aleatoire = Fixtures.tontine(gestionnaire);
+    aleatoire.setOrdreBeneficiaire("ALEATOIRE");
+    Tontine hybride = Fixtures.tontine(gestionnaire);
+    hybride.setOrdreBeneficiaire("HYBRIDE");
+    CycleTontine j3 = Fixtures.cycle(tontine, 2, CycleStatut.EN_COURS);
+    CycleTontine j3Aleatoire = Fixtures.cycle(aleatoire, 1, CycleStatut.EN_COURS);
+    CycleTontine j3Hybride = Fixtures.cycle(hybride, 1, CycleStatut.EN_COURS);
+    TontineMembre besoinRotation = Fixtures.membre(tontine, Fixtures.user("Besoin"), 5);
+    TontineMembre besoinTirage = Fixtures.membre(aleatoire, Fixtures.user("Tirage"), 2);
+    when(cycleRepository.findByStatutAndDateFinAndDeletedAtIsNull(
+            CycleStatut.EN_COURS, LocalDate.now().plusDays(2)))
+        .thenReturn(List.of());
+    when(cycleRepository.findByStatutAndDateFinAndDeletedAtIsNull(
+            CycleStatut.EN_COURS, LocalDate.now().plusDays(3)))
+        .thenReturn(List.of(j3, j3Aleatoire, j3Hybride));
+    when(prioriteService.prioritairesEligibles(tontine.getId()))
+        .thenReturn(List.of(besoinRotation));
+    when(prioriteService.prioritairesEligibles(aleatoire.getId()))
+        .thenReturn(List.of(besoinTirage));
+
+    scheduler.rappelsCyclesProches();
+
+    verify(notificationService)
+        .notify(
+            eq(besoinRotation.getUser().getId()),
+            eq(NotificationType.TOUR_PROCHE),
+            anyString(),
+            anyString(),
+            eq(tontine.getId()),
+            any());
+    verify(notificationService)
+        .notify(
+            eq(besoinTirage.getUser().getId()),
+            eq(NotificationType.TOUR_PROCHE),
+            anyString(),
+            anyString(),
+            eq(aleatoire.getId()),
+            any());
+    verify(membreRepository, never())
+        .findByTontine_IdAndOrdreJackpotAndStatutAndDeletedAtIsNull(any(), anyInt(), any());
+    verify(prioriteService, never()).prioritairesEligibles(hybride.getId());
   }
 
   @Nested

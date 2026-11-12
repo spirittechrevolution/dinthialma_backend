@@ -82,6 +82,7 @@
 | `/{id}` | DELETE | ❌ | ❌ | ✅² | ✅ | 🔒 soft delete, BROUILLON seulement |
 | `/{id}/activer` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 BROUILLON/SUSPENDUE → ACTIVE |
 | `/{id}/suspendre` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 ACTIVE → SUSPENDUE |
+| `/{id}/ordre-beneficiaire` | PATCH | ❌ | ❌ | ✅² | ✅ | 🔒 ROTATIVE BROUILLON/ACTIVE/SUSPENDUE ; effet à la prochaine clôture ; vers ROTATION/ALEATOIRE refusé si un tour attend ses gagnants (409 `DESIGNATION_EN_ATTENTE`) ; membres actifs notifiés (`ORDRE_BENEFICIAIRE_MODIFIE`) |
 
 ### 👥 Membres (`/v1/tontines/{tontineId}/membres`)
 
@@ -115,7 +116,18 @@
 | `/beneficiaires` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 historique des cycles TERMINE avec gagnants (pageable, tri numeroCycle ASC) |
 | `/` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 mode MANUEL uniquement |
 | `/{cycleId}/cloturer` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 EN_COURS → TERMINE, calcul jackpot + commissions |
-| `/{cycleId}/beneficiaire` | PATCH | ❌ | ❌ | ✅² | ✅ | 🔒 ordreBeneficiaire MANUEL + cycle TERMINE sans gagnant ; `membreIds` vide = tirage aléatoire de `nombreGagnants` ; refuse doublons, membres non ACTIF et membres `aRecuJackpot` |
+| `/{cycleId}/beneficiaire` | PATCH | ❌ | ❌ | ✅² | ✅ | 🔒 ordreBeneficiaire MANUEL ou HYBRIDE + cycle TERMINE sans gagnant ; `membreIds` vide = tirage aléatoire de `nombreGagnants` (priorités accordées servies d'abord) ; refuse doublons, membres non ACTIF et membres `aRecuJackpot` |
+
+### 🙏 Priorités de jackpot (`/v1/tontines/{tontineId}/priorites`)
+
+| Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
+|----------|---------|------|--------|-------|-------------|-------|
+| `/` | POST | ❌ | ✅¹ | ❌ | ❌ | 🔒 le membre demande (motif optionnel) → EN_ATTENTE, gestionnaire notifié ; `PRIORITE_NON_DISPONIBLE`, `MEMBRE_NON_ELIGIBLE_JACKPOT`, `PRIORITE_DEJA_ACTIVE` |
+| `/attribuer` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 `{membreId, motif}` → ACCEPTEE d'emblée (accord pris hors application) |
+| `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 `?statut=` ; `motif` visible du gestionnaire et du membre concerné uniquement |
+| `/{prioriteId}/accepter` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 EN_ATTENTE → ACCEPTEE ; membre + autres membres actifs notifiés ; `PRIORITE_NOT_PENDING` |
+| `/{prioriteId}/refuser` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 EN_ATTENTE → REFUSEE, motif optionnel ; membre notifié |
+| `/{prioriteId}` | DELETE | ❌ | ✅¹ (la sienne) | ✅² | ✅ | 🔒 EN_ATTENTE/ACCEPTEE → ANNULEE |
 
 ### 💸 Commissions (`/v1/tontines/{tontineId}/commissions`)
 
@@ -140,7 +152,7 @@
 | `/dashboard/users/{id}/enable` | POST | ❌ | ✅ | Réactiver un compte |
 | `/dashboard/users/{id}/roles` | PUT | ❌ | ✅ | Modifier les rôles |
 | `/dashboard/contributions` | GET | ❌ | ✅ | Toutes cotisations (pageable, filtres cumulables `?statut=` `?tontineId=`) |
-| `/my-dashboard` | GET | ✅ | ✅ | Métriques de l'admin pour ses tontines (`tontines` = `PagedModel`) + agrégats globaux : `nombreTontinesGerees`, `montantTotalValide`, `totalMembres`, `totalCotisationsEnAttente/EnRetard`, `totalDemandesEnAttente`, `totalCollecteToursEnCours`, `totalAttenduToursEnCours` ; par tontine : `gagnantsADesigner`, `demandesEnAttente` + `cycleEnCours` (`montantCollecte`, `montantEnAttente`, `montantAttendu`, `membresAyantPaye`, `membresEnAttente`, `membresActifs`) |
+| `/my-dashboard` | GET | ✅ | ✅ | Métriques de l'admin pour ses tontines (`tontines` = `PagedModel`) + agrégats globaux : `nombreTontinesGerees`, `montantTotalValide`, `totalMembres`, `totalCotisationsEnAttente/EnRetard`, `totalDemandesEnAttente`, `totalCollecteToursEnCours`, `totalAttenduToursEnCours` ; par tontine : `gagnantsADesigner`, `demandesEnAttente`, `prioritesEnAttente` + `cycleEnCours` (`montantCollecte`, `montantEnAttente`, `montantAttendu`, `membresAyantPaye`, `membresEnAttente`, `membresActifs`) |
 
 ### 🙋 Mon espace (`/v1/me`)
 
@@ -262,7 +274,7 @@ src/main/java/com/africa/dinthialma_backend/
 │       ├── interfaces/ CotisationService
 │       └── impl/       CotisationServiceImpl
 ├── notification/   ✅ SMS (LAfricaMobile) + notifications in-app
-│   ├── codeList/       NotificationType (15 valeurs)
+│   ├── codeList/       NotificationType (20 valeurs)
 │   ├── controller/     NotificationController
 │   ├── dto/            NotificationResponse
 │   ├── entity/         UserNotification
@@ -286,6 +298,14 @@ src/main/java/com/africa/dinthialma_backend/
 │   ├── entity/         DemandeAdhesion
 │   ├── repository/     DemandeAdhesionRepository
 │   └── service/        AdhesionService(+Impl)
+├── jackpot/        ✅ Priorités de jackpot (membre dans le besoin servi en premier)
+│   ├── codeList/       StatutPriorite, OriginePriorite
+│   ├── controller/     PrioriteJackpotController
+│   ├── dto/            PrioriteJackpotResponse, PrioriteRequests
+│   ├── entity/         PrioriteJackpot
+│   ├── mapper/         PrioriteJackpotMapper
+│   ├── repository/     PrioriteJackpotRepository
+│   └── service/        PrioriteJackpotService(+Impl) — aussi utilisé par Cycle, Me, Scheduler
 ├── admin/          ✅ Complet (GlobalDashboard + gestion users + MyDashboard)
 │   ├── controller/     AdminDashboardController
 │   ├── dto/            GlobalDashboardResponse, AdminUserResponse,
@@ -534,8 +554,9 @@ obligatoire** : sans Docker démarré, le build échoue (les `*IT` ne sont jamai
 | V034 | `create_distributions_evenementielles.sql` | table `distributions_evenementielles` : part de chaque membre à la clôture finale EVENEMENTIELLE (1 active par tontine/membre) |
 | V035 | `seed_ordre_beneficiaire_hybride.sql` | Seed ORDRE_BENEFICIAIRE `HYBRIDE` |
 | V036 | `seed_methode_paiement_pi_spi.sql` | Seed METHODE_PAIEMENT `PI_SPI` (PI-SPI, paiement instantané BCEAO) |
+| V037 | `create_priorites_jackpot.sql` | table `priorites_jackpot` (statut, origine, motif, cycle servi) ; 1 priorité active (EN_ATTENTE/ACCEPTEE) max par membership |
 
-Prochaine version disponible : **V037**
+Prochaine version disponible : **V038**
 
 ---
 
@@ -618,7 +639,10 @@ Prochaine version disponible : **V037**
 | Détail cycle | ✅ | 🔒 membres + créateur + SUPER_ADMIN |
 | Ouvrir cycle (ROTATIVE MANUEL uniquement) | ✅ | 🔒 créateur + SUPER_ADMIN |
 | Clôturer cycle (ROTATIVE) | ✅ | 🔒 créateur + SUPER_ADMIN |
-| Désigner les gagnants (MANUEL ou tirage aléatoire) | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Désigner les gagnants (MANUEL / HYBRIDE : tirage ou choix) | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Changer l'ordre des bénéficiaires en cours de tontine | ✅ | 🔒 créateur + SUPER_ADMIN |
+| Priorité de jackpot (demande du membre ou attribution directe) | ✅ | 🔒 membre / créateur + SUPER_ADMIN |
+| Notification « gagnants à désigner » à la clôture (MANUEL / HYBRIDE) | ✅ | AUTO |
 | Historique des bénéficiaires (paginé) | ✅ | 🔒 membres + créateur + SUPER_ADMIN |
 | Clôturer sous-cycle (EVENEMENTIELLE) | ✅ | 🔒 créateur + SUPER_ADMIN – activation sous-cycle suivant |
 | Clôture finale EVENEMENTIELLE | ✅ | AUTO détection dernier cycle – `distributionParMembre` calculée |
@@ -678,7 +702,7 @@ Prochaine version disponible : **V037**
 | Marquer tout lu (bulk `@Modifying`) | ✅ | 🔒 tout auth |
 | `notify()` non-bloquant (try/catch interne, jamais de rollback) | ✅ | INFRA |
 
-#### Mapping événements → `NotificationType` (15 valeurs)
+#### Mapping événements → `NotificationType` (20 valeurs)
 
 | Événement | Type | Destinataire |
 |-----------|------|--------------|
@@ -697,6 +721,11 @@ Prochaine version disponible : **V037**
 | Cycle MANUEL ouvert | `CYCLE_OUVERT` | Membres actifs |
 | Ajout à une tontine | `INVITATION_TONTINE` | Membre ajouté |
 | Statut changé (suspendu / retiré / réactivé) | `STATUT_MEMBRE` | Membre concerné |
+| Demande de priorité sur le jackpot | `PRIORITE_JACKPOT_DEMANDEE` | Gestionnaire |
+| Priorité acceptée ou attribuée | `PRIORITE_JACKPOT_ACCORDEE` | Membre concerné + autres membres actifs |
+| Priorité refusée, ou annulée par le gestionnaire | `PRIORITE_JACKPOT_REFUSEE` | Membre concerné |
+| Ordre des bénéficiaires modifié | `ORDRE_BENEFICIAIRE_MODIFIE` | Membres actifs |
+| Tour clôturé en MANUEL / HYBRIDE avec des éligibles | `GAGNANTS_A_DESIGNER` | Gestionnaire |
 
 ---
 
@@ -856,7 +885,37 @@ cd docker && docker compose up -d
       → fix : unicité de l'e-mail du profil contournée par des espaces
       → fix : ajout sans nom d'un PRE_ENROLLED au nom vide -> 500
       → fix : SMS encodé deux fois (service non encore branché)
+
+✦ Sprint 10 – Règle du jackpot souple (branche feature/jackpot-priorite-hybride)  🔄 EN REVUE
+  10.1 Complexité cognitive des services réduite (≤ 8 sur les 7 méthodes visées)     ✅
+  10.2 PATCH /tontines/{id}/ordre-beneficiaire : règle modifiable en cours            ✅
+  10.3 Priorités de jackpot : demande membre / attribution directe (V037)            ✅
+  10.4 GAGNANTS_A_DESIGNER à la clôture MANUEL / HYBRIDE ; TOUR_PROCHE et estimation
+       /v1/me/jackpots tenant compte des priorités                                   ✅
 ```
+
+---
+
+## Désignation des gagnants — règle convenue et exceptions
+
+En Afrique, le groupe convient d'une règle (tirage, ordre, choix), mais un membre dans le besoin
+peut demander à recevoir le prochain jackpot. Le backend gère les deux sans casser la règle.
+
+| `ordreBeneficiaire` | À la clôture du tour | Ensuite |
+|---|---|---|
+| `ROTATION` | automatique : priorités accordées, puis ordre de passage (`ordreJackpot`, puis adhésion) | — |
+| `ALEATOIRE` | automatique : priorités accordées, puis tirage au sort | — |
+| `MANUEL` / `HYBRIDE` | aucun gagnant ; `GAGNANTS_A_DESIGNER` au gestionnaire | `PATCH /beneficiaire` : liste vide = tirage (priorités d'abord), liste = choix |
+
+- `HYBRIDE` et `MANUEL` ont le même comportement ; `HYBRIDE` est le libellé à proposer au front.
+- **Priorité** : une seule active par membership ; membre ACTIF sans jackpot reçu ; tontine ROTATIVE
+  ACTIVE ou SUSPENDUE. Plusieurs priorités acceptées passent dans l'ordre d'acceptation, dans la
+  limite de `nombreGagnants` par tour (le reste attend le tour suivant). Le membre qui gagne, de
+  quelque façon que ce soit, voit ses priorités actives passer SERVIE (avec `cycleId`).
+- En ROTATION, passer devant ne retire sa place à personne : `aRecuJackpot` reste la seule source
+  de vérité, le membre décalé passe au tour suivant.
+- **Changement d'ordre** : effet à la prochaine clôture ; refusé vers un ordre automatique tant qu'un
+  tour TERMINE attend ses gagnants (sinon il ne serait plus désignable).
 
 ---
 
