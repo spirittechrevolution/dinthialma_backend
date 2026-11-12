@@ -459,6 +459,10 @@ integration/   tous les tests d'intégration   (*IT.java)   → ./mvnw verify (D
 service/       tous les tests unitaires       (*Test.java) → ./mvnw test
 ```
 
+**`./mvnw clean install`** lance tout : unitaires, puis intégration, puis seuil JaCoCo. **Docker
+obligatoire** : sans Docker démarré, le build échoue (les `*IT` ne sont jamais sautés en silence).
+`-DskipITs` = unitaires seuls · `-DskipTests` = aucun test (utilisé par le Dockerfile et la CI).
+
 - **Unitaires** (`service/`, Mockito + AssertJ) : un fichier par service, dépendances simulées,
   mappers MapStruct réels (`Mappers.getMapper(...)` en `@Spy`), jeux de données `support/Fixtures`.
   Les tests étant hors du paquet du service, on ne teste que l'API publique (pas de méthode

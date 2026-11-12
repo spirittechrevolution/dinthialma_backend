@@ -242,7 +242,9 @@
                 </configuration>
             </plugin>
 
-            <!-- Tests d'intégration (*IT) : mvn verify – PostgreSQL + Keycloak via Testcontainers (Docker requis) -->
+            <!-- Tests d'intégration (*IT) : lancés par mvn verify / mvn install – PostgreSQL + Keycloak via
+                 Testcontainers. Docker OBLIGATOIRE (build en échec sinon) ; -DskipITs pour les ignorer,
+                 -DskipTests pour ignorer unitaires + intégration (Dockerfile, CI). -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>

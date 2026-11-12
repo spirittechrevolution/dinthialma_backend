@@ -23,7 +23,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
-@Testcontainers(disabledWithoutDocker = true)
+// Docker obligatoire : sans Docker, le build échoue (pas de saut silencieux des *IT).
+// Pour ne lancer que les tests unitaires : mvn install -DskipITs
+@Testcontainers
 public abstract class AbstractIntegrationTest {
 
   static final PostgreSQLContainer<?> POSTGRES =
