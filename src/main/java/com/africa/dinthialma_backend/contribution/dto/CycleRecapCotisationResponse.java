@@ -2,6 +2,7 @@ package com.africa.dinthialma_backend.contribution.dto;
 
 import com.africa.dinthialma_backend.auth.codeList.AccountStatus;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
+import com.africa.dinthialma_backend.contribution.codeList.Ponctualite;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
@@ -71,6 +72,13 @@ public class CycleRecapCotisationResponse {
       description = "Statut de la cotisation. null = aucune cotisation soumise pour ce cycle.",
       allowableValues = {"EN_ATTENTE", "VALIDE", "EN_RETARD", "REFUSE"})
   private CotisationStatut statutCotisation;
+
+  @Schema(
+      description =
+          "Ponctualité du membre sur ce tour : A_TEMPS, EN_RETARD ou NON_DECLAREE (aucune"
+              + " déclaration retenue)",
+      allowableValues = {"A_TEMPS", "EN_RETARD", "NON_DECLAREE"})
+  private Ponctualite ponctualite;
 
   @Schema(description = "Date de validation par l'admin (null si pas encore validé)")
   private LocalDateTime dateValidation;

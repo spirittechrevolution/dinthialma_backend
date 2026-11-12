@@ -1,6 +1,7 @@
 package com.africa.dinthialma_backend.contribution.dto;
 
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
+import com.africa.dinthialma_backend.contribution.codeList.Ponctualite;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -71,6 +72,18 @@ public class CotisationResponse {
 
   @Schema(description = "Date d'enregistrement de la cotisation")
   private LocalDateTime createdAt;
+
+  @Schema(
+      description = "Date du paiement remis en main propre (encaissement admin), sinon null",
+      nullable = true)
+  private LocalDateTime datePaiement;
+
+  @Schema(
+      description =
+          "Ponctualité : payée avant l'échéance du tour ou non (distincte du statut, dont"
+              + " EN_RETARD signifie « non validée à la clôture »)",
+      allowableValues = {"A_TEMPS", "EN_RETARD", "NON_DECLAREE"})
+  private Ponctualite ponctualite;
 
   @Schema(description = "Date de dernière modification")
   private LocalDateTime updatedAt;

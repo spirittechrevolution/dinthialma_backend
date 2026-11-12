@@ -19,6 +19,7 @@ import com.africa.dinthialma_backend.auth.repository.UserRoleAssignmentRepositor
 import com.africa.dinthialma_backend.auth.service.interfaces.KeycloakAuthService;
 import com.africa.dinthialma_backend.common.audit.AuditService;
 import com.africa.dinthialma_backend.common.exception.BadRequestException;
+import com.africa.dinthialma_backend.common.exception.ConflictException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
@@ -26,6 +27,8 @@ import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
+import com.africa.dinthialma_backend.notification.codeList.NotificationType;
+import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.support.Fixtures;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
@@ -33,6 +36,7 @@ import com.africa.dinthialma_backend.tontine.codeList.MonRoleTontine;
 import com.africa.dinthialma_backend.tontine.codeList.RoleFiltreTontine;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
+import com.africa.dinthialma_backend.tontine.dto.ChangerOrdreBeneficiaireRequest;
 import com.africa.dinthialma_backend.tontine.dto.CreateTontineRequest;
 import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.dto.UpdateTontineRequest;
@@ -77,6 +81,7 @@ class TontineServiceImplTest {
   @Mock private UserRoleAssignmentRepository roleRepository;
   @Mock private KeycloakAuthService keycloakAuthService;
   @Mock private AuditService auditService;
+  @Mock private NotificationService notificationService;
   @InjectMocks private TontineServiceImpl service;
 
   private User gestionnaire;
@@ -596,6 +601,139 @@ class TontineServiceImplTest {
       assertThatThrownBy(
               () -> service.suspendTontine(gestionnaire.getKeycloakId(), tontine.getId()))
           .isInstanceOf(BadRequestException.class);
+    }
+  }
+
+  @Nested
+  @DisplayName("changement d'ordre des bénéficiaires en cours de tontine")
+  class ChangementOrdre {
+
+    private ChangerOrdreBeneficiaireRequest vers(String ordre) {
+      ChangerOrdreBeneficiaireRequest r = new ChangerOrdreBeneficiaireRequest();
+      r.setOrdreBeneficiaire(ordre);
+      return r;
+    }
+
+    private String kc() {
+      return gestionnaire.getKeycloakId();
+    }
+
+    @Test
+    @DisplayName("ACTIVE : ROTATION -> HYBRIDE appliqué, audité, chaque membre actif notifié")
+    void active() throws Exception {
+      tontine.setStatut(TontineStatut.ACTIVE);
+      lenient()
+          .when(
+              membreRepository.findByTontine_IdAndStatutAndDeletedAtIsNull(
+                  tontine.getId(), MembreStatut.ACTIF))
+          .thenReturn(
+              List.of(
+                  Fixtures.membre(tontine, Fixtures.user("A"), 1),
+                  Fixtures.membre(tontine, Fixtures.user("B"), 2)));
+
+      TontineResponse r =
+          service.changerOrdreBeneficiaire(kc(), tontine.getId(), vers(" HYBRIDE "));
+
+      assertThat(r.getOrdreBeneficiaire()).isEqualTo("HYBRIDE");
+      verify(auditService)
+          .log(
+              gestionnaire,
+              "tontines",
+              tontine.getId(),
+              "ordreBeneficiaire",
+              "ROTATION",
+              "HYBRIDE");
+      verify(notificationService, org.mockito.Mockito.times(2))
+          .notify(
+              any(),
+              eq(NotificationType.ORDRE_BENEFICIAIRE_MODIFIE),
+              any(),
+              org.mockito.ArgumentMatchers.contains("à chaque tour"),
+              eq(tontine.getId()));
+    }
+
+    @Test
+    @DisplayName("libellés des notifications pour ROTATION, ALEATOIRE et MANUEL")
+    void libelles() throws Exception {
+      tontine.setStatut(TontineStatut.SUSPENDUE);
+      tontine.setOrdreBeneficiaire("MANUEL");
+      when(membreRepository.findByTontine_IdAndStatutAndDeletedAtIsNull(
+              tontine.getId(), MembreStatut.ACTIF))
+          .thenReturn(List.of(Fixtures.membre(tontine, Fixtures.user("A"), 1)));
+      for (String[] cas :
+          new String[][] {
+            {"ROTATION", "ordre de passage"},
+            {"ALEATOIRE", "tirage au sort"},
+            {"MANUEL", "choix du gestionnaire"}
+          }) {
+        service.changerOrdreBeneficiaire(kc(), tontine.getId(), vers(cas[0]));
+        verify(notificationService)
+            .notify(
+                any(),
+                eq(NotificationType.ORDRE_BENEFICIAIRE_MODIFIE),
+                any(),
+                org.mockito.ArgumentMatchers.contains(cas[1]),
+                any());
+      }
+    }
+
+    @Test
+    @DisplayName("même valeur : rien n'est modifié ni notifié")
+    void inchange() throws Exception {
+      tontine.setStatut(TontineStatut.ACTIVE);
+      service.changerOrdreBeneficiaire(kc(), tontine.getId(), vers("ROTATION"));
+      verify(tontineRepository, never()).save(any());
+      verify(notificationService, never()).notify(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("vers un ordre automatique : refusé tant qu'un tour attend ses gagnants")
+    void designationEnAttente() throws Exception {
+      tontine.setStatut(TontineStatut.ACTIVE);
+      tontine.setOrdreBeneficiaire("HYBRIDE");
+      when(cycleRepository.existsTermineSansGagnant(tontine.getId())).thenReturn(true);
+
+      assertThatThrownBy(
+              () -> service.changerOrdreBeneficiaire(kc(), tontine.getId(), vers("ALEATOIRE")))
+          .isInstanceOfSatisfying(
+              ConflictException.class,
+              e -> assertThat(e.getCode()).isEqualTo(ErrorCode.DESIGNATION_EN_ATTENTE));
+
+      // Vers MANUEL, le tour en attente reste désignable : accepté
+      assertThat(
+              service
+                  .changerOrdreBeneficiaire(kc(), tontine.getId(), vers("MANUEL"))
+                  .getOrdreBeneficiaire())
+          .isEqualTo("MANUEL");
+    }
+
+    @Test
+    @DisplayName("refus : événementielle, terminée, valeur inconnue, non gestionnaire")
+    void refus() {
+      tontine.setStatut(TontineStatut.TERMINEE);
+      assertThatThrownBy(
+              () -> service.changerOrdreBeneficiaire(kc(), tontine.getId(), vers("HYBRIDE")))
+          .isInstanceOf(BadRequestException.class);
+
+      tontine.setStatut(TontineStatut.ACTIVE);
+      tontine.setTontineType(TontineType.EVENEMENTIELLE);
+      assertThatThrownBy(
+              () -> service.changerOrdreBeneficiaire(kc(), tontine.getId(), vers("HYBRIDE")))
+          .isInstanceOf(BadRequestException.class)
+          .hasMessageContaining("rotative");
+
+      tontine.setTontineType(TontineType.ROTATIVE);
+      assertThatThrownBy(
+              () -> service.changerOrdreBeneficiaire(kc(), tontine.getId(), vers("FIXE")))
+          .isInstanceOfSatisfying(
+              BadRequestException.class,
+              e -> assertThat(e.getCode()).isEqualTo(ErrorCode.INVALID_PARAMETER));
+
+      assertThatThrownBy(
+              () ->
+                  service.changerOrdreBeneficiaire(
+                      etranger.getKeycloakId(), tontine.getId(), vers("HYBRIDE")))
+          .isInstanceOf(ForbiddenException.class);
     }
   }
 }

@@ -9,6 +9,7 @@ import com.africa.dinthialma_backend.auth.service.interfaces.KeycloakAuthService
 import com.africa.dinthialma_backend.common.audit.AuditService;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
 import com.africa.dinthialma_backend.common.exception.BadRequestException;
+import com.africa.dinthialma_backend.common.exception.ConflictException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
@@ -16,12 +17,15 @@ import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
+import com.africa.dinthialma_backend.notification.codeList.NotificationType;
+import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.OrdreBeneficiaire;
 import com.africa.dinthialma_backend.tontine.codeList.RoleFiltreTontine;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
+import com.africa.dinthialma_backend.tontine.dto.ChangerOrdreBeneficiaireRequest;
 import com.africa.dinthialma_backend.tontine.dto.CreateTontineRequest;
 import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.dto.UpdateTontineRequest;
@@ -66,6 +70,7 @@ public class TontineServiceImpl implements TontineService {
   private final UserRoleAssignmentRepository roleAssignmentRepository;
   private final KeycloakAuthService keycloakAuthService;
   private final AuditService auditService;
+  private final NotificationService notificationService;
 
   // ─── Création ────────────────────────────────────────────────────────────
 
@@ -297,6 +302,75 @@ public class TontineServiceImpl implements TontineService {
     auditService.log(
         caller, "tontines", tontine.getId(), champ, ancienTexte, texte.apply(nouvelle));
     affecter.accept(nouvelle);
+  }
+
+  // ─── Ordre des bénéficiaires en cours de tontine ─────────────────────────
+
+  @Override
+  public TontineResponse changerOrdreBeneficiaire(
+      String keycloakId, UUID id, ChangerOrdreBeneficiaireRequest request) throws CustomException {
+    User caller = findUserByKeycloakId(keycloakId);
+    Tontine tontine = findTontineById(id);
+    assertIsCreatorOrSuperAdmin(caller, tontine);
+    String nouvel = request.getOrdreBeneficiaire().trim();
+    verifierOrdreBeneficiaire(nouvel);
+    verifierOrdreModifiable(tontine, nouvel);
+
+    String ancien = tontine.getOrdreBeneficiaire();
+    if (nouvel.equals(ancien)) {
+      return toResponse(tontine, caller);
+    }
+    tontine.setOrdreBeneficiaire(nouvel);
+    Tontine saved = tontineRepository.save(tontine);
+    auditService.log(caller, "tontines", id, "ordreBeneficiaire", ancien, nouvel);
+    notifierChangementOrdre(saved);
+    log.info("Ordre des bénéficiaires modifié – tontineId={} {} → {}", id, ancien, nouvel);
+    return toResponse(saved, caller);
+  }
+
+  private void verifierOrdreModifiable(Tontine tontine, String nouvel) throws CustomException {
+    boolean modifiable =
+        tontine.getStatut() == TontineStatut.BROUILLON
+            || tontine.getStatut() == TontineStatut.ACTIVE
+            || tontine.getStatut() == TontineStatut.SUSPENDUE;
+    if (tontine.getTontineType() != TontineType.ROTATIVE || !modifiable) {
+      throw new BadRequestException(
+          "L'ordre des bénéficiaires ne se modifie que sur une tontine rotative non terminée");
+    }
+    if (!OrdreBeneficiaire.designationApresCloture(nouvel)
+        && cycleRepository.existsTermineSansGagnant(tontine.getId())) {
+      throw new ConflictException(
+          "Un tour clôturé attend encore ses gagnants : désignez-les avant de passer à un ordre"
+              + " automatique",
+          ErrorCode.DESIGNATION_EN_ATTENTE);
+    }
+  }
+
+  private void notifierChangementOrdre(Tontine tontine) {
+    String libelle = libelleOrdre(tontine.getOrdreBeneficiaire());
+    membreRepository
+        .findByTontine_IdAndStatutAndDeletedAtIsNull(tontine.getId(), MembreStatut.ACTIF)
+        .forEach(
+            m ->
+                notificationService.notify(
+                    m.getUser().getId(),
+                    NotificationType.ORDRE_BENEFICIAIRE_MODIFIE,
+                    "Règle du jackpot modifiée",
+                    "Les gagnants de "
+                        + tontine.getNom()
+                        + " seront désormais désignés "
+                        + libelle
+                        + ", à partir de la prochaine clôture de tour.",
+                    tontine.getId()));
+  }
+
+  private static String libelleOrdre(String ordre) {
+    return switch (ordre) {
+      case "ROTATION" -> "selon l'ordre de passage";
+      case "ALEATOIRE" -> "par tirage au sort automatique";
+      case "HYBRIDE" -> "par le gestionnaire à chaque tour (tirage ou choix)";
+      default -> "par le choix du gestionnaire";
+    };
   }
 
   // ─── Suppression ─────────────────────────────────────────────────────────

@@ -48,6 +48,9 @@ public interface TontineRepository
   /** Tontine non supprimée par id. */
   Optional<Tontine> findByIdAndDeletedAtIsNull(UUID id);
 
+  /** L'utilisateur est le gestionnaire (créateur) de cette tontine non supprimée. */
+  boolean existsByIdAndCreePar_IdAndDeletedAtIsNull(UUID id, UUID createurId);
+
   /**
    * Tontines auxquelles l'utilisateur cotise (via {@code tontine_membres}).
    *

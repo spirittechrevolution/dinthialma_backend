@@ -1,6 +1,7 @@
 package com.africa.dinthialma_backend.contribution.mapper;
 
 import com.africa.dinthialma_backend.auth.entity.User;
+import com.africa.dinthialma_backend.contribution.codeList.Ponctualite;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.CycleRecapCotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.MembreTotalCotisationResponse;
@@ -11,13 +12,14 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 /** Conversions des cotisations et des récapitulatifs par membre. */
-@Mapper
+@Mapper(imports = Ponctualite.class)
 public interface CotisationMapper {
 
   @Mapping(target = "tontineId", source = "tontine.id")
   @Mapping(target = "tontineNom", source = "tontine.nom")
   @Mapping(target = "cycleId", source = "cycle.id")
   @Mapping(target = "numeroCycle", source = "cycle.numeroCycle")
+  @Mapping(target = "ponctualite", expression = "java(Ponctualite.de(cotisation))")
   CotisationResponse toResponse(Cotisation cotisation);
 
   /** Cotisant d'une cotisation (null si le membre ou son compte est absent). */
@@ -59,6 +61,7 @@ public interface CotisationMapper {
   @Mapping(target = "motifRefus", source = "cotisation.motifRefus")
   @Mapping(target = "cotisationCreatedAt", source = "cotisation.createdAt")
   @Mapping(target = "enregistrePar", source = "cotisation.enregistrePar")
+  @Mapping(target = "ponctualite", expression = "java(Ponctualite.de(cotisation))")
   CycleRecapCotisationResponse toRecap(TontineMembre membre, Cotisation cotisation);
 
   /** Total VALIDÉ d'un membre, tous tours confondus (0 si aucun). */

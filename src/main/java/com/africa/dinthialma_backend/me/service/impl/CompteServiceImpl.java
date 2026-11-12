@@ -17,6 +17,7 @@ import com.africa.dinthialma_backend.me.dto.ChangePasswordRequest;
 import com.africa.dinthialma_backend.me.dto.PreferencesDto;
 import com.africa.dinthialma_backend.me.dto.SessionResponse;
 import com.africa.dinthialma_backend.me.service.interfaces.CompteService;
+import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
@@ -43,6 +44,7 @@ public class CompteServiceImpl implements CompteService {
   private final UserSessionRepository sessionRepository;
   private final UserSessionService userSessionService;
   private final KeycloakAuthService keycloakAuthService;
+  private final TontineRepository tontineRepository;
 
   // ─── B21 : mot de passe ──────────────────────────────────────────────────
 
@@ -122,8 +124,12 @@ public class CompteServiceImpl implements CompteService {
   @Override
   @Transactional(readOnly = true)
   public PreferencesDto getPreferences(String keycloakId) throws CustomException {
-    PreferencesDto prefs = findUser(keycloakId).getPreferences();
-    return prefs != null ? prefs : new PreferencesDto();
+    User user = findUser(keycloakId);
+    PreferencesDto prefs =
+        user.getPreferences() != null ? user.getPreferences() : new PreferencesDto();
+    // Tontine supprimée ou plus gérée depuis l'enregistrement : renvoyée à null (lecture seule)
+    prefs.setDerniereTontineGeree(tontineGereeOuNull(user, prefs.getDerniereTontineGeree()));
+    return prefs;
   }
 
   @Override
@@ -136,12 +142,22 @@ public class CompteServiceImpl implements CompteService {
         prefs.getTontinesFavorites() == null
             ? new ArrayList<>()
             : new ArrayList<>(new LinkedHashSet<>(prefs.getTontinesFavorites())));
+    prefs.setDerniereTontineGeree(tontineGereeOuNull(user, prefs.getDerniereTontineGeree()));
     user.setPreferences(prefs);
     userRepository.save(user);
     return prefs;
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
+
+  /** La tontine si l'utilisateur en est le gestionnaire (non supprimée), sinon null. */
+  private UUID tontineGereeOuNull(User user, UUID tontineId) {
+    if (tontineId == null
+        || !tontineRepository.existsByIdAndCreePar_IdAndDeletedAtIsNull(tontineId, user.getId())) {
+      return null;
+    }
+    return tontineId;
+  }
 
   /** Révoque la session Keycloak (non bloquant) puis supprime la session locale. */
   private void revoquer(UserSession session) {

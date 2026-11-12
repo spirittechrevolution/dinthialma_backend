@@ -33,6 +33,7 @@ import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.mapper.CotisationMapper;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
+import com.africa.dinthialma_backend.jackpot.repository.PrioriteJackpotRepository;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.support.Fixtures;
@@ -85,6 +86,7 @@ class AdminDashboardServiceImplTest {
   @Mock private CotisationRepository cotisationRepository;
   @Mock private KeycloakAuthService keycloakAuthService;
   @Mock private DemandeAdhesionRepository demandeRepository;
+  @Mock private PrioriteJackpotRepository prioriteRepository;
   @InjectMocks private AdminDashboardServiceImpl service;
 
   private User superAdmin;

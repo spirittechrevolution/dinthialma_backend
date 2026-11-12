@@ -29,6 +29,7 @@ import com.africa.dinthialma_backend.me.dto.PreferencesDto;
 import com.africa.dinthialma_backend.me.dto.SessionResponse;
 import com.africa.dinthialma_backend.me.service.impl.CompteServiceImpl;
 import com.africa.dinthialma_backend.support.Fixtures;
+import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -53,6 +54,7 @@ class CompteServiceImplTest {
   @Mock private UserSessionRepository sessionRepository;
   @Mock private UserSessionService userSessionService;
   @Mock private KeycloakAuthService keycloakAuthService;
+  @Mock private TontineRepository tontineRepository;
   @InjectMocks private CompteServiceImpl service;
 
   private User user;
@@ -221,6 +223,35 @@ class CompteServiceImplTest {
     assertThat(user.getPreferences()).isSameAs(r);
     verify(userRepository).save(user);
     assertThat(service.getPreferences(user.getKeycloakId()).isMasquerMontant()).isTrue();
+  }
+
+  @Test
+  @DisplayName(
+      "dernière tontine gérée : conservée si gestionnaire ; tontine d'un autre -> null sans refus ;"
+          + " plus gérée à la relecture -> null")
+  void derniereTontineGeree() throws Exception {
+    UUID mienne = UUID.randomUUID();
+    UUID autre = UUID.randomUUID();
+    when(tontineRepository.existsByIdAndCreePar_IdAndDeletedAtIsNull(mienne, user.getId()))
+        .thenReturn(true);
+
+    PreferencesDto p = new PreferencesDto();
+    p.setDerniereTontineGeree(mienne);
+    p.setMasquerMontant(true);
+    assertThat(service.savePreferences(user.getKeycloakId(), p).getDerniereTontineGeree())
+        .isEqualTo(mienne);
+
+    PreferencesDto q = new PreferencesDto();
+    q.setDerniereTontineGeree(autre);
+    q.setMasquerMontant(true);
+    PreferencesDto r = service.savePreferences(user.getKeycloakId(), q);
+    assertThat(r.getDerniereTontineGeree()).isNull();
+    assertThat(r.isMasquerMontant()).isTrue();
+
+    user.getPreferences().setDerniereTontineGeree(mienne);
+    when(tontineRepository.existsByIdAndCreePar_IdAndDeletedAtIsNull(mienne, user.getId()))
+        .thenReturn(false);
+    assertThat(service.getPreferences(user.getKeycloakId()).getDerniereTontineGeree()).isNull();
   }
 
   @Test

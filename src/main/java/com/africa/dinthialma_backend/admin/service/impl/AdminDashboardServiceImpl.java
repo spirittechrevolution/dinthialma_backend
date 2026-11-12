@@ -26,6 +26,8 @@ import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.contribution.mapper.CotisationMapper;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
+import com.africa.dinthialma_backend.jackpot.codeList.StatutPriorite;
+import com.africa.dinthialma_backend.jackpot.repository.PrioriteJackpotRepository;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
@@ -71,6 +73,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
   private final CotisationRepository cotisationRepository;
   private final KeycloakAuthService keycloakAuthService;
   private final DemandeAdhesionRepository demandeRepository;
+  private final PrioriteJackpotRepository prioriteRepository;
 
   // ─── Dashboard global SUPER_ADMIN ─────────────────────────────────────────
 
@@ -413,6 +416,9 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         .demandesEnAttente(
             demandeRepository.countByTontine_IdAndStatutAndDeletedAtIsNull(
                 tid, StatutDemande.EN_ATTENTE))
+        .prioritesEnAttente(
+            prioriteRepository.countByTontine_IdAndStatutAndDeletedAtIsNull(
+                tid, StatutPriorite.EN_ATTENTE))
         .build();
   }
 

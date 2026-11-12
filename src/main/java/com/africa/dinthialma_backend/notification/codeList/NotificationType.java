@@ -47,5 +47,26 @@ public enum NotificationType {
   ADHESION_REFUSEE,
 
   /** Rappel quotidien scheduler – cotisation en attente ou période non cotisée. */
-  RAPPEL_COTISATION
+  RAPPEL_COTISATION,
+
+  /** Un membre demande à recevoir le prochain jackpot en priorité (destinataire : gestionnaire). */
+  PRIORITE_JACKPOT_DEMANDEE,
+
+  /**
+   * Priorité de jackpot accordée (destinataires : le membre concerné et, par transparence, les
+   * autres membres actifs).
+   */
+  PRIORITE_JACKPOT_ACCORDEE,
+
+  /** Priorité de jackpot refusée ou annulée par le gestionnaire (destinataire : le membre). */
+  PRIORITE_JACKPOT_REFUSEE,
+
+  /** L'ordre des bénéficiaires a changé en cours de tontine (destinataires : membres actifs). */
+  ORDRE_BENEFICIAIRE_MODIFIE,
+
+  /**
+   * Tour clôturé en ordre MANUEL ou HYBRIDE : les gagnants sont à désigner (destinataire :
+   * gestionnaire).
+   */
+  GAGNANTS_A_DESIGNER
 }

@@ -2,8 +2,10 @@ package com.africa.dinthialma_backend.contribution.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PastOrPresent;
 import jakarta.validation.constraints.Positive;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
@@ -49,4 +51,12 @@ public class AdminRecordCotisationRequest {
 
   @Schema(description = "Note libre de l'admin", example = "Reçu cash le 01/06/2026")
   private String note;
+
+  @Schema(
+      description =
+          "Date réelle du paiement remis en main propre (optionnel, défaut : maintenant). Compte"
+              + " pour la ponctualité ; ≤ maintenant et ≥ début du tour.",
+      example = "2026-11-10T18:30:00")
+  @PastOrPresent(message = "datePaiement ne peut pas être dans le futur")
+  private LocalDateTime datePaiement;
 }

@@ -108,7 +108,21 @@ public enum ErrorCode {
   CODE_LIST_SYSTEM_VALUE,
 
   // ─── Cycles ─────────────────────────────────────────────────────────────
-  CYCLE_ALREADY_IN_PROGRESS;
+  CYCLE_ALREADY_IN_PROGRESS,
+  // ─── Gagnants / priorités de jackpot ────────────────────────────────────
+  /**
+   * Passage vers un ordre automatique (ROTATION, ALEATOIRE) refusé : un tour clôturé attend encore
+   * la désignation de ses gagnants.
+   */
+  DESIGNATION_EN_ATTENTE,
+  /** Priorités de jackpot : tontine ROTATIVE ACTIVE ou SUSPENDUE uniquement. */
+  PRIORITE_NON_DISPONIBLE,
+  /** Membre non ACTIF ou ayant déjà reçu son jackpot : aucune priorité possible. */
+  MEMBRE_NON_ELIGIBLE_JACKPOT,
+  /** Une priorité EN_ATTENTE ou ACCEPTEE existe déjà pour ce membre. */
+  PRIORITE_DEJA_ACTIVE,
+  /** Action réservée à une priorité EN_ATTENTE (acceptation, refus). */
+  PRIORITE_NOT_PENDING;
 
   /** Code générique correspondant à un statut HTTP (repli quand aucun code métier n'est fourni). */
   public static ErrorCode fromStatus(HttpStatusCode status) {
