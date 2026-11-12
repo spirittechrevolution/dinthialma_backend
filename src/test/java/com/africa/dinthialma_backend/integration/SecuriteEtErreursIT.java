@@ -2,10 +2,10 @@ package com.africa.dinthialma_backend.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.africa.dinthialma_backend.integration.support.AbstractIntegrationTest;
-import com.africa.dinthialma_backend.integration.support.ApiClient.Reponse;
-import com.africa.dinthialma_backend.integration.support.TestDataFactory;
-import com.africa.dinthialma_backend.integration.support.TestDataFactory.Utilisateur;
+import com.africa.dinthialma_backend.support.AbstractIntegrationTest;
+import com.africa.dinthialma_backend.support.ApiClient.Reponse;
+import com.africa.dinthialma_backend.support.TestDataFactory;
+import com.africa.dinthialma_backend.support.TestDataFactory.Utilisateur;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;

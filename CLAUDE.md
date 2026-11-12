@@ -450,17 +450,26 @@ public class ModuleController {
 
 ## Tests
 
-| Type | Emplacement | Nommage | Commande |
-|------|-------------|---------|----------|
-| Unitaires (Mockito + AssertJ) | `src/test/java/<module>/service/…` | `*Test` | `./mvnw test` |
-| Intégration (Testcontainers : PostgreSQL 17 + Keycloak 26) | `src/test/java/…/integration/` | `*IT` | `./mvnw verify` (Docker requis) |
+Arborescence imposée de `src/test/java/com/africa/dinthialma_backend/` — **trois répertoires
+à plat, aucun sous-répertoire** :
 
-- **Unitaires** : un fichier par service, dépendances simulées, mappers MapStruct réels
-  (`Mappers.getMapper(...)` en `@Spy`). Jeux de données : `support/Fixtures`. Les appels HTTP
-  sortants (Keycloak, WhatsApp, SMS) sont testés contre un faux serveur `HttpServer` local.
-- **Intégration** : hériter de `integration/support/AbstractIntegrationTest` (conteneurs
-  partagés, profil `test`, SMS/WhatsApp simulés) ; appels via `ApiClient`, données via
-  `TestDataFactory`. Realm Keycloak importé depuis `src/test/resources/keycloak/`.
+```
+support/       commun aux deux types : Fixtures, AbstractIntegrationTest, ApiClient, TestDataFactory
+integration/   tous les tests d'intégration   (*IT.java)   → ./mvnw verify (Docker requis)
+service/       tous les tests unitaires       (*Test.java) → ./mvnw test
+```
+
+- **Unitaires** (`service/`, Mockito + AssertJ) : un fichier par service, dépendances simulées,
+  mappers MapStruct réels (`Mappers.getMapper(...)` en `@Spy`), jeux de données `support/Fixtures`.
+  Les tests étant hors du paquet du service, on ne teste que l'API publique (pas de méthode
+  package-private). Les appels HTTP sortants (Keycloak, WhatsApp, SMS) sont testés contre un
+  faux serveur `HttpServer` local.
+- **Intégration** (`integration/`, Testcontainers PostgreSQL 17 + Keycloak 26) : hériter de
+  `support/AbstractIntegrationTest` (conteneurs partagés, profil `test`, SMS/WhatsApp simulés) ;
+  appels via `ApiClient`, données via `TestDataFactory`. Realm importé depuis
+  `src/test/resources/keycloak/`.
+- Après un déplacement de tests, lancer `./mvnw clean verify` (sinon les anciennes classes
+  compilées de `target/test-classes` sont rejouées en double).
 - **Couverture (JaCoCo)** : `./mvnw verify` échoue si un paquet `*.service`, `*.service.impl`
   ou `*.security` passe sous **90 % d'instructions** ou **80 % de branches** (tests unitaires).
   Rapport : `target/site/jacoco/index.html`.

@@ -2,9 +2,9 @@ package com.africa.dinthialma_backend.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.africa.dinthialma_backend.integration.support.AbstractIntegrationTest;
-import com.africa.dinthialma_backend.integration.support.ApiClient.Reponse;
-import com.africa.dinthialma_backend.integration.support.TestDataFactory.TontineEnCours;
+import com.africa.dinthialma_backend.support.AbstractIntegrationTest;
+import com.africa.dinthialma_backend.support.ApiClient.Reponse;
+import com.africa.dinthialma_backend.support.TestDataFactory.TontineEnCours;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
