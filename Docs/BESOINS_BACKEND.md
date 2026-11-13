@@ -49,6 +49,7 @@
 | B32 | Rythme du jackpot distinct du rythme de cotisation (N cotisations par tour, rotatives) | Créer, Modifier, Réglages, Fiche, Tours, Payer, Encaisser, À valider, Invitation, Accueil, Mes jackpots | P1 (après B26) |
 | B33 | Cotisation séparée de la remise : retards régularisables, options de remise du jackpot, clôture de la tontine | Tours, Remise du jackpot, Payer, Encaisser, À valider, Réglages, Fiche | P1 (avec B32) |
 | B34 | Tontine groupée : achat groupé d'un produit unique, remis à la fin (sans commission) | Créer, Fiche, Membres, Payer, Encaisser, À valider, Mon espace | P1 (après B33) |
+| B35 | Plusieurs parts par membre (rotatives, groupées si configuré) : parts max par adhérent, personnes requises pour démarrer, retrait encadré par le gestionnaire | Créer, Réglages, Membres, Invitation, Payer, Encaisser, Mes jackpots | P1 (après B33) |
 | S01 | Socle : ponctualité d'une cotisation (à temps / en retard / non déclarée), distincte du statut | Récap tour, Je cotise, Amendes | P1 (prérequis B26/B27) |
 | S02 | Socle : montants en francs entiers, partages exacts (aucun franc perdu) | Clôture, Distribution, Caisses | P1 (prérequis B27/B28/B29) |
 
@@ -277,7 +278,7 @@ Aucun développement backend nécessaire pour : inscription / connexion / code s
    3. B29 (caisses) : **prérequis de B27 et B28** (destination des amendes et des frais de prêt) ;
    4. B27 (amendes) ;
    5. B28 (prêts).
-6. **Ajouts du 2026-11-13** : B32 (N cotisations par tour) puis B33 (cotisation séparée de la remise, retards régularisables, options de remise, clôture de la tontine), **après B26 et avant B29/B27** : B27 compte une amende par échéance manquée (B32), B29 reçoit les régularisations en option D (B33). Puis B34 (tontine groupée), qui réutilise B26, B32 et B33.
+6. **Ajouts du 2026-11-13** : B32 (N cotisations par tour) puis B33 (cotisation séparée de la remise, retards régularisables, options de remise, clôture de la tontine), **après B26 et avant B29/B27** : B27 compte une amende par échéance manquée (B32), B29 reçoit les régularisations en option D (B33). Puis B34 (tontine groupée), qui réutilise B26, B32 et B33, B35 (plusieurs parts par membre) passe **avant** B34, qui en a besoin pour les parts en groupée.
 
 ---
 
@@ -822,3 +823,36 @@ Le gestionnaire choisit une **option par défaut** dans les réglages (`modeRemi
   - membre ayant tout payé → `PRODUIT_A_REMETTRE` au gestionnaire ; remise saisie → `PRODUIT_REMIS` au membre, qui peut confirmer ;
   - remise à un membre avec 10 000 F de reste dû → acceptée, `resteDu` = 10 000 F affiché ;
   - commission sur une tontine groupée → 400 `COMMISSION_NON_APPLICABLE`.
+
+### B35 — Plusieurs parts par membre (rotatives et groupées)
+- **Écrans** : Créer une tontine, Réglages, Membres (ajout, parts), Invitation / demande d'adhésion, Payer, Encaisser, Fiche Tontine, Mes jackpots.
+- **Besoin (porteur du projet, 2026-11-13)** : dans une rotative, un membre peut prendre **plusieurs parts**. Ex. jackpot de 1 000 000 F à la fin du mois, part de 100 000 F → 10 parts ; 8 membres à 1 part + 1 membre à 2 parts (200 000 F par mois) = 9 personnes, 10 parts. C'est fréquent.
+- **Paramètres demandés à la création** : `partsMaxParMembre` (nombre de parts maximum pour un adhérent) et `membresMinimum` (nombre de personnes requis pour démarrer).
+- **Changement de modèle** : l'unité de la rotative devient la **part**, plus la personne.
+  - nombre de tours = parts ÷ `nombreGagnants` (aujourd'hui : membres ÷ gagnants) ; jackpot = `montant` (par part) × parts ;
+  - cotisation due par un membre = `montant` × ses parts, à chaque échéance (une seule cotisation par membre et par échéance) ;
+  - un membre à 2 parts occupe **2 places** dans l'ordre de passage et peut recevoir **2 jackpots** ; `aRecuJackpot` devient « parts servies / parts détenues » ;
+  - champs proposés : `tontines.nombre_parts` (parts attendues, remplace `nombreMembres` comme base du calcul des tours), `parts_max_par_membre`, `membres_minimum` ; `tontine_membres.nombre_parts` (défaut 1) ; une ligne par part servie (tour, montant) ;
+  - **activation** : refusée tant que les parts attribuées ≠ `nombreParts` ou que les personnes < `membresMinimum` (codes à définir) ;
+  - **migration** : chaque membre existant = 1 part, `nombreParts` = `nombreMembres` → aucun changement de comportement.
+- **Impacts** : désignation des gagnants (ordre, tirage, choix, hybride), priorités de jackpot (par part), clôture et remise (B33), jackpot visé (B32 : calcul sur les parts), demandes d'adhésion (B17 : nombre de parts souhaité, places restantes en parts), récapitulatifs, `/me/summary`, `/me/jackpots`, tableaux de bord, ponctualité (par membre), amendes (B27).
+- **Périmètre** : collectif + cotisations récurrentes + plus de cotisations qui circulent → dans le périmètre.
+- **Décisions (porteur du projet, 2026-11-13)** :
+  1. **un seul jackpot à la fois** : un membre à plusieurs parts ne reçoit jamais deux jackpots au même tour ; ses parts sont servies à des tours différents (y compris quand `nombreGagnants` > 1 : un membre ne peut pas être deux fois gagnant d'un même tour ; tirage, choix et priorités le respectent) ;
+  2. **pas de demi-part** dans l'app : quand deux personnes se partagent une part, une seule est inscrite et en porte la responsabilité (le partage se règle hors de l'app) ;
+  3. **parts figées à l'activation** (modifiables en BROUILLON seulement) ;
+  4. **paiement partiel = cotisation en retard** : l'app ne sait pas quelle part est payée ; la cotisation due est `montant` × parts, une déclaration d'un autre montant est refusée (`AMOUNT_MISMATCH`, comme le montant fixe actuel) et la cotisation reste due.
+- **Retrait d'un membre en cours de rotative** (règle générale, avec ou sans parts) :
+  - **n'a pas encore reçu de jackpot** : le gestionnaire choisit le remboursement de ses cotisations validées : **à la fin de la tontine** ou **sans attendre** ; l'app enregistre le montant dû, le mode choisi, puis la date de remboursement déclarée par le gestionnaire (suivi uniquement : le remboursement se fait hors de l'app) ;
+  - **a déjà reçu un jackpot** : **litige, géré hors de l'app** (l'app passe le membre SORTI et affiche ses échéances restantes, sans autre action) ;
+  - endpoint : `DELETE /membres/{membreId}` (ou `PATCH …/statut` SORTI) accepte `remboursement: FIN_DE_TONTINE | IMMEDIAT` quand le membre n'a reçu aucun jackpot ; `PUT /membres/{membreId}/remboursement` enregistre le remboursement effectué ; notifications au membre.
+- **Décisions complémentaires (2026-11-13)** :
+  - **retrait réservé au gestionnaire** : une tontine en cours ne propose **jamais** au membre de se retirer lui-même (sécurité) ; seul le gestionnaire (ou le SUPER_ADMIN) passe un membre SORTI. *Déjà le cas dans le code : à conserver.*
+  - **plusieurs gagnants par tour** : le gestionnaire fixe `nombreGagnants` dans les réglages de création (existe déjà, défaut 1, modifiable en BROUILLON) ; l'app impose des limites cohérentes (voir point 8) ; avec les parts : nombre de tours = parts ÷ gagnants, et un membre n'est jamais deux fois gagnant d'un même tour ;
+  - **parts en tontine groupée** (B34) : **oui, si le gestionnaire l'a configuré** (`partsMaxParMembre` > 1) : un membre à 2 parts achète 2 produits, cotise 2 × le montant et reçoit 2 produits → B35 passe **avant** B34 ;
+  - **parts non servies d'un membre sorti** : **au choix du gestionnaire**, au moment du retrait : (a) un nouveau membre les reprend, (b) le gestionnaire les reprend, (c) le nombre de tours diminue (jackpots suivants recalculés) ; l'app montre l'effet de chaque choix avant validation ;
+  - **reprise par un nouveau membre** (et plus largement **adhésion à une rotative en cours**) : par défaut, le nouveau membre **paie les cotisations des échéances déjà passées** pour suivre le flux (rattrapage, régularisation B33) ; le gestionnaire peut choisir de ne pas l'exiger ;
+  - **remboursement** = cotisations **validées par le gestionnaire** ; si le gestionnaire a configuré une **pénalité d'abandon** (nouveau type de commission `PENALITE_ABANDON`, en **montant fixe ou en pourcentage** des cotisations remboursées, au choix du gestionnaire), elle est déduite et lui revient ;
+  - **limites du nombre de gagnants** : `1 ≤ nombreGagnants ≤ parts ÷ 2` (au moins 2 tours) ; si les parts ne se divisent pas exactement (ex. 10 parts, 3 gagnants), le **dernier tour a moins de gagnants** (comportement actuel conservé), affiché par la simulation.
+- **Codes d'erreur** (à nommer à l'implémentation) : parts au-delà de `partsMaxParMembre`, activation sans toutes les parts ou sous `membresMinimum`, `nombreGagnants` hors limites.
+- **Dépendances** : B32/B33 (échéances, régularisation, remise) ; **avant B34**.
