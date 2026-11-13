@@ -33,9 +33,22 @@ public final class CalendrierTours {
    */
   public static List<PeriodeTour> generer(
       Rythme rythme, LocalDate dateDebut, int nombreTours, LocalDate dateLimite) {
+    return generer(rythme, dateDebut, nombreTours, dateLimite, null);
+  }
+
+  /**
+   * Variante qui poursuit un calendrier existant : {@code echeancePrecedente} = jour d'échéance du
+   * dernier tour déjà commencé (null = premier tour de la tontine).
+   */
+  public static List<PeriodeTour> generer(
+      Rythme rythme,
+      LocalDate dateDebut,
+      int nombreTours,
+      LocalDate dateLimite,
+      LocalDate echeancePrecedente) {
     List<PeriodeTour> periodes = new ArrayList<>();
     LocalDate debut = dateDebut;
-    LocalDate precedente = null;
+    LocalDate precedente = echeancePrecedente;
     int maximum = Math.min(nombreTours, TOURS_MAXIMUM);
     while (periodes.size() < maximum && (dateLimite == null || !debut.isAfter(dateLimite))) {
       LocalDate fin = rythme.finDuTour(debut, precedente);
@@ -47,6 +60,20 @@ public final class CalendrierTours {
       debut = fin.plusDays(1);
     }
     return periodes;
+  }
+
+  /** Replace un tour (et son échéance) sur une nouvelle période. */
+  public static void deplacer(CycleTontine cycle, PeriodeTour periode) {
+    cycle.setDateDebut(periode.debut());
+    cycle.setDateFin(periode.fin());
+    cycle.setEcheanceAt(periode.echeanceAt());
+    cycle.getEcheances().stream()
+        .filter(e -> e.getDeletedAt() == null)
+        .forEach(
+            e -> {
+              e.setDateDebut(periode.debut());
+              e.setEcheanceAt(periode.echeanceAt());
+            });
   }
 
   /** Nouveau tour (non enregistré) avec son unique échéance (une cotisation par tour). */

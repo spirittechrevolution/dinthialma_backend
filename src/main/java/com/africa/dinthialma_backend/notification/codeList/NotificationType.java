@@ -68,5 +68,11 @@ public enum NotificationType {
    * Tour clôturé en ordre MANUEL ou HYBRIDE : les gagnants sont à désigner (destinataire :
    * gestionnaire).
    */
-  GAGNANTS_A_DESIGNER
+  GAGNANTS_A_DESIGNER,
+
+  /**
+   * Règles de la tontine modifiées en cours (B26 : jour ou heure d'échéance) ; s'appliquent aux
+   * tours pas encore commencés (destinataires : membres actifs).
+   */
+  REGLES_MODIFIEES
 }

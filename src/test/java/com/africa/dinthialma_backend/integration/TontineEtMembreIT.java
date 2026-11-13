@@ -78,6 +78,29 @@ class TontineEtMembreIT extends AbstractIntegrationTest {
     var nonModifiable = api.put("/v1/tontines/" + tid, g.jeton(), Map.of("rythmeIntervalle", 2));
     assertThat(nonModifiable.code()).isEqualTo("RYTHME_NON_MODIFIABLE");
 
+    // lot 2 : jour et heure modifiés en cours -> seul le tour à venir bouge, membres prévenus
+    JsonNode modifiee =
+        api.patch(
+                "/v1/tontines/" + tid + "/echeance",
+                g.jeton(),
+                Map.of("jourEcheance", "SAMEDI", "heureEcheance", "19:00"))
+            .data();
+    assertThat(modifiee.path("jourEcheance").asText()).isEqualTo("SAMEDI");
+    JsonNode replanifies =
+        api.get("/v1/tontines/" + tid + "/cycles", g.jeton()).data().path("content");
+    assertThat(replanifies.get(0).path("echeanceAt").asText()).isEqualTo(dimanche + "T20:00:00Z");
+    assertThat(replanifies.get(1).path("echeanceAt").asText())
+        .isEqualTo(dimanche.plusDays(6) + "T19:00:00Z");
+    JsonNode notifications = api.get("/v1/notifications", m.jeton()).data().path("content");
+    assertThat(notifications.findValuesAsText("type")).contains("REGLES_MODIFIEES");
+    assertThat(
+            api.patch(
+                    "/v1/tontines/" + tid + "/echeance",
+                    m.jeton(),
+                    Map.of("heureEcheance", "18:00"))
+                .statut())
+        .isEqualTo(403);
+
     Map<String, Object> invalide = new HashMap<>(rythme);
     invalide.put("rythmeUnite", "JOUR");
     var refus = api.post("/v1/tontines", g.jeton(), corpsTontine("Invalide", invalide));

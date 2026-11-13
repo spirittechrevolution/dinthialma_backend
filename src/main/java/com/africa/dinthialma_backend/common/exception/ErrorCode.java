@@ -140,7 +140,9 @@ public enum ErrorCode {
   /** Heure d'échéance hors format {@code HH:mm}. */
   HEURE_ECHEANCE_INVALIDE,
   /** Rythme (intervalle, unité) modifiable seulement en BROUILLON. */
-  RYTHME_NON_MODIFIABLE;
+  RYTHME_NON_MODIFIABLE,
+  /** Échéance et rappels non modifiables : tontine TERMINEE. */
+  ECHEANCE_NON_MODIFIABLE;
 
   /** Code générique correspondant à un statut HTTP (repli quand aucun code métier n'est fourni). */
   public static ErrorCode fromStatus(HttpStatusCode status) {

@@ -273,7 +273,9 @@ public record Rythme(
     if (jourEcheance == null) {
       return ajouter(debut, intervalle).minusDays(1);
     }
-    if (echeancePrecedente != null) {
+    // Échéance précédente sur un autre jour (jour d'échéance modifié, date de fin choisie à la
+    // main) : on repart de la prochaine occurrence du jour, sans allonger le tour.
+    if (echeancePrecedente != null && estUneOccurrence(echeancePrecedente)) {
       LocalDate suivante = suivante(echeancePrecedente);
       if (!suivante.isBefore(debut)) {
         return suivante;
@@ -308,6 +310,13 @@ public record Rythme(
     }
     LocalDate ceMois = jourDuMois(YearMonth.from(date));
     return ceMois.isAfter(date) ? ceMois : jourDuMois(YearMonth.from(date).plusMonths(1));
+  }
+
+  private boolean estUneOccurrence(LocalDate date) {
+    if (unite == UniteRythme.SEMAINE) {
+      return date.getDayOfWeek() == jourSemaine();
+    }
+    return date.equals(jourDuMois(YearMonth.from(date)));
   }
 
   private DayOfWeek jourSemaine() {

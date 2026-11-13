@@ -15,6 +15,7 @@ import com.africa.dinthialma_backend.tontine.codeList.UniteRythme;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
@@ -268,6 +269,52 @@ class RythmeTest {
               CalendrierTours.generer(
                   rythme("JOURNALIERE"), LocalDate.of(2026, 1, 1), Integer.MAX_VALUE, null))
           .hasSize(CalendrierTours.TOURS_MAXIMUM);
+    }
+
+    @Test
+    @DisplayName(
+        "suite d'un calendrier : alignée -> + intervalle ; jour changé -> prochaine occurrence")
+    void suiteDeCalendrier() throws CustomException {
+      Rythme deuxSemainesDimanche = Rythme.lire(2, "SEMAINE", "DIMANCHE", null);
+      LocalDate dimanche = LocalDate.of(2026, 11, 15);
+      assertThat(
+              CalendrierTours.generer(deuxSemainesDimanche, dimanche.plusDays(1), 1, null, dimanche)
+                  .get(0)
+                  .fin())
+          .isEqualTo(LocalDate.of(2026, 11, 29));
+      // échéance précédente un samedi : on ne rallonge pas le tour à 3 semaines
+      LocalDate samedi = LocalDate.of(2026, 11, 14);
+      assertThat(deuxSemainesDimanche.finDuTour(samedi.plusDays(1), samedi))
+          .isEqualTo(LocalDate.of(2026, 11, 22));
+      // mois : précédente le 10 alors que le jour est le 30
+      Rythme le30 = Rythme.lire(1, "MOIS", "30", null);
+      assertThat(le30.finDuTour(LocalDate.of(2026, 11, 11), LocalDate.of(2026, 11, 10)))
+          .isEqualTo(LocalDate.of(2026, 11, 30));
+      assertThat(le30.finDuTour(LocalDate.of(2026, 12, 1), LocalDate.of(2026, 11, 30)))
+          .isEqualTo(LocalDate.of(2026, 12, 30));
+    }
+
+    @Test
+    @DisplayName("tour déplacé : dates et échéance active mises à jour, échéance supprimée ignorée")
+    void deplacer() {
+      CycleTontine cycle =
+          CalendrierTours.tour(
+              Fixtures.tontine(Fixtures.user("G")),
+              1,
+              new PeriodeTour(
+                  JEUDI_12_NOV, JEUDI_12_NOV.plusDays(2), JEUDI_12_NOV.plusDays(2).atTime(23, 59)),
+              CycleStatut.EN_ATTENTE);
+      PeriodeTour nouvelle =
+          new PeriodeTour(
+              JEUDI_12_NOV, JEUDI_12_NOV.plusDays(5), JEUDI_12_NOV.plusDays(5).atTime(8, 0));
+      CalendrierTours.deplacer(cycle, nouvelle);
+      assertThat(cycle.getDateFin()).isEqualTo(nouvelle.fin());
+      assertThat(cycle.getEcheances().get(0).getEcheanceAt()).isEqualTo(nouvelle.echeanceAt());
+
+      cycle.getEcheances().get(0).setDeletedAt(LocalDateTime.now());
+      CalendrierTours.deplacer(
+          cycle, new PeriodeTour(JEUDI_12_NOV, JEUDI_12_NOV, JEUDI_12_NOV.atTime(9, 0)));
+      assertThat(cycle.getEcheances().get(0).getEcheanceAt()).isEqualTo(nouvelle.echeanceAt());
     }
 
     @Test

@@ -48,6 +48,7 @@
 | B31 | Canaux de notification : in-app, push, WhatsApp (+ SMS pour les jackpots) | Toutes les alertes | P1 |
 | B32 | Rythme du jackpot distinct du rythme de cotisation (N cotisations par tour, rotatives) | Créer, Modifier, Réglages, Fiche, Tours, Payer, Encaisser, À valider, Invitation, Accueil, Mes jackpots | P1 (après B26) |
 | B33 | Cotisation séparée de la remise : retards régularisables, options de remise du jackpot, clôture de la tontine | Tours, Remise du jackpot, Payer, Encaisser, À valider, Réglages, Fiche | P1 (avec B32) |
+| B34 | Tontine groupée : achat groupé d'un produit unique, remis à la fin (sans commission) | Créer, Fiche, Membres, Payer, Encaisser, À valider, Mon espace | P1 (après B33) |
 | S01 | Socle : ponctualité d'une cotisation (à temps / en retard / non déclarée), distincte du statut | Récap tour, Je cotise, Amendes | P1 (prérequis B26/B27) |
 | S02 | Socle : montants en francs entiers, partages exacts (aucun franc perdu) | Clôture, Distribution, Caisses | P1 (prérequis B27/B28/B29) |
 
@@ -276,7 +277,7 @@ Aucun développement backend nécessaire pour : inscription / connexion / code s
    3. B29 (caisses) : **prérequis de B27 et B28** (destination des amendes et des frais de prêt) ;
    4. B27 (amendes) ;
    5. B28 (prêts).
-6. **Ajouts du 2026-11-13** : B32 (N cotisations par tour) puis B33 (cotisation séparée de la remise, retards régularisables, options de remise, clôture de la tontine), **après B26 et avant B29/B27** : B27 compte une amende par échéance manquée (B32), B29 reçoit les régularisations en option D (B33).
+6. **Ajouts du 2026-11-13** : B32 (N cotisations par tour) puis B33 (cotisation séparée de la remise, retards régularisables, options de remise, clôture de la tontine), **après B26 et avant B29/B27** : B27 compte une amende par échéance manquée (B32), B29 reçoit les régularisations en option D (B33). Puis B34 (tontine groupée), qui réutilise B26, B32 et B33.
 
 ---
 
@@ -782,3 +783,42 @@ Le gestionnaire choisit une **option par défaut** dans les réglages (`modeRemi
   - le gestionnaire n'a pas remis le tour 1 : les membres paient quand même la 1ʳᵉ échéance du tour 2 ;
   - déclaration en attente à la clôture → validable ensuite ;
   - clôture de la tontine avec un retard en cours → 409 `TONTINE_CLOTURE_A_CONFIRMER`, puis `forcer: true` → `TERMINEE`.
+
+### B34 — Tontine groupée (achat groupé d'un produit)
+- **Écrans** : Créer une tontine (type « Groupée »), Fiche Tontine, Membres, Payer, Encaisser, À valider, Mon espace.
+- **Besoin** : un vendeur (le gestionnaire) réunit des membres qui cotisent selon un rythme (journalier, hebdomadaire, quinzaine, mensuel ou libre, B26) ; **à la fin de la durée prévue, chaque membre reçoit le produit**. Ex. un lot de vêtements à 50 000 F par personne, 10 membres, 5 000 F par semaine → 10 semaines.
+- **Périmètre (2026-11-13)** : collectif + cotisations récurrentes + argent qui circule en cotisations (mobile money) → dans le périmètre. **Hors périmètre** : suivi de créances grossiste → détaillant (relation à deux, crédit commercial), catalogue, stock, livraison. La version « un produit par tour » existe déjà : c'est la ROTATIVE.
+- **Décisions (porteur du projet, 2026-11-13)** :
+  - **un produit unique**, identique pour tous les membres (même prix, même cotisation) ;
+  - **remise à la fin** de la durée prévue ; le gestionnaire peut aussi remettre plus tôt à un membre qui a tout payé ;
+  - la **remise se fait hors de l'app** : l'app l'enregistre mais ne la bloque jamais ; remettre à un membre qui n'a pas tout payé est la décision du gestionnaire (l'app affiche le reste dû) ;
+  - le **vendeur est le gestionnaire** de la tontine ; **aucune commission** (sa marge est dans le prix).
+- **Création** (`tontineType: GROUPEE`) :
+  ```json
+  "produit": { "nom": "Lot de 3 boubous", "description": "Bazin, tailles au choix", "prix": 50000 },
+  "montant": 5000                       // ou "nombreEcheances": 10
+  ```
+  - rythme et échéances : B26 ; un seul tour de N échéances (modèle B32), N = `prix` ÷ `montant` (arrondi au-dessus, dernière échéance = reste) ou `montant` déduit de `nombreEcheances` (`Montants.repartir` : somme exacte) ; la simulation B26 renvoie N, le montant de chaque échéance et la date de fin ;
+  - `ordreBeneficiaire`, `nombreGagnants`, commissions : non applicables (commission → 400 `COMMISSION_NON_APPLICABLE`, y compris `commissions` à la création B30) ;
+  - `produit` obligatoire pour ce type (`PRODUIT_OBLIGATOIRE`) ; prix en francs entiers (S02).
+- **Paiements et retards** : règles B32/B33 (échéance en cours, régularisation d'une échéance passée, ponctualité S01, rappels B26) ; « tout payé » = toutes les échéances validées.
+- **Remise du produit** (suivi uniquement) :
+  - `PUT /v1/tontines/{id}/membres/{membreId}/remise-produit` (créateur, SUPER_ADMIN) : `{ "dateRemise"?, "note"? }` → enregistre la remise (auteur, date) ; réponse avec `resteDu` ; aucune vérification bloquante ;
+  - `DELETE` du même chemin : annule une remise saisie par erreur (motif, tracé) ;
+  - `PUT /v1/tontines/{id}/remise-produit/confirmer` (le membre) : confirme avoir reçu le produit (trace utile en cas de désaccord, qui reste hors plateforme) ;
+  - notifications : `PRODUIT_REMIS` au membre ; `PRODUIT_A_REMETTRE` au gestionnaire quand un membre a tout payé et à la fin de la durée prévue.
+- **Lecture** :
+  - `TontineResponse` et aperçu d'invitation : `produit` (nom, description, prix), `nombreEcheances`, date de fin ;
+  - `GET /membres` : par membre `montantPaye`, `resteDu`, `toutPaye`, `produitRemis` (date), `remiseConfirmee` ; filtre `?produitRemis=true|false` ;
+  - `my-dashboard` : `produitsARemettre` (tout payé, non remis), `produitsRemis`, `resteDuTotal` ;
+  - `/me/summary` : mon reste dû, mes échéances, produit remis ou non.
+- **Fin** : quand tous les produits sont remis, l'app suggère la clôture (B33, `TONTINE_PRETE_A_CLOTURER`).
+- **Migration** : colonnes `tontines.produit_nom`, `produit_description`, `produit_prix` ; `tontine_membres.produit_remis_le`, `produit_remis_par`, `produit_remise_note`, `produit_remise_confirmee_le` ; valeur `GROUPEE` de `TontineType`. Aucun effet sur les tontines existantes.
+- **Dépendances** : B26 (rythme), B32 (échéances d'un tour), B33 (régularisation, clôture). À faire après B33.
+- **Codes d'erreur** : `PRODUIT_OBLIGATOIRE`, `COMMISSION_NON_APPLICABLE`.
+- **Critères d'acceptation** :
+  - produit à 50 000 F, 5 000 F par semaine le dimanche, 10 membres → 10 échéances, fin au 10ᵉ dimanche, collecte prévue 500 000 F ;
+  - produit à 50 000 F, 3 échéances → 16 667 + 16 667 + 16 666 F ;
+  - membre ayant tout payé → `PRODUIT_A_REMETTRE` au gestionnaire ; remise saisie → `PRODUIT_REMIS` au membre, qui peut confirmer ;
+  - remise à un membre avec 10 000 F de reste dû → acceptée, `resteDu` = 10 000 F affiché ;
+  - commission sur une tontine groupée → 400 `COMMISSION_NON_APPLICABLE`.

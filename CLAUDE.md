@@ -84,6 +84,7 @@
 | `/{id}/activer` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 BROUILLON/SUSPENDUE → ACTIVE |
 | `/{id}/suspendre` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 ACTIVE → SUSPENDUE |
 | `/{id}/ordre-beneficiaire` | PATCH | ❌ | ❌ | ✅² | ✅ | 🔒 ROTATIVE BROUILLON/ACTIVE/SUSPENDUE ; effet à la prochaine clôture ; vers ROTATION/ALEATOIRE refusé si un tour attend ses gagnants (409 `DESIGNATION_EN_ATTENTE`) ; membres actifs notifiés (`ORDRE_BENEFICIAIRE_MODIFIE`) |
+| `/{id}/echeance` | PATCH | ❌ | ❌ | ✅² | ✅ | 🔒 jour / heure d'échéance et rappels (B26), tontine non TERMINEE ; tours pas encore commencés replanifiés, tour en cours inchangé ; membres actifs notifiés (`REGLES_MODIFIEES`) |
 
 ### 👥 Membres (`/v1/tontines/{tontineId}/membres`)
 
@@ -275,7 +276,7 @@ src/main/java/com/africa/dinthialma_backend/
 │       ├── interfaces/ CotisationService
 │       └── impl/       CotisationServiceImpl
 ├── notification/   ✅ SMS (LAfricaMobile) + notifications in-app
-│   ├── codeList/       NotificationType (20 valeurs)
+│   ├── codeList/       NotificationType (21 valeurs)
 │   ├── controller/     NotificationController
 │   ├── dto/            NotificationResponse
 │   ├── entity/         UserNotification
@@ -714,7 +715,7 @@ Prochaine version disponible : **V040**
 | Marquer tout lu (bulk `@Modifying`) | ✅ | 🔒 tout auth |
 | `notify()` non-bloquant (try/catch interne, jamais de rollback) | ✅ | INFRA |
 
-#### Mapping événements → `NotificationType` (20 valeurs)
+#### Mapping événements → `NotificationType` (21 valeurs)
 
 | Événement | Type | Destinataire |
 |-----------|------|--------------|
@@ -737,6 +738,7 @@ Prochaine version disponible : **V040**
 | Priorité acceptée ou attribuée | `PRIORITE_JACKPOT_ACCORDEE` | Membre concerné + autres membres actifs |
 | Priorité refusée, ou annulée par le gestionnaire | `PRIORITE_JACKPOT_REFUSEE` | Membre concerné |
 | Ordre des bénéficiaires modifié | `ORDRE_BENEFICIAIRE_MODIFIE` | Membres actifs |
+| Jour / heure d'échéance modifiés en cours (B26) | `REGLES_MODIFIEES` | Membres actifs |
 | Tour clôturé en MANUEL / HYBRIDE avec des éligibles | `GAGNANTS_A_DESIGNER` | Gestionnaire |
 
 ---
@@ -915,7 +917,7 @@ cd docker && docker compose up -d
       → plafond 100 % sur POURCENTAGE_JACKPOT (création, modification, création de tontine)
   B26 Rythme libre, jour et heure d'échéance (lot 1 : modèle, V039, tours + échéances,
       simulation, ouverture manuelle sans dateFin, ponctualité sur echeanceAt)        ✅
-      lot 2 : échéance/rappels modifiables en cours (REGLES_MODIFIEES)                🔲
+      lot 2 : échéance/rappels modifiables en cours (REGLES_MODIFIEES)                ✅
       lot 3 : rappels veille / N h avant + COTISATIONS_MANQUANTES (planifié)          🔲
       lot 4 : exports CSV (rythme lisible, echeanceAt)                                🔲
 ```
@@ -966,6 +968,13 @@ l'ouverture manuelle et la simulation (`GET /v1/tontines/simulation`).
 - **Ponctualité** (S01) : `Ponctualite.finEcheance` = `echeanceAt`, minute d'échéance incluse.
 - **Modification** : rythme (intervalle, unité, `frequence`) en BROUILLON seulement
   (`RYTHME_NON_MODIFIABLE`) ; changement audité sous le champ `rythme` (libellé lisible).
+- **Échéance en cours de tontine** (`PATCH /v1/tontines/{id}/echeance`, `EcheanceService`) : jour,
+  heure et rappels modifiables tant que la tontine n'est pas TERMINEE (`ECHEANCE_NON_MODIFIABLE`).
+  Le tour EN_COURS et les tours terminés ne bougent pas ; les tours EN_ATTENTE sont replanifiés à la
+  suite du dernier tour commencé (événementielle : jusqu'à `dateEcheance`, tours à venir ajoutés ou
+  retirés logiquement). Si l'échéance précédente ne tombe pas sur le nouveau jour, le tour suivant
+  s'arrête à la prochaine occurrence (jamais rallongé). Audit `echeance` ; membres actifs notifiés
+  (`REGLES_MODIFIEES`), sauf en BROUILLON ; un changement de rappels seul n'est pas notifié.
 - **Rappels** : `rappels.veille` (18h00 la veille) et `rappels.heuresAvant` (0–24, défaut 3).
 - **À l'échéance** : le statut ne change pas (EN_RETARD seulement à la clôture, S01).
 - **Codes** : `RYTHME_INVALIDE`, `JOUR_ECHEANCE_INVALIDE`, `HEURE_ECHEANCE_INVALIDE`, `RYTHME_NON_MODIFIABLE`.
