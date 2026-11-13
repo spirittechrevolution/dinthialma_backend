@@ -4,6 +4,7 @@ import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 
 /**
  * Ponctualité d'une cotisation (S01), distincte de son statut : le membre a-t-il payé avant
@@ -40,10 +41,14 @@ public enum Ponctualite {
   }
 
   /**
-   * Premier instant après l'échéance du tour. En attendant l'heure d'échéance de B26 : fin du jour
-   * {@code dateFin} (23h59 incluse).
+   * Premier instant après l'échéance du tour : la minute d'échéance ({@code echeanceAt}, B26) est
+   * incluse en entier (échéance 23:59 → payé à 23:59:59 = à temps). Tour sans échéance enregistrée
+   * : fin du jour {@code dateFin}.
    */
   public static LocalDateTime finEcheance(CycleTontine cycle) {
+    if (cycle.getEcheanceAt() != null) {
+      return cycle.getEcheanceAt().truncatedTo(ChronoUnit.MINUTES).plusMinutes(1);
+    }
     return cycle.getDateFin().plusDays(1).atStartOfDay();
   }
 }

@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 import lombok.Builder;
@@ -29,6 +30,12 @@ public class CycleResponse {
 
   @Schema(description = "Date de fin prévue du cycle", example = "2024-07-31")
   private LocalDate dateFin;
+
+  @Schema(
+      description =
+          "Limite de paiement du tour (B26) : dateFin + heure d'échéance, avec fuseau (Dakar = UTC)",
+      example = "2024-07-31T23:59:00Z")
+  private OffsetDateTime echeanceAt;
 
   @Schema(
       description = "Jackpot brut = somme des cotisations VALIDÉES (calculé à la clôture)",

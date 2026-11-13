@@ -21,6 +21,7 @@ import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
+import com.africa.dinthialma_backend.common.util.Fuseau;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
@@ -30,6 +31,7 @@ import com.africa.dinthialma_backend.jackpot.codeList.StatutPriorite;
 import com.africa.dinthialma_backend.jackpot.repository.PrioriteJackpotRepository;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
+import com.africa.dinthialma_backend.tontine.calendrier.Rythme;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.OrdreBeneficiaire;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
@@ -401,6 +403,10 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         .tontineType(tontine.getTontineType())
         .montant(tontine.getMontant())
         .frequence(tontine.getFrequence())
+        .rythmeIntervalle(tontine.getRythme().intervalle())
+        .rythmeUnite(tontine.getRythme().unite())
+        .jourEcheance(tontine.getRythme().jourEcheance())
+        .heureEcheance(Rythme.formaterHeure(tontine.getRythme().heureEcheance()))
         .dateDebut(tontine.getDateDebut())
         .dateEcheance(evenementielle ? tontine.getDateEcheance() : null)
         .nomEvenement(evenementielle ? tontine.getNomEvenement() : null)
@@ -450,6 +456,7 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         .numeroCycle(cycle.getNumeroCycle())
         .dateDebut(cycle.getDateDebut())
         .dateFin(cycle.getDateFin())
+        .echeanceAt(Fuseau.versOffset(cycle.getEcheanceAt()))
         .beneficiaireNom(
             beneficiaire != null
                 ? beneficiaire.getFirstName() + " " + beneficiaire.getLastName()

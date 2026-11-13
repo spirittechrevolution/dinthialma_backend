@@ -56,11 +56,43 @@ public class CreateTontineRequest {
 
   @Schema(
       description =
-          "Fréquence de cotisation – code de la liste FREQUENCE_TONTINE."
-              + " Exemples : JOURNALIERE, HEBDOMADAIRE, BIMENSUEL, MENSUEL, TRIMESTRIEL.",
+          "Fréquence historique (compatibilité) : JOURNALIERE, HEBDOMADAIRE, BIMENSUEL, MENSUEL,"
+              + " TRIMESTRIEL. Traduite en rythme ; ignorée si rythmeIntervalle / rythmeUnite"
+              + " sont fournis. L'un ou l'autre est obligatoire (sinon 400 RYTHME_INVALIDE).",
       example = "MENSUEL")
-  @NotBlank
   private String frequence;
+
+  // ─── Rythme et échéance (B26) ───────────────────────────────────────────
+
+  @Schema(
+      description =
+          "« Tous les N … » (B26) : JOUR 1 à 90, SEMAINE 1 à 26, MOIS 1 à 12. À fournir avec"
+              + " rythmeUnite ; prime sur frequence.",
+      example = "3")
+  private Integer rythmeIntervalle;
+
+  @Schema(
+      description = "Unité du rythme (B26)",
+      allowableValues = {"JOUR", "SEMAINE", "MOIS"},
+      example = "JOUR")
+  private String rythmeUnite;
+
+  @Schema(
+      description =
+          "Jour d'échéance facultatif : SEMAINE → LUNDI…DIMANCHE ; MOIS → \"1\"…\"31\" ou"
+              + " \"DERNIER\" (29–31 absents du mois → dernier jour) ; JOUR → aucun. 1ʳᵉ échéance"
+              + " = prochaine occurrence strictement après dateDebut.",
+      example = "DIMANCHE")
+  private String jourEcheance;
+
+  @Schema(
+      description = "Heure limite de paiement HH:mm, heure de Dakar (défaut 23:59)",
+      example = "23:59")
+  private String heureEcheance;
+
+  @Schema(description = "Rappels avant échéance (défaut : veille 18h00 + 3 h avant)")
+  @Valid
+  private RappelsEcheance rappels;
 
   @Schema(
       description =

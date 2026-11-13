@@ -1,6 +1,7 @@
 package com.africa.dinthialma_backend.tontine.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -38,9 +39,38 @@ public class UpdateTontineRequest {
   private BigDecimal montant;
 
   @Schema(
-      description = "Nouvelle fréquence (code FREQUENCE_TONTINE, null = inchangée)",
+      description =
+          "Nouvelle fréquence historique (null = inchangée), traduite en rythme ; ignorée si"
+              + " rythmeIntervalle ou rythmeUnite est fourni",
       example = "HEBDOMADAIRE")
   private String frequence;
+
+  // ─── Rythme et échéance (B26) ───────────────────────────────────────────
+
+  @Schema(
+      description =
+          "Nouvel intervalle du rythme (null = inchangé). Rythme modifiable seulement en"
+              + " BROUILLON (sinon 400 RYTHME_NON_MODIFIABLE).",
+      example = "3")
+  private Integer rythmeIntervalle;
+
+  @Schema(
+      description = "Nouvelle unité du rythme (null = inchangée)",
+      allowableValues = {"JOUR", "SEMAINE", "MOIS"},
+      example = "JOUR")
+  private String rythmeUnite;
+
+  @Schema(
+      description = "Nouveau jour d'échéance (null = inchangé, \"\" = aucun jour imposé)",
+      example = "DIMANCHE")
+  private String jourEcheance;
+
+  @Schema(description = "Nouvelle heure d'échéance HH:mm (null = inchangée)", example = "20:00")
+  private String heureEcheance;
+
+  @Schema(description = "Rappels avant échéance (champ absent = inchangé)")
+  @Valid
+  private RappelsEcheance rappels;
 
   @Schema(
       description =

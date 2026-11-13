@@ -9,6 +9,7 @@ import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.common.util.CsvExport;
 import com.africa.dinthialma_backend.common.util.CsvWriter;
 import com.africa.dinthialma_backend.common.util.FichierExport;
+import com.africa.dinthialma_backend.common.util.Fuseau;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.codeList.Ponctualite;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
@@ -32,6 +33,7 @@ import com.africa.dinthialma_backend.me.service.interfaces.MeService;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
+import com.africa.dinthialma_backend.tontine.calendrier.Rythme;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
@@ -221,6 +223,10 @@ public class MeServiceImpl implements MeService {
         .tontineType(t.getTontineType())
         .statut(t.getStatut())
         .frequence(t.getFrequence())
+        .rythmeIntervalle(t.getRythme().intervalle())
+        .rythmeUnite(t.getRythme().unite())
+        .jourEcheance(t.getRythme().jourEcheance())
+        .heureEcheance(Rythme.formaterHeure(t.getRythme().heureEcheance()))
         .nomEvenement(t.getNomEvenement())
         .dateEcheance(t.getDateEcheance())
         .monMembreId(m.getId())
@@ -249,6 +255,7 @@ public class MeServiceImpl implements MeService {
         .numeroCycle(cycle.getNumeroCycle())
         .dateDebut(cycle.getDateDebut())
         .dateFin(cycle.getDateFin())
+        .echeanceAt(Fuseau.versOffset(cycle.getEcheanceAt()))
         .build();
   }
 

@@ -34,11 +34,13 @@ import com.africa.dinthialma_backend.notification.service.SchedulerService;
 import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.support.Fixtures;
+import com.africa.dinthialma_backend.tontine.calendrier.Rythme;
 import com.africa.dinthialma_backend.tontine.codeList.CommissionType;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
+import com.africa.dinthialma_backend.tontine.codeList.UniteRythme;
 import com.africa.dinthialma_backend.tontine.dto.CycleResponse;
 import com.africa.dinthialma_backend.tontine.dto.OpenCycleRequest;
 import com.africa.dinthialma_backend.tontine.dto.SelectionnerBeneficiaireRequest;
@@ -57,6 +59,9 @@ import com.africa.dinthialma_backend.tontine.service.impl.CycleServiceImpl;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -258,6 +263,31 @@ class CycleServiceImplTest {
                   .openCycle(kc, tontine.getId(), req(LocalDate.now(), LocalDate.now()))
                   .getNumeroCycle())
           .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("sans dateFin (B26) : calculée selon le rythme, échéance créée avec le tour")
+    void dateFinCalculee() throws Exception {
+      membresActifs(0);
+      tontine.appliquerRythme(new Rythme(1, UniteRythme.SEMAINE, "DIMANCHE", LocalTime.of(20, 0)));
+      when(cycleRepository.findByTontine_IdAndStatutAndDeletedAtIsNull(
+              tontine.getId(), CycleStatut.EN_COURS))
+          .thenReturn(Optional.empty());
+      CycleTontine precedent = Fixtures.cycle(tontine, 1, CycleStatut.TERMINE);
+      precedent.setDateFin(LocalDate.of(2026, 11, 15));
+      when(cycleRepository.findTopByTontine_IdAndDeletedAtIsNullOrderByNumeroCycleDesc(
+              tontine.getId()))
+          .thenReturn(Optional.of(precedent));
+      ArgumentCaptor<CycleTontine> enregistre = ArgumentCaptor.forClass(CycleTontine.class);
+
+      CycleResponse r =
+          service.openCycle(kc, tontine.getId(), req(LocalDate.of(2026, 11, 16), null));
+
+      assertThat(r.getDateFin()).isEqualTo(LocalDate.of(2026, 11, 22));
+      assertThat(r.getEcheanceAt())
+          .isEqualTo(OffsetDateTime.of(2026, 11, 22, 20, 0, 0, 0, ZoneOffset.UTC));
+      verify(cycleRepository).save(enregistre.capture());
+      assertThat(enregistre.getValue().getEcheances()).hasSize(1);
     }
 
     @Test

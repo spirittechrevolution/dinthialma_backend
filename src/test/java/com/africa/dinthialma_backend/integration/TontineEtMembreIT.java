@@ -8,7 +8,9 @@ import com.africa.dinthialma_backend.support.TestDataFactory.Utilisateur;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.temporal.TemporalAdjusters;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +30,71 @@ class TontineEtMembreIT extends AbstractIntegrationTest {
     return StreamSupport.stream(page.path("content").spliterator(), false)
         .map(x -> x.path("nom").asText())
         .toList();
+  }
+
+  @Test
+  @DisplayName("rythme libre (B26) : création, simulation, échéances des tours, refus")
+  void rythmeEtEcheances() {
+    Utilisateur g = donnees.inscrire();
+    Utilisateur m = donnees.inscrire();
+    LocalDate mercredi = LocalDate.now().with(TemporalAdjusters.next(DayOfWeek.WEDNESDAY));
+    LocalDate dimanche = mercredi.plusDays(4);
+    Map<String, Object> rythme = new HashMap<>();
+    rythme.put("frequence", null);
+    rythme.put("rythmeIntervalle", 1);
+    rythme.put("rythmeUnite", "SEMAINE");
+    rythme.put("jourEcheance", "DIMANCHE");
+    rythme.put("heureEcheance", "20:00");
+    rythme.put("rappels", Map.of("veille", false, "heuresAvant", 2));
+    rythme.put("modeCycle", "AUTOMATIQUE");
+    rythme.put("dateDebut", mercredi.toString());
+
+    JsonNode tontine = donnees.creerTontine(g.jeton(), "Hebdo", rythme);
+    assertThat(tontine.path("frequence").asText()).isEqualTo("HEBDOMADAIRE");
+    assertThat(tontine.path("jourEcheance").asText()).isEqualTo("DIMANCHE");
+    assertThat(tontine.path("heureEcheance").asText()).isEqualTo("20:00");
+    assertThat(tontine.path("rappels").path("heuresAvant").asInt()).isEqualTo(2);
+    String tid = tontine.path("id").asText();
+
+    JsonNode simulation =
+        api.get(
+                "/v1/tontines/simulation?rythmeIntervalle=1&rythmeUnite=SEMAINE"
+                    + "&jourEcheance=DIMANCHE&heureEcheance=20:00&nombreMembres=2&dateDebut="
+                    + mercredi,
+                g.jeton())
+            .data();
+    assertThat(simulation.path("nombreTours").asInt()).isEqualTo(2);
+    assertThat(simulation.path("premiereEcheance").asText()).isEqualTo(dimanche + "T20:00:00Z");
+
+    donnees.ajouterMembre(g.jeton(), tid, m.phone());
+    donnees.ajouterMembre(g.jeton(), tid, donnees.inscrire().phone());
+    donnees.activer(g.jeton(), tid);
+    JsonNode tours = api.get("/v1/tontines/" + tid + "/cycles", g.jeton()).data().path("content");
+    assertThat(tours).hasSize(2);
+    assertThat(tours.get(0).path("echeanceAt").asText()).isEqualTo(dimanche + "T20:00:00Z");
+    assertThat(tours.get(1).path("echeanceAt").asText())
+        .isEqualTo(dimanche.plusWeeks(1) + "T20:00:00Z");
+
+    var nonModifiable = api.put("/v1/tontines/" + tid, g.jeton(), Map.of("rythmeIntervalle", 2));
+    assertThat(nonModifiable.code()).isEqualTo("RYTHME_NON_MODIFIABLE");
+
+    Map<String, Object> invalide = new HashMap<>(rythme);
+    invalide.put("rythmeUnite", "JOUR");
+    var refus = api.post("/v1/tontines", g.jeton(), corpsTontine("Invalide", invalide));
+    assertThat(refus.statut()).isEqualTo(400);
+    assertThat(refus.code()).isEqualTo("JOUR_ECHEANCE_INVALIDE");
+  }
+
+  /** Corps complet d'une tontine rotative (les surcharges priment). */
+  private static Map<String, Object> corpsTontine(String nom, Map<String, Object> surcharges) {
+    Map<String, Object> corps = new HashMap<>();
+    corps.put("tontineType", "ROTATIVE");
+    corps.put("nom", nom);
+    corps.put("montant", 1000);
+    corps.put("ordreBeneficiaire", "ROTATION");
+    corps.put("nombreMembres", 5);
+    corps.putAll(surcharges);
+    return corps;
   }
 
   @Test

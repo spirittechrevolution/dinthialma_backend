@@ -25,6 +25,8 @@ import com.africa.dinthialma_backend.notification.dto.NotificationLiens;
 import com.africa.dinthialma_backend.notification.service.SchedulerService;
 import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
+import com.africa.dinthialma_backend.tontine.calendrier.CalendrierTours;
+import com.africa.dinthialma_backend.tontine.calendrier.Rythme;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.OrdreBeneficiaire;
@@ -57,6 +59,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -149,7 +152,7 @@ public class CycleServiceImpl implements CycleService {
     if (tontine.getStatut() != TontineStatut.ACTIVE) {
       throw new BadRequestException("La tontine doit être ACTIVE pour ouvrir un cycle");
     }
-    if (request.getDateFin().isBefore(request.getDateDebut())) {
+    if (request.getDateFin() != null && request.getDateFin().isBefore(request.getDateDebut())) {
       throw new BadRequestException("La date de fin doit être postérieure à la date de début");
     }
 
@@ -161,20 +164,24 @@ public class CycleServiceImpl implements CycleService {
           ErrorCode.CYCLE_ALREADY_IN_PROGRESS);
     }
 
-    int nextNum =
-        cycleRepository
-            .findTopByTontine_IdAndDeletedAtIsNullOrderByNumeroCycleDesc(tontineId)
-            .map(c -> c.getNumeroCycle() + 1)
-            .orElse(1);
+    Optional<CycleTontine> precedent =
+        cycleRepository.findTopByTontine_IdAndDeletedAtIsNullOrderByNumeroCycleDesc(tontineId);
+    int nextNum = precedent.map(c -> c.getNumeroCycle() + 1).orElse(1);
 
+    // Sans date de fin : celle du rythme (B26), comme pour les tours générés
+    Rythme rythme = tontine.getRythme();
+    LocalDate dateFin =
+        request.getDateFin() != null
+            ? request.getDateFin()
+            : rythme.finDuTour(
+                request.getDateDebut(), precedent.map(CycleTontine::getDateFin).orElse(null));
     CycleTontine cycle =
-        CycleTontine.builder()
-            .tontine(tontine)
-            .numeroCycle(nextNum)
-            .dateDebut(request.getDateDebut())
-            .dateFin(request.getDateFin())
-            .statut(CycleStatut.EN_COURS)
-            .build();
+        CalendrierTours.tour(
+            tontine,
+            nextNum,
+            new CalendrierTours.PeriodeTour(
+                request.getDateDebut(), dateFin, rythme.echeanceAt(dateFin)),
+            CycleStatut.EN_COURS);
 
     CycleTontine saved = cycleRepository.save(cycle);
     auditService.logCreate(caller, "cycles_tontine", saved.getId());

@@ -19,6 +19,8 @@ import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.notification.codeList.NotificationType;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
+import com.africa.dinthialma_backend.tontine.calendrier.CalendrierTours;
+import com.africa.dinthialma_backend.tontine.calendrier.Rythme;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.OrdreBeneficiaire;
@@ -27,9 +29,9 @@ import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.dto.ChangerOrdreBeneficiaireRequest;
 import com.africa.dinthialma_backend.tontine.dto.CreateTontineRequest;
+import com.africa.dinthialma_backend.tontine.dto.RappelsEcheance;
 import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.dto.UpdateTontineRequest;
-import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.mapper.TontineMapper;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
@@ -74,6 +76,9 @@ public class TontineServiceImpl implements TontineService {
   private final NotificationService notificationService;
   private final CommissionService commissionService;
 
+  /** Rappel par défaut N heures avant l'échéance (B26). */
+  private static final int RAPPEL_HEURES_AVANT_PAR_DEFAUT = 3;
+
   // ─── Création ────────────────────────────────────────────────────────────
 
   @Override
@@ -85,9 +90,17 @@ public class TontineServiceImpl implements TontineService {
         request.getTontineType() != null ? request.getTontineType() : TontineType.ROTATIVE;
 
     validateCreateRequest(request, type);
+    Rythme rythme =
+        Rythme.resoudre(
+            request.getRythmeIntervalle(),
+            request.getRythmeUnite(),
+            request.getJourEcheance(),
+            request.getHeureEcheance(),
+            request.getFrequence());
     commissionService.verifierCommissionsInitiales(request.getCommissions());
 
     BigDecimal montantEffectif = resolveMontant(request, type);
+    RappelsEcheance rappels = request.getRappels();
 
     Tontine tontine =
         Tontine.builder()
@@ -95,7 +108,16 @@ public class TontineServiceImpl implements TontineService {
             .nom(request.getNom().trim())
             .description(request.getDescription())
             .montant(montantEffectif)
-            .frequence(request.getFrequence())
+            .frequence(rythme.frequence())
+            .rythmeIntervalle(rythme.intervalle())
+            .rythmeUnite(rythme.unite())
+            .jourEcheance(rythme.jourEcheance())
+            .heureEcheance(rythme.heureEcheance())
+            .rappelVeille(rappels == null || rappels.getVeille() == null || rappels.getVeille())
+            .rappelHeuresAvant(
+                rappels == null || rappels.getHeuresAvant() == null
+                    ? RAPPEL_HEURES_AVANT_PAR_DEFAUT
+                    : rappels.getHeuresAvant())
             .ordreBeneficiaire(
                 type == TontineType.EVENEMENTIELLE ? null : request.getOrdreBeneficiaire())
             .modeCycle(
@@ -188,9 +210,17 @@ public class TontineServiceImpl implements TontineService {
     assertIsCreatorOrSuperAdmin(caller, tontine);
 
     if (tontine.getStatut() != TontineStatut.BROUILLON) {
+      if (request.getRythmeIntervalle() != null
+          || request.getRythmeUnite() != null
+          || request.getFrequence() != null) {
+        throw new BadRequestException(
+            "Le rythme ne peut être modifié qu'en statut BROUILLON",
+            ErrorCode.RYTHME_NON_MODIFIABLE);
+      }
       throw new BadRequestException("La tontine ne peut être modifiée qu'en statut BROUILLON");
     }
 
+    appliquerRythme(caller, tontine, request);
     appliquerChampsCommuns(caller, tontine, request);
     if (tontine.getTontineType() == TontineType.EVENEMENTIELLE) {
       appliquerChampsEvenementielle(caller, tontine, request);
@@ -198,6 +228,43 @@ public class TontineServiceImpl implements TontineService {
 
     Tontine saved = tontineRepository.save(tontine);
     return toResponse(saved, caller);
+  }
+
+  /** Rythme, jour et heure d'échéance, rappels (B26) : chaque changement est audité. */
+  private void appliquerRythme(User caller, Tontine tontine, UpdateTontineRequest request)
+      throws CustomException {
+    Rythme actuel = tontine.getRythme();
+    Rythme nouveau =
+        actuel.modifier(
+            request.getRythmeIntervalle(),
+            request.getRythmeUnite(),
+            request.getJourEcheance(),
+            request.getHeureEcheance(),
+            request.getFrequence());
+    if (!nouveau.equals(actuel)) {
+      auditService.log(
+          caller, "tontines", tontine.getId(), "rythme", actuel.libelle(), nouveau.libelle());
+      tontine.appliquerRythme(nouveau);
+    }
+    RappelsEcheance rappels = request.getRappels();
+    if (rappels != null) {
+      modifier(
+          caller,
+          tontine,
+          "rappelVeille",
+          tontine.isRappelVeille(),
+          rappels.getVeille(),
+          String::valueOf,
+          tontine::setRappelVeille);
+      modifier(
+          caller,
+          tontine,
+          "rappelHeuresAvant",
+          tontine.getRappelHeuresAvant(),
+          rappels.getHeuresAvant(),
+          String::valueOf,
+          tontine::setRappelHeuresAvant);
+    }
   }
 
   private void appliquerChampsCommuns(User caller, Tontine tontine, UpdateTontineRequest request)
@@ -220,14 +287,6 @@ public class TontineServiceImpl implements TontineService {
         request.getMontant(),
         BigDecimal::toPlainString,
         tontine::setMontant);
-    modifier(
-        caller,
-        tontine,
-        "frequence",
-        tontine.getFrequence(),
-        request.getFrequence(),
-        String::valueOf,
-        tontine::setFrequence);
     if (request.getOrdreBeneficiaire() != null) {
       verifierOrdreBeneficiaire(request.getOrdreBeneficiaire());
     }
@@ -474,23 +533,9 @@ public class TontineServiceImpl implements TontineService {
 
     int n = tontine.getNombreGagnants();
     int nombreCycles = (int) Math.ceil((double) membres.size() / n);
-    LocalDate current = tontine.getDateDebut();
-
-    for (int i = 0; i < nombreCycles; i++) {
-      LocalDate fin = calculateEndDate(current, tontine.getFrequence());
-
-      CycleTontine cycle =
-          CycleTontine.builder()
-              .tontine(tontine)
-              .numeroCycle(i + 1)
-              .dateDebut(current)
-              .dateFin(fin)
-              .statut(i == 0 ? CycleStatut.EN_COURS : CycleStatut.EN_ATTENTE)
-              .build();
-
-      cycleRepository.save(cycle);
-      current = fin.plusDays(1);
-    }
+    enregistrerTours(
+        tontine,
+        CalendrierTours.generer(tontine.getRythme(), tontine.getDateDebut(), nombreCycles, null));
 
     log.info(
         "Cycles ROTATIVE générés – tontineId={} membres={} gagnants/cycle={} cycles={}",
@@ -509,43 +554,29 @@ public class TontineServiceImpl implements TontineService {
    * sur {@code dateEcheance}. La fréquence est utilisée pour planifier les rappels WhatsApp.
    */
   private void generateEvenementielleSubCycles(Tontine tontine) {
-    LocalDate current = tontine.getDateDebut();
     LocalDate echeance = tontine.getDateEcheance();
-    int cycleNum = 1;
-
-    while (!current.isAfter(echeance)) {
-      LocalDate normalEnd = calculateEndDate(current, tontine.getFrequence());
-      LocalDate actualEnd = normalEnd.isAfter(echeance) ? echeance : normalEnd;
-
-      CycleTontine cycle =
-          CycleTontine.builder()
-              .tontine(tontine)
-              .numeroCycle(cycleNum)
-              .dateDebut(current)
-              .dateFin(actualEnd)
-              .statut(cycleNum == 1 ? CycleStatut.EN_COURS : CycleStatut.EN_ATTENTE)
-              .build();
-
-      cycleRepository.save(cycle);
-      current = actualEnd.plusDays(1);
-      cycleNum++;
-    }
+    List<CalendrierTours.PeriodeTour> periodes =
+        CalendrierTours.generer(
+            tontine.getRythme(), tontine.getDateDebut(), Integer.MAX_VALUE, echeance);
+    enregistrerTours(tontine, periodes);
 
     log.info(
         "Sous-cycles EVENEMENTIELLE générés – tontineId={} nbCycles={} echéance={}",
         tontine.getId(),
-        cycleNum - 1,
+        periodes.size(),
         echeance);
   }
 
-  private LocalDate calculateEndDate(LocalDate start, String frequence) {
-    return switch (frequence.toUpperCase()) {
-      case "JOURNALIERE" -> start;
-      case "HEBDOMADAIRE" -> start.plusDays(6);
-      case "BIMENSUEL" -> start.plusDays(13);
-      case "TRIMESTRIEL" -> start.plusMonths(3).minusDays(1);
-      default -> start.plusMonths(1).minusDays(1); // MENSUEL par défaut
-    };
+  /** Enregistre les tours (avec leur échéance) : le premier EN_COURS, les suivants EN_ATTENTE. */
+  private void enregistrerTours(Tontine tontine, List<CalendrierTours.PeriodeTour> periodes) {
+    for (int i = 0; i < periodes.size(); i++) {
+      cycleRepository.save(
+          CalendrierTours.tour(
+              tontine,
+              i + 1,
+              periodes.get(i),
+              i == 0 ? CycleStatut.EN_COURS : CycleStatut.EN_ATTENTE));
+    }
   }
 
   // ─── Validation création ─────────────────────────────────────────────────

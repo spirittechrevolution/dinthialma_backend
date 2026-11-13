@@ -55,6 +55,17 @@ class PonctualiteTest {
   }
 
   @Test
+  @DisplayName("échéance à 20h00 (B26) : 20h00:59 -> A_TEMPS ; 20h01 -> EN_RETARD")
+  void heureEcheance() {
+    cycle.setEcheanceAt(LocalDate.of(2026, 11, 22).atTime(20, 0));
+    Cotisation limite = declaree(CotisationStatut.VALIDE, 22, 20, 0);
+    limite.setCreatedAt(limite.getCreatedAt().plusSeconds(59));
+    assertThat(Ponctualite.de(limite)).isEqualTo(Ponctualite.A_TEMPS);
+    assertThat(Ponctualite.de(declaree(CotisationStatut.VALIDE, 22, 20, 1)))
+        .isEqualTo(Ponctualite.EN_RETARD);
+  }
+
+  @Test
   @DisplayName("datePaiement (main propre) prime sur la date de saisie")
   void datePaiement() {
     Cotisation saisieTard = declaree(CotisationStatut.VALIDE, 25, 9, 0);

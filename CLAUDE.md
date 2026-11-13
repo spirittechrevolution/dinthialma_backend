@@ -75,7 +75,8 @@
 
 | Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
 |----------|---------|------|--------|-------|-------------|-------|
-| `/` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 tout auth peut créer → devient ADMIN ; `commissions` optionnelles enregistrées dans la même transaction (B30 : une refusée = rien créé) |
+| `/` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 tout auth peut créer → devient ADMIN ; `commissions` optionnelles enregistrées dans la même transaction (B30 : une refusée = rien créé) ; rythme `rythmeIntervalle`/`rythmeUnite`/`jourEcheance`/`heureEcheance`/`rappels` ou `frequence` (B26) |
+| `/simulation` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 calendrier simulé (B26), sans effet en base : `nombreTours`, `premiereEcheance`, `derniereEcheance`, `echeances` (400 max) ; mêmes paramètres que la création |
 | `/` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 SUPER_ADMIN voit tout ; autres voient les leurs ; `?role=GERE\|COTISE` ; chaque tontine porte `monRole`, `monMembreId`, `monStatutMembre` |
 | `/{id}` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 ¹membre de la tontine ²créateur |
 | `/{id}` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 BROUILLON seulement |
@@ -114,7 +115,7 @@
 | `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
 | `/{cycleId}` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
 | `/beneficiaires` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 historique des cycles TERMINE avec gagnants (pageable, tri numeroCycle ASC) |
-| `/` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 mode MANUEL uniquement |
+| `/` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 mode MANUEL uniquement ; `dateFin` facultative (absente = calculée selon le rythme, B26) |
 | `/{cycleId}/cloturer` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 EN_COURS → TERMINE, calcul jackpot + commissions |
 | `/{cycleId}/beneficiaire` | PATCH | ❌ | ❌ | ✅² | ✅ | 🔒 ordreBeneficiaire MANUEL ou HYBRIDE + cycle TERMINE sans gagnant ; `membreIds` vide = tirage aléatoire de `nombreGagnants` (priorités accordées servies d'abord) ; refuse doublons, membres non ACTIF et membres `aRecuJackpot` |
 
@@ -564,8 +565,9 @@ obligatoire** : sans Docker démarré, le build échoue (les `*IT` ne sont jamai
 | V036 | `seed_methode_paiement_pi_spi.sql` | Seed METHODE_PAIEMENT `PI_SPI` (PI-SPI, paiement instantané BCEAO) |
 | V037 | `create_priorites_jackpot.sql` | table `priorites_jackpot` (statut, origine, motif, cycle servi) ; 1 priorité active (EN_ATTENTE/ACCEPTEE) max par membership |
 | V038 | `add_date_paiement_to_cotisations.sql` | `cotisations.date_paiement` (paiement remis en main propre, compte pour la ponctualité) |
+| V039 | `add_rythme_et_echeances.sql` | B26 : `tontines.rythme_intervalle`, `rythme_unite`, `jour_echeance`, `heure_echeance`, `rappel_veille`, `rappel_heures_avant` (reprise depuis `frequence`) ; `cycles_tontine.echeance_at` ; table `echeances_cycle` (1 par tour existant) ; seed FREQUENCE_TONTINE `PERSONNALISEE` |
 
-Prochaine version disponible : **V039**
+Prochaine version disponible : **V040**
 
 ---
 
@@ -610,7 +612,8 @@ Prochaine version disponible : **V039**
 | Activer tontine | ✅ | 🔒 créateur + SUPER_ADMIN |
 | Suspendre tontine | ✅ | 🔒 créateur + SUPER_ADMIN |
 | Génération auto cycles (ROTATIVE AUTOMATIQUE) | ✅ | AUTO à l'activation |
-| Génération auto sous-cycles (EVENEMENTIELLE) | ✅ | AUTO à l'activation – dateDebut → dateEcheance par fréquence |
+| Génération auto sous-cycles (EVENEMENTIELLE) | ✅ | AUTO à l'activation – dateDebut → dateEcheance selon le rythme |
+| Rythme libre + jour/heure d'échéance, simulation du calendrier (B26) | ✅ | 🔒 tout auth (création / simulation) |
 
 ### Module Membre ✅ (complet)
 
@@ -910,6 +913,11 @@ cd docker && docker compose up -d
       → fix : 1 000 F entre 3 gagnants donnait 333,33 × 3 = 999,99 F (centime perdu)
   B30 Commissions du gestionnaire dans `POST /v1/tontines` (`commissions`, même transaction)  ✅
       → plafond 100 % sur POURCENTAGE_JACKPOT (création, modification, création de tontine)
+  B26 Rythme libre, jour et heure d'échéance (lot 1 : modèle, V039, tours + échéances,
+      simulation, ouverture manuelle sans dateFin, ponctualité sur echeanceAt)        ✅
+      lot 2 : échéance/rappels modifiables en cours (REGLES_MODIFIEES)                🔲
+      lot 3 : rappels veille / N h avant + COTISATIONS_MANQUANTES (planifié)          🔲
+      lot 4 : exports CSV (rythme lisible, echeanceAt)                                🔲
 ```
 
 ---
@@ -937,6 +945,33 @@ peut demander à recevoir le prochain jackpot. Le backend gère les deux sans ca
 
 ---
 
+## Rythme et échéances (B26)
+
+Une tontine (rotative ou événementielle) a un **rythme** : `rythmeIntervalle` + `rythmeUnite`
+(`JOUR` 1–90, `SEMAINE` 1–26, `MOIS` 1–12), un `jourEcheance` facultatif (SEMAINE : `LUNDI`…`DIMANCHE` ;
+MOIS : `1`…`31` ou `DERNIER`) et une `heureEcheance` (`HH:mm`, défaut 23:59, heure de Dakar).
+Logique pure dans `tontine/calendrier/` (`Rythme`, `CalendrierTours`), partagée par l'activation,
+l'ouverture manuelle et la simulation (`GET /v1/tontines/simulation`).
+
+- **Compatibilité** : `frequence` seule reste acceptée (JOURNALIERE = 1 JOUR, HEBDOMADAIRE = 1 SEMAINE,
+  BIMENSUEL = 2 SEMAINE, MENSUEL = 1 MOIS, TRIMESTRIEL = 3 MOIS) ; en lecture, `frequence` = code
+  historique si le rythme y correspond, sinon `PERSONNALISEE`. Les nouveaux champs priment.
+- **Échéance d'un tour** : chaque tour commence le lendemain de l'échéance du précédent.
+  - sans jour : début + intervalle − 1 jour (dates historiques inchangées) ;
+  - avec jour : 1ʳᵉ échéance = prochaine occurrence **strictement après** `dateDebut` (décision
+    2026-11-13), puis une tous les N ; jour 29–31 absent du mois → dernier jour du mois.
+- **Tour** : `cycles_tontine.echeance_at` (= `dateFin` + `heureEcheance`) et table `echeances_cycle`
+  (une échéance par tour, créée en cascade avec le tour ; B32 passera à N échéances).
+  `CycleResponse.echeanceAt` est sérialisé avec fuseau (`…T23:59:00Z`).
+- **Ponctualité** (S01) : `Ponctualite.finEcheance` = `echeanceAt`, minute d'échéance incluse.
+- **Modification** : rythme (intervalle, unité, `frequence`) en BROUILLON seulement
+  (`RYTHME_NON_MODIFIABLE`) ; changement audité sous le champ `rythme` (libellé lisible).
+- **Rappels** : `rappels.veille` (18h00 la veille) et `rappels.heuresAvant` (0–24, défaut 3).
+- **À l'échéance** : le statut ne change pas (EN_RETARD seulement à la clôture, S01).
+- **Codes** : `RYTHME_INVALIDE`, `JOUR_ECHEANCE_INVALIDE`, `HEURE_ECHEANCE_INVALIDE`, `RYTHME_NON_MODIFIABLE`.
+
+---
+
 ## Tontine Événementielle — règles de fonctionnement
 
 ### Création (`POST /v1/tontines` avec `tontineType: EVENEMENTIELLE`)
@@ -956,14 +991,9 @@ Champs non applicables (ignorés) : `ordreBeneficiaire`, `nombreMembres`, `modeC
 
 ### Activation → génération des sous-cycles
 
-À l'activation, `generateEvenementielleSubCycles()` découpe la période en sous-cycles :
-- `JOURNALIERE` → 1 sous-cycle/jour
-- `HEBDOMADAIRE` → 1 sous-cycle/semaine (7 jours)
-- `BIMENSUEL` → 1 sous-cycle/15 jours
-- `MENSUEL` → 1 sous-cycle/mois
-- `TRIMESTRIEL` → 1 sous-cycle/3 mois
-
-Le dernier sous-cycle se termine exactement sur `dateEcheance` (pas de dépassement).
+À l'activation, `generateEvenementielleSubCycles()` découpe la période selon le **rythme** (B26, voir
+« Rythme et échéances ») : un sous-cycle par période, le dernier se termine exactement sur
+`dateEcheance` (pas de dépassement).
 
 ### Cotisations
 

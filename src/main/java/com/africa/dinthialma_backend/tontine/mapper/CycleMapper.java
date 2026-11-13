@@ -1,11 +1,14 @@
 package com.africa.dinthialma_backend.tontine.mapper;
 
+import com.africa.dinthialma_backend.common.util.Fuseau;
 import com.africa.dinthialma_backend.tontine.dto.BeneficiaireHistoriqueResponse;
 import com.africa.dinthialma_backend.tontine.dto.CycleResponse;
 import com.africa.dinthialma_backend.tontine.dto.CycleResponse.MembreDistributionInfo;
 import com.africa.dinthialma_backend.tontine.entity.CycleGagnant;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -19,6 +22,11 @@ public interface CycleMapper {
   @Mapping(target = "gagnants", source = "gagnants", qualifiedByName = "gagnantsActifs")
   @Mapping(target = "distributionParMembre", ignore = true)
   CycleResponse toResponse(CycleTontine cycle);
+
+  /** Échéance (heure de Dakar) avec son décalage horaire. */
+  default OffsetDateTime versOffset(LocalDateTime dateHeure) {
+    return Fuseau.versOffset(dateHeure);
+  }
 
   /** Cycle final d'une tontine événementielle, avec la distribution par membre. */
   default CycleResponse toResponse(CycleTontine cycle, List<MembreDistributionInfo> distribution) {

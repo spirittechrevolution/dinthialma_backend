@@ -3,9 +3,11 @@ package com.africa.dinthialma_backend.tontine.entity;
 import com.africa.dinthialma_backend.auth.entity.User;
 import com.africa.dinthialma_backend.common.base.BaseEntity;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
+import com.africa.dinthialma_backend.tontine.calendrier.Rythme;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
+import com.africa.dinthialma_backend.tontine.codeList.UniteRythme;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -17,6 +19,7 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -128,6 +131,33 @@ public class Tontine extends BaseEntity {
   @Column(name = "montant_minimum", precision = 12, scale = 2)
   private BigDecimal montantMinimum;
 
+  // ─── Rythme et échéance (B26) ───────────────────────────────────────────
+
+  /** « Tous les N … » : intervalle du rythme de cotisation. */
+  @Column(name = "rythme_intervalle", nullable = false)
+  private int rythmeIntervalle;
+
+  /** Unité du rythme : JOUR, SEMAINE ou MOIS. */
+  @Enumerated(EnumType.STRING)
+  @Column(name = "rythme_unite", nullable = false, length = 10)
+  private UniteRythme rythmeUnite;
+
+  /** SEMAINE : LUNDI…DIMANCHE ; MOIS : « 1 »…« 31 » ou DERNIER ; null = aucun jour imposé. */
+  @Column(name = "jour_echeance", length = 10)
+  private String jourEcheance;
+
+  /** Heure limite de paiement le jour de l'échéance (heure de Dakar). */
+  @Column(name = "heure_echeance", nullable = false)
+  private LocalTime heureEcheance;
+
+  /** Rappel la veille de l'échéance, à 18h00. */
+  @Column(name = "rappel_veille", nullable = false)
+  private boolean rappelVeille;
+
+  /** Rappel N heures avant l'échéance (0 = aucun, 1 à 24). */
+  @Column(name = "rappel_heures_avant", nullable = false)
+  private int rappelHeuresAvant;
+
   /** Code d'invitation partageable (B16) – null = aucune invitation active. */
   @Column(name = "code_invitation", length = 20)
   private String codeInvitation;
@@ -143,6 +173,33 @@ public class Tontine extends BaseEntity {
    */
   public BigDecimal getMontantAttenduParMembre() {
     return montantAttenduParMembre(montantLibre, montant, montantMinimum);
+  }
+
+  /**
+   * Rythme de cotisation (B26). Sans rythme renseigné (objet non enregistré), repli sur la
+   * fréquence historique, puis sur un rythme mensuel.
+   */
+  public Rythme getRythme() {
+    if (rythmeUnite == null) {
+      return Rythme.depuisFrequence(frequence)
+          .orElse(new Rythme(1, UniteRythme.MOIS, null, Rythme.HEURE_PAR_DEFAUT));
+    }
+    return new Rythme(
+        rythmeIntervalle,
+        rythmeUnite,
+        jourEcheance,
+        heureEcheance != null ? heureEcheance : Rythme.HEURE_PAR_DEFAUT);
+  }
+
+  /**
+   * Applique un rythme : ses champs et la fréquence équivalente (code historique ou PERSONNALISEE).
+   */
+  public void appliquerRythme(Rythme rythme) {
+    this.rythmeIntervalle = rythme.intervalle();
+    this.rythmeUnite = rythme.unite();
+    this.jourEcheance = rythme.jourEcheance();
+    this.heureEcheance = rythme.heureEcheance();
+    this.frequence = rythme.frequence();
   }
 
   /** Variante statique utilisable sur des colonnes issues d'une projection JPQL. */

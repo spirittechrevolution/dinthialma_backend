@@ -2,6 +2,7 @@ package com.africa.dinthialma_backend.tontine.entity;
 
 import com.africa.dinthialma_backend.common.base.BaseEntity;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -61,9 +62,21 @@ public class CycleTontine extends BaseEntity {
   @Column(name = "date_debut", nullable = false)
   private LocalDate dateDebut;
 
-  /** Date de fin du cycle. */
+  /** Date de fin du cycle (jour de sa dernière échéance). */
   @Column(name = "date_fin", nullable = false)
   private LocalDate dateFin;
+
+  /**
+   * Limite de paiement du tour (B26) : jour {@code dateFin} + heure d'échéance de la tontine, heure
+   * de Dakar. Null seulement sur un objet non encore enregistré.
+   */
+  @Column(name = "echeance_at")
+  private LocalDateTime echeanceAt;
+
+  /** Échéances de cotisation du tour (une seule aujourd'hui ; plusieurs avec B32). */
+  @OneToMany(mappedBy = "cycle", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+  @Builder.Default
+  private List<EcheanceCycle> echeances = new ArrayList<>();
 
   /** Somme brute des cotisations validées du cycle. */
   @Column(name = "montant_jackpot", precision = 12, scale = 2)

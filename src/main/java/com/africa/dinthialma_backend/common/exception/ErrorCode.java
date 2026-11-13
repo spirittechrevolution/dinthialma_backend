@@ -128,7 +128,19 @@ public enum ErrorCode {
   /** Une commission de ce type existe déjà (ou figure deux fois dans la requête). */
   COMMISSION_ALREADY_EXISTS,
   /** Commission POURCENTAGE_JACKPOT supérieure à 100 %. */
-  COMMISSION_PERCENTAGE_TOO_HIGH;
+  COMMISSION_PERCENTAGE_TOO_HIGH,
+
+  // ─── Rythme et échéance (B26) ──────────────────────────────────────────
+  /**
+   * Rythme absent, unité inconnue ou intervalle hors bornes (JOUR 1–90, SEMAINE 1–26, MOIS 1–12).
+   */
+  RYTHME_INVALIDE,
+  /** Jour d'échéance incohérent avec l'unité du rythme. */
+  JOUR_ECHEANCE_INVALIDE,
+  /** Heure d'échéance hors format {@code HH:mm}. */
+  HEURE_ECHEANCE_INVALIDE,
+  /** Rythme (intervalle, unité) modifiable seulement en BROUILLON. */
+  RYTHME_NON_MODIFIABLE;
 
   /** Code générique correspondant à un statut HTTP (repli quand aucun code métier n'est fourni). */
   public static ErrorCode fromStatus(HttpStatusCode status) {

@@ -56,6 +56,7 @@ public final class ResponseMessageConstants {
   public static final String TONTINE_DELETE_SUCCESS = "Tontine supprimée avec succès";
   public static final String TONTINE_GET_SUCCESS = "Tontine récupérée avec succès";
   public static final String TONTINE_LIST_SUCCESS = "Liste des tontines récupérée avec succès";
+  public static final String TONTINE_SIMULATION_SUCCESS = "Calendrier simulé avec succès";
   public static final String TONTINE_NOT_FOUND = "Tontine introuvable";
   public static final String TONTINE_ACCESS_DENIED = "Accès non autorisé à cette tontine";
   public static final String TONTINE_ACTIVATED = "Tontine activée avec succès";

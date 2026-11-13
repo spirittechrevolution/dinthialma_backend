@@ -5,6 +5,7 @@ import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.MonRoleTontine;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
+import com.africa.dinthialma_backend.tontine.codeList.UniteRythme;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -35,8 +36,28 @@ public class TontineResponse {
   @Schema(description = "Montant fixe de cotisation par cycle en FCFA", example = "5000")
   private BigDecimal montant;
 
-  @Schema(description = "Code de fréquence (FREQUENCE_TONTINE)", example = "MENSUEL")
+  @Schema(
+      description =
+          "Fréquence historique si le rythme y correspond, sinon PERSONNALISEE (lire le rythme)",
+      example = "MENSUEL")
   private String frequence;
+
+  @Schema(description = "« Tous les N … » (B26)", example = "1")
+  private Integer rythmeIntervalle;
+
+  @Schema(description = "Unité du rythme (B26)", example = "MOIS")
+  private UniteRythme rythmeUnite;
+
+  @Schema(
+      description = "Jour d'échéance (LUNDI…DIMANCHE, 1…31, DERNIER) ; absent = aucun jour imposé",
+      example = "30")
+  private String jourEcheance;
+
+  @Schema(description = "Heure limite de paiement HH:mm, heure de Dakar", example = "23:59")
+  private String heureEcheance;
+
+  @Schema(description = "Rappels avant échéance")
+  private RappelsEcheance rappels;
 
   @Schema(description = "Code de l'ordre des bénéficiaires (ROTATIVE uniquement)", example = "FIXE")
   private String ordreBeneficiaire;
