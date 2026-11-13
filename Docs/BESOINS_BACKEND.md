@@ -633,6 +633,11 @@ Points d'attention :
 - **Existant** : la commission se crée après coup par `POST /v1/tontines/{id}/commissions`. Le front enchaîne les deux appels ; si le second échoue, la tontine est créée sans commission (message à l'utilisateur).
 - **Proposition** : `CreateTontineRequest` accepte `"commissions": [{ "type", "valeur", "description"? }]` (0 ou plusieurs ; mêmes règles que `POST …/commissions`), enregistrées **dans la même transaction**. Absent ou vide = aucune commission (0).
 - **Codes d'erreur** : ceux de la création de commission (valeur ≤ 0, pourcentage > 100…).
+- **✅ Livré (2026-11-13)** : tout est vérifié avant d'enregistrer la tontine ; si une commission est refusée, rien n'est créé.
+  - valeur ≤ 0 → 400 `VALIDATION_ERROR` ;
+  - type en double dans la liste → 409 `COMMISSION_ALREADY_EXISTS` (même code pour `POST …/commissions` si le type existe déjà) ;
+  - `POURCENTAGE_JACKPOT` > 100 → 400 `COMMISSION_PERCENTAGE_TOO_HIGH` (nouveau plafond, appliqué aussi à `POST` et `PUT …/commissions`).
+  - La réponse de création reste un `TontineResponse` ; les commissions se relisent par `GET /v1/tontines/{id}/commissions`.
 
 ### B31 — Canaux de notification
 - **Écrans** : toutes les alertes ; Paramètres (préférences de canaux).

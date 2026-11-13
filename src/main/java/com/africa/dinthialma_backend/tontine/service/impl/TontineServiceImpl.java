@@ -35,6 +35,7 @@ import com.africa.dinthialma_backend.tontine.mapper.TontineMapper;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineSpecifications;
+import com.africa.dinthialma_backend.tontine.service.interfaces.CommissionService;
 import com.africa.dinthialma_backend.tontine.service.interfaces.TontineService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -71,6 +72,7 @@ public class TontineServiceImpl implements TontineService {
   private final KeycloakAuthService keycloakAuthService;
   private final AuditService auditService;
   private final NotificationService notificationService;
+  private final CommissionService commissionService;
 
   // ─── Création ────────────────────────────────────────────────────────────
 
@@ -83,6 +85,7 @@ public class TontineServiceImpl implements TontineService {
         request.getTontineType() != null ? request.getTontineType() : TontineType.ROTATIVE;
 
     validateCreateRequest(request, type);
+    commissionService.verifierCommissionsInitiales(request.getCommissions());
 
     BigDecimal montantEffectif = resolveMontant(request, type);
 
@@ -109,6 +112,7 @@ public class TontineServiceImpl implements TontineService {
             .build();
 
     Tontine saved = tontineRepository.save(tontine);
+    commissionService.enregistrerCommissionsInitiales(caller, saved, request.getCommissions());
     assignRoleIfAbsent(caller, UserRole.ADMIN);
     auditService.logCreate(caller, "tontines", saved.getId());
     log.info("Tontine créée – id={} type={} par userId={}", saved.getId(), type, caller.getId());

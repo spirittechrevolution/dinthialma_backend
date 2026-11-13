@@ -3,6 +3,7 @@ package com.africa.dinthialma_backend.tontine.dto;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -11,6 +12,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -22,7 +24,9 @@ import lombok.Setter;
             + "**ROTATIVE** : ordreBeneficiaire, nombreMembres, modeCycle et montant sont"
             + " obligatoires.\n"
             + "**EVENEMENTIELLE** : dateEcheance est obligatoire ; montant est obligatoire si"
-            + " montantLibre=false ; ordreBeneficiaire et nombreMembres sont ignorés.")
+            + " montantLibre=false ; ordreBeneficiaire et nombreMembres sont ignorés.\n\n"
+            + "**commissions** (optionnel) : enregistrées dans la même transaction que la"
+            + " tontine ; si l'une est refusée, rien n'est créé.")
 @Getter
 @Setter
 public class CreateTontineRequest {
@@ -131,4 +135,14 @@ public class CreateTontineRequest {
       example = "500")
   @Positive
   private BigDecimal montantMinimum;
+
+  // ─── Commissions (B30) ──────────────────────────────────────────────────
+
+  @Schema(
+      description =
+          "Commissions du gestionnaire, enregistrées avec la tontine (mêmes règles que POST"
+              + " /v1/tontines/{id}/commissions). Absent ou vide = aucune commission. Un type au"
+              + " plus une fois (409 COMMISSION_ALREADY_EXISTS) ; POURCENTAGE_JACKPOT ≤ 100"
+              + " (400 COMMISSION_PERCENTAGE_TOO_HIGH) ; valeur ≤ 0 → 400 VALIDATION_ERROR.")
+  private List<@NotNull @Valid CreateCommissionRequest> commissions;
 }

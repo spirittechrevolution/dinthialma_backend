@@ -75,7 +75,7 @@
 
 | Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
 |----------|---------|------|--------|-------|-------------|-------|
-| `/` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 tout auth peut créer → devient ADMIN |
+| `/` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 tout auth peut créer → devient ADMIN ; `commissions` optionnelles enregistrées dans la même transaction (B30 : une refusée = rien créé) |
 | `/` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 SUPER_ADMIN voit tout ; autres voient les leurs ; `?role=GERE\|COTISE` ; chaque tontine porte `monRole`, `monMembreId`, `monStatutMembre` |
 | `/{id}` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 ¹membre de la tontine ²créateur |
 | `/{id}` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 BROUILLON seulement |
@@ -133,7 +133,7 @@
 
 | Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
 |----------|---------|------|--------|-------|-------------|-------|
-| `/` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 max 1 par type |
+| `/` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 max 1 par type (`COMMISSION_ALREADY_EXISTS`) ; `POURCENTAGE_JACKPOT` ≤ 100 (`COMMISSION_PERCENTAGE_TOO_HIGH`, aussi au PUT) ; possible aussi dès `POST /v1/tontines` (B30) |
 | `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
 | `/{commissionId}` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 valeur + description |
 | `/{commissionId}` | DELETE | ❌ | ❌ | ✅² | ✅ | 🔒 soft delete |
@@ -368,7 +368,7 @@ avec `CsvExport.reponse(fichier)`.
 
 ## Conventions de code
 
-- **Formatage** : Google Java Format via `fmt-maven-plugin` – `./mvnw fmt:apply`
+- **Formatage** : Google Java Format via `fmt-maven-plugin` – `./mvnw fmt:format` (contrôle : `fmt:check`)
 - **Lombok** : `@Getter @Setter @NoArgsConstructor @AllArgsConstructor @SuperBuilder` entités ; `@RequiredArgsConstructor` services/controllers
 - **Entités** : toutes étendent `BaseEntity` (id UUID, createdAt, updatedAt)
 - **Soft delete** : `deletedAt` (`LocalDateTime`, null = actif) – jamais de suppression physique
@@ -908,6 +908,8 @@ cd docker && docker compose up -d
   S02 Montants en francs entiers, partages exacts (Montants) : clôture, désignation,
       distribution finale                                                            ✅
       → fix : 1 000 F entre 3 gagnants donnait 333,33 × 3 = 999,99 F (centime perdu)
+  B30 Commissions du gestionnaire dans `POST /v1/tontines` (`commissions`, même transaction)  ✅
+      → plafond 100 % sur POURCENTAGE_JACKPOT (création, modification, création de tontine)
 ```
 
 ---

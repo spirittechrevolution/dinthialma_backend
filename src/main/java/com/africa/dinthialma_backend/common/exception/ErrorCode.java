@@ -122,7 +122,13 @@ public enum ErrorCode {
   /** Une priorité EN_ATTENTE ou ACCEPTEE existe déjà pour ce membre. */
   PRIORITE_DEJA_ACTIVE,
   /** Action réservée à une priorité EN_ATTENTE (acceptation, refus). */
-  PRIORITE_NOT_PENDING;
+  PRIORITE_NOT_PENDING,
+
+  // ─── Commissions ───────────────────────────────────────────────────────
+  /** Une commission de ce type existe déjà (ou figure deux fois dans la requête). */
+  COMMISSION_ALREADY_EXISTS,
+  /** Commission POURCENTAGE_JACKPOT supérieure à 100 %. */
+  COMMISSION_PERCENTAGE_TOO_HIGH;
 
   /** Code générique correspondant à un statut HTTP (repli quand aucun code métier n'est fourni). */
   public static ErrorCode fromStatus(HttpStatusCode status) {

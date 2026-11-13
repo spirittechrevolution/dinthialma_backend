@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -27,6 +28,58 @@ class TontineEtMembreIT extends AbstractIntegrationTest {
     return StreamSupport.stream(page.path("content").spliterator(), false)
         .map(x -> x.path("nom").asText())
         .toList();
+  }
+
+  @Test
+  @DisplayName("commissions à la création : enregistrées avec la tontine, refus = rien créé (B30)")
+  void commissionsALaCreation() {
+    Utilisateur g = donnees.inscrire();
+    String tid =
+        donnees
+            .creerTontine(
+                g.jeton(),
+                "Avec commissions",
+                Map.of(
+                    "commissions",
+                    List.of(
+                        Map.of("type", "POURCENTAGE_JACKPOT", "valeur", 5),
+                        Map.of("type", "FRAIS_ADHESION", "valeur", 1000, "description", "Carnet"))))
+            .path("id")
+            .asText();
+    JsonNode commissions = api.get("/v1/tontines/" + tid + "/commissions", g.jeton()).data();
+    assertThat(commissions.path("content")).hasSize(2);
+
+    Map<String, Object> base =
+        Map.of(
+            "tontineType", "ROTATIVE",
+            "nom", "Refusée",
+            "montant", 1000,
+            "frequence", "MENSUEL",
+            "ordreBeneficiaire", "ROTATION",
+            "modeCycle", "MANUEL",
+            "dateDebut", LocalDate.now().toString(),
+            "nombreMembres", 5);
+    Map<String, Object> doublon = new HashMap<>(base);
+    doublon.put(
+        "commissions",
+        List.of(
+            Map.of("type", "FRAIS_ADHESION", "valeur", 500),
+            Map.of("type", "FRAIS_ADHESION", "valeur", 800)));
+    var reponse = api.post("/v1/tontines", g.jeton(), doublon);
+    assertThat(reponse.statut()).isEqualTo(409);
+    assertThat(reponse.code()).isEqualTo("COMMISSION_ALREADY_EXISTS");
+
+    Map<String, Object> tropEleve = new HashMap<>(base);
+    tropEleve.put("commissions", List.of(Map.of("type", "POURCENTAGE_JACKPOT", "valeur", 120)));
+    assertThat(api.post("/v1/tontines", g.jeton(), tropEleve).code())
+        .isEqualTo("COMMISSION_PERCENTAGE_TOO_HIGH");
+
+    Map<String, Object> negative = new HashMap<>(base);
+    negative.put("commissions", List.of(Map.of("type", "FRAIS_ADHESION", "valeur", -1)));
+    assertThat(api.post("/v1/tontines", g.jeton(), negative).code()).isEqualTo("VALIDATION_ERROR");
+
+    assertThat(noms(api.get("/v1/tontines?role=GERE", g.jeton()).data()))
+        .containsExactly("Avec commissions");
   }
 
   @Test

@@ -6,11 +6,14 @@ import com.africa.dinthialma_backend.auth.repository.UserRepository;
 import com.africa.dinthialma_backend.auth.repository.UserRoleAssignmentRepository;
 import com.africa.dinthialma_backend.common.audit.AuditService;
 import com.africa.dinthialma_backend.common.constants.ResponseMessageConstants;
+import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.ConflictException;
 import com.africa.dinthialma_backend.common.exception.CustomException;
+import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
+import com.africa.dinthialma_backend.tontine.codeList.CommissionType;
 import com.africa.dinthialma_backend.tontine.dto.CommissionResponse;
 import com.africa.dinthialma_backend.tontine.dto.CreateCommissionRequest;
 import com.africa.dinthialma_backend.tontine.dto.UpdateCommissionRequest;
@@ -20,7 +23,11 @@ import com.africa.dinthialma_backend.tontine.mapper.CommissionMapper;
 import com.africa.dinthialma_backend.tontine.repository.TontineCommissionRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import com.africa.dinthialma_backend.tontine.service.interfaces.CommissionService;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +51,8 @@ public class CommissionServiceImpl implements CommissionService {
   private final UserRoleAssignmentRepository roleAssignmentRepository;
   private final AuditService auditService;
 
+  private static final BigDecimal CENT = BigDecimal.valueOf(100);
+
   // ─── Création ────────────────────────────────────────────────────────────
 
   @Override
@@ -53,31 +62,59 @@ public class CommissionServiceImpl implements CommissionService {
     User caller = findUserByKeycloakId(keycloakId);
     Tontine tontine = findTontineById(tontineId);
     assertIsCreatorOrSuperAdmin(caller, tontine);
+    verifierValeur(request.getType(), request.getValeur());
 
     // Un seul type de commission par tontine (contrainte UNIQUE en base)
     boolean exists =
         commissionRepository.findByTontine_IdAndDeletedAtIsNull(tontineId).stream()
             .anyMatch(c -> c.getType() == request.getType());
     if (exists) {
-      throw new ConflictException(ResponseMessageConstants.COMMISSION_ALREADY_EXISTS);
+      throw new ConflictException(
+          ResponseMessageConstants.COMMISSION_ALREADY_EXISTS, ErrorCode.COMMISSION_ALREADY_EXISTS);
     }
 
-    TontineCommission commission =
-        TontineCommission.builder()
-            .tontine(tontine)
-            .type(request.getType())
-            .valeur(request.getValeur())
-            .description(request.getDescription())
-            .build();
+    return commissionMapper.toResponse(enregistrer(caller, tontine, request));
+  }
 
-    TontineCommission saved = commissionRepository.save(commission);
-    auditService.logCreate(caller, "tontine_commissions", saved.getId());
+  @Override
+  public void verifierCommissionsInitiales(List<CreateCommissionRequest> commissions)
+      throws CustomException {
+    if (commissions == null) return;
+    Set<CommissionType> types = EnumSet.noneOf(CommissionType.class);
+    for (CreateCommissionRequest commission : commissions) {
+      verifierValeur(commission.getType(), commission.getValeur());
+      if (!types.add(commission.getType())) {
+        throw new ConflictException(
+            ResponseMessageConstants.COMMISSION_TYPE_EN_DOUBLE,
+            ErrorCode.COMMISSION_ALREADY_EXISTS);
+      }
+    }
+  }
+
+  @Override
+  public void enregistrerCommissionsInitiales(
+      User createur, Tontine tontine, List<CreateCommissionRequest> commissions) {
+    if (commissions == null) return;
+    commissions.forEach(commission -> enregistrer(createur, tontine, commission));
+  }
+
+  private TontineCommission enregistrer(
+      User auteur, Tontine tontine, CreateCommissionRequest request) {
+    TontineCommission saved =
+        commissionRepository.save(
+            TontineCommission.builder()
+                .tontine(tontine)
+                .type(request.getType())
+                .valeur(request.getValeur())
+                .description(request.getDescription())
+                .build());
+    auditService.logCreate(auteur, "tontine_commissions", saved.getId());
     log.info(
         "Commission créée – tontineId={} type={} valeur={}",
-        tontineId,
+        tontine.getId(),
         saved.getType(),
         saved.getValeur());
-    return commissionMapper.toResponse(saved);
+    return saved;
   }
 
   // ─── Lecture ─────────────────────────────────────────────────────────────
@@ -110,6 +147,7 @@ public class CommissionServiceImpl implements CommissionService {
     TontineCommission commission = findCommissionById(tontineId, commissionId);
 
     if (request.getValeur() != null) {
+      verifierValeur(commission.getType(), request.getValeur());
       auditService.log(
           caller,
           "tontine_commissions",
@@ -153,6 +191,18 @@ public class CommissionServiceImpl implements CommissionService {
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
+
+  /** Un pourcentage du jackpot au-delà de 100 % rendrait le montant net négatif. */
+  private static void verifierValeur(CommissionType type, BigDecimal valeur)
+      throws CustomException {
+    if (type == CommissionType.POURCENTAGE_JACKPOT
+        && valeur != null
+        && valeur.compareTo(CENT) > 0) {
+      throw new BadRequestException(
+          ResponseMessageConstants.COMMISSION_POURCENTAGE_TROP_ELEVE,
+          ErrorCode.COMMISSION_PERCENTAGE_TOO_HIGH);
+    }
+  }
 
   private User findUserByKeycloakId(String keycloakId) throws CustomException {
     return userRepository

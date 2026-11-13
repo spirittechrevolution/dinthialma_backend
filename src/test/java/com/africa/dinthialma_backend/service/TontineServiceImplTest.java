@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -30,6 +31,7 @@ import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.notification.codeList.NotificationType;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.support.Fixtures;
+import com.africa.dinthialma_backend.tontine.codeList.CommissionType;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.MonRoleTontine;
@@ -37,6 +39,7 @@ import com.africa.dinthialma_backend.tontine.codeList.RoleFiltreTontine;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.dto.ChangerOrdreBeneficiaireRequest;
+import com.africa.dinthialma_backend.tontine.dto.CreateCommissionRequest;
 import com.africa.dinthialma_backend.tontine.dto.CreateTontineRequest;
 import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.dto.UpdateTontineRequest;
@@ -46,6 +49,7 @@ import com.africa.dinthialma_backend.tontine.mapper.TontineMapper;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import com.africa.dinthialma_backend.tontine.service.impl.TontineServiceImpl;
+import com.africa.dinthialma_backend.tontine.service.interfaces.CommissionService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -60,6 +64,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mapstruct.factory.Mappers;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -82,6 +87,7 @@ class TontineServiceImplTest {
   @Mock private KeycloakAuthService keycloakAuthService;
   @Mock private AuditService auditService;
   @Mock private NotificationService notificationService;
+  @Mock private CommissionService commissionService;
   @InjectMocks private TontineServiceImpl service;
 
   private User gestionnaire;
@@ -292,6 +298,42 @@ class TontineServiceImplTest {
         assertThatThrownBy(() -> service.createTontine(gestionnaire.getKeycloakId(), r))
             .isInstanceOf(BadRequestException.class);
       }
+    }
+
+    @Test
+    @DisplayName("commissions (B30) : vérifiées avant, enregistrées après la tontine")
+    void commissionsALaCreation() throws Exception {
+      when(roleRepository.existsByUserIdAndRole(gestionnaire.getId(), UserRole.ADMIN))
+          .thenReturn(true);
+      CreateTontineRequest r = rotative();
+      CreateCommissionRequest commission = new CreateCommissionRequest();
+      commission.setType(CommissionType.POURCENTAGE_JACKPOT);
+      commission.setValeur(new BigDecimal("5"));
+      r.setCommissions(List.of(commission));
+
+      service.createTontine(gestionnaire.getKeycloakId(), r);
+
+      InOrder ordre = inOrder(commissionService, tontineRepository);
+      ordre.verify(commissionService).verifierCommissionsInitiales(r.getCommissions());
+      ordre.verify(tontineRepository).save(any());
+      ordre
+          .verify(commissionService)
+          .enregistrerCommissionsInitiales(eq(gestionnaire), any(), eq(r.getCommissions()));
+    }
+
+    @Test
+    @DisplayName("commission refusée : aucune tontine enregistrée")
+    void commissionRefusee() throws Exception {
+      CreateTontineRequest r = rotative();
+      r.setCommissions(List.of(new CreateCommissionRequest()));
+      doThrow(new ConflictException("doublon", ErrorCode.COMMISSION_ALREADY_EXISTS))
+          .when(commissionService)
+          .verifierCommissionsInitiales(r.getCommissions());
+
+      assertThatThrownBy(() -> service.createTontine(gestionnaire.getKeycloakId(), r))
+          .isInstanceOf(ConflictException.class);
+      verify(tontineRepository, never()).save(any());
+      verify(commissionService, never()).enregistrerCommissionsInitiales(any(), any(), any());
     }
   }
 

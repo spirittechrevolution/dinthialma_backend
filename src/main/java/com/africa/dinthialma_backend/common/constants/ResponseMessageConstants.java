@@ -113,6 +113,10 @@ public final class ResponseMessageConstants {
   public static final String COMMISSION_NOT_FOUND = "Commission introuvable";
   public static final String COMMISSION_ALREADY_EXISTS =
       "Une commission de ce type existe déjà sur cette tontine";
+  public static final String COMMISSION_TYPE_EN_DOUBLE =
+      "Chaque type de commission ne peut figurer qu'une seule fois";
+  public static final String COMMISSION_POURCENTAGE_TROP_ELEVE =
+      "Une commission en pourcentage du jackpot ne peut pas dépasser 100 %";
 
   // Espace personnel (/v1/me)
   public static final String ME_SUMMARY_SUCCESS = "Résumé de mes cotisations récupéré avec succès";
