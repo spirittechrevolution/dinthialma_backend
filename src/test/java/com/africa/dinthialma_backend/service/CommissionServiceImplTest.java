@@ -2,10 +2,12 @@ package com.africa.dinthialma_backend.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -14,7 +16,9 @@ import com.africa.dinthialma_backend.auth.entity.User;
 import com.africa.dinthialma_backend.auth.repository.UserRepository;
 import com.africa.dinthialma_backend.auth.repository.UserRoleAssignmentRepository;
 import com.africa.dinthialma_backend.common.audit.AuditService;
+import com.africa.dinthialma_backend.common.exception.BadRequestException;
 import com.africa.dinthialma_backend.common.exception.ConflictException;
+import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
@@ -234,6 +238,87 @@ class CommissionServiceImplTest {
                     createur.getKeycloakId(), tontine.getId(), c.getId(), descriptionSeule)
                 .getDescription())
         .isEqualTo("Nouvelle");
+  }
+
+  @Test
+  @DisplayName(
+      "pourcentage du jackpot > 100 -> 400 à la création et à la modification ; 100 accepté")
+  void pourcentageTropEleve() throws Exception {
+    assertThatThrownBy(
+            () ->
+                service.createCommission(
+                    createur.getKeycloakId(),
+                    tontine.getId(),
+                    creation(CommissionType.POURCENTAGE_JACKPOT, "100.01")))
+        .isInstanceOfSatisfying(
+            BadRequestException.class,
+            e -> assertThat(e.getCode()).isEqualTo(ErrorCode.COMMISSION_PERCENTAGE_TOO_HIGH));
+
+    TontineCommission c = commission(CommissionType.POURCENTAGE_JACKPOT);
+    when(commissionRepository.findByIdAndTontine_IdAndDeletedAtIsNull(c.getId(), tontine.getId()))
+        .thenReturn(Optional.of(c));
+    UpdateCommissionRequest maj = new UpdateCommissionRequest();
+    maj.setValeur(new BigDecimal("150"));
+    assertThatThrownBy(
+            () ->
+                service.updateCommission(createur.getKeycloakId(), tontine.getId(), c.getId(), maj))
+        .isInstanceOf(BadRequestException.class);
+    assertThat(c.getValeur()).isEqualByComparingTo("5");
+    verify(commissionRepository, never()).save(any());
+
+    // Un montant fixe n'est pas plafonné à 100
+    service.verifierCommissionsInitiales(
+        List.of(
+            creation(CommissionType.POURCENTAGE_JACKPOT, "100"),
+            creation(CommissionType.FRAIS_FIXES_PAR_CYCLE, "2500")));
+  }
+
+  @Test
+  @DisplayName("commissions initiales (B30) : absentes = rien ; type en double -> 409")
+  void verificationInitiale() throws Exception {
+    service.verifierCommissionsInitiales(null);
+    service.verifierCommissionsInitiales(List.of());
+    assertThatThrownBy(
+            () ->
+                service.verifierCommissionsInitiales(
+                    List.of(
+                        creation(CommissionType.FRAIS_ADHESION, "500"),
+                        creation(CommissionType.FRAIS_ADHESION, "1000"))))
+        .isInstanceOfSatisfying(
+            ConflictException.class,
+            e -> assertThat(e.getCode()).isEqualTo(ErrorCode.COMMISSION_ALREADY_EXISTS));
+    verify(commissionRepository, never()).save(any());
+  }
+
+  @Test
+  @DisplayName("commissions initiales (B30) : chacune enregistrée et auditée au nom du créateur")
+  void enregistrementInitial() {
+    when(commissionRepository.save(any()))
+        .thenAnswer(
+            i -> {
+              TontineCommission c = i.getArgument(0);
+              c.setId(UUID.randomUUID());
+              return c;
+            });
+
+    service.enregistrerCommissionsInitiales(createur, tontine, null);
+    verify(commissionRepository, never()).save(any());
+
+    service.enregistrerCommissionsInitiales(
+        createur,
+        tontine,
+        List.of(
+            creation(CommissionType.POURCENTAGE_JACKPOT, "5"),
+            creation(CommissionType.FRAIS_ADHESION, "1000")));
+
+    ArgumentCaptor<TontineCommission> captor = ArgumentCaptor.forClass(TontineCommission.class);
+    verify(commissionRepository, times(2)).save(captor.capture());
+    assertThat(captor.getAllValues())
+        .extracting(TontineCommission::getType, TontineCommission::getTontine)
+        .containsExactly(
+            tuple(CommissionType.POURCENTAGE_JACKPOT, tontine),
+            tuple(CommissionType.FRAIS_ADHESION, tontine));
+    verify(auditService, times(2)).logCreate(eq(createur), eq("tontine_commissions"), any());
   }
 
   @Test

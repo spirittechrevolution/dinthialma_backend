@@ -8,8 +8,13 @@ import com.africa.dinthialma_backend.tontine.codeList.RoleFiltreTontine;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.dto.ChangerOrdreBeneficiaireRequest;
 import com.africa.dinthialma_backend.tontine.dto.CreateTontineRequest;
+import com.africa.dinthialma_backend.tontine.dto.ModifierEcheanceRequest;
+import com.africa.dinthialma_backend.tontine.dto.SimulationCalendrierRequest;
+import com.africa.dinthialma_backend.tontine.dto.SimulationCalendrierResponse;
 import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.dto.UpdateTontineRequest;
+import com.africa.dinthialma_backend.tontine.service.interfaces.CalendrierService;
+import com.africa.dinthialma_backend.tontine.service.interfaces.EcheanceService;
 import com.africa.dinthialma_backend.tontine.service.interfaces.TontineService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -23,6 +28,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -63,6 +69,8 @@ public class TontineController {
   private static final int CREATED = 201;
 
   private final TontineService tontineService;
+  private final CalendrierService calendrierService;
+  private final EcheanceService echeanceService;
   private final RequestHeaderParser headerParser;
 
   // ─── Création ────────────────────────────────────────────────────────────
@@ -99,6 +107,37 @@ public class TontineController {
         .body(
             new CustomResponse(
                 SUCCESS, CREATED, ResponseMessageConstants.TONTINE_CREATE_SUCCESS, response));
+  }
+
+  // ─── Simulation du calendrier (B26) ──────────────────────────────────────
+
+  @GetMapping("/simulation")
+  @Operation(
+      summary = "Simuler le calendrier des tours",
+      description =
+          "🔒 Rôles : tout utilisateur authentifié. Aucun effet en base.\n\n"
+              + "Calcule les échéances avec les mêmes règles que l'activation (B26), pour l'écran"
+              + " de création : `rythmeIntervalle` + `rythmeUnite` (ou `frequence`),"
+              + " `jourEcheance`, `heureEcheance`, `dateDebut` ; ROTATIVE : `nombreMembres`"
+              + " (+ `nombreGagnants`) ; EVENEMENTIELLE : `dateEcheance`. 400 échéances listées au"
+              + " plus.\n\n"
+              + "Erreurs : `RYTHME_INVALIDE`, `JOUR_ECHEANCE_INVALIDE`, `HEURE_ECHEANCE_INVALIDE`.")
+  @ApiResponses({
+    @ApiResponse(
+        responseCode = "200",
+        description = "Calendrier simulé",
+        content = @Content(schema = @Schema(implementation = SimulationCalendrierResponse.class))),
+    @ApiResponse(responseCode = "400", description = "Rythme ou paramètres invalides"),
+    @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
+  })
+  public ResponseEntity<CustomResponse> simulerCalendrier(
+      @ParameterObject @Valid SimulationCalendrierRequest request) throws CustomException {
+    return ResponseEntity.ok(
+        new CustomResponse(
+            SUCCESS,
+            OK,
+            ResponseMessageConstants.TONTINE_SIMULATION_SUCCESS,
+            calendrierService.simuler(request)));
   }
 
   // ─── Liste ───────────────────────────────────────────────────────────────
@@ -354,5 +393,27 @@ public class TontineController {
     return ResponseEntity.ok(
         new CustomResponse(
             SUCCESS, OK, ResponseMessageConstants.ORDRE_BENEFICIAIRE_UPDATED, response));
+  }
+
+  @PatchMapping("/{id}/echeance")
+  @Operation(
+      summary = "Modifier le jour / l'heure d'échéance et les rappels (y compris en cours)",
+      description =
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN. Tontine non terminée (sinon 400"
+              + " `ECHEANCE_NON_MODIFIABLE`). Champ absent = inchangé ; `jourEcheance: \"\"` retire"
+              + " le jour imposé. Le tour en cours et les tours terminés ne bougent pas ; les tours"
+              + " pas encore commencés sont replanifiés (événementielle : jusqu'à la date de"
+              + " l'événement). Changement d'échéance notifié aux membres actifs"
+              + " (`REGLES_MODIFIEES`). Le rythme (intervalle, unité) ne se modifie qu'en"
+              + " BROUILLON via PUT.")
+  public ResponseEntity<CustomResponse> modifierEcheance(
+      @PathVariable UUID id,
+      @RequestBody @Valid ModifierEcheanceRequest request,
+      HttpServletRequest httpRequest)
+      throws CustomException {
+    String keycloakId = headerParser.extractKeycloakId(httpRequest);
+    TontineResponse response = echeanceService.modifierEcheance(keycloakId, id, request);
+    return ResponseEntity.ok(
+        new CustomResponse(SUCCESS, OK, ResponseMessageConstants.ECHEANCE_UPDATED, response));
   }
 }

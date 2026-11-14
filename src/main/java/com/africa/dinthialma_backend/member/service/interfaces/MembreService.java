@@ -44,6 +44,7 @@ public interface MembreService {
       MembreStatut statut,
       String q,
       UUID cycleId,
+      UUID echeanceId,
       Boolean aPaye,
       Pageable pageable)
       throws CustomException;

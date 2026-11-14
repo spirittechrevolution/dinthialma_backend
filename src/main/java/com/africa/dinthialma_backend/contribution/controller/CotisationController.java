@@ -428,6 +428,9 @@ public class CotisationController {
               + "- `statutCotisation` **EN_ATTENTE** → cotisation soumise, en attente de validation\n"
               + "- `statutCotisation` **VALIDE** → cotisation validée et prise en compte\n"
               + "- `statutCotisation` **EN_RETARD** → cycle clôturé sans cotisation validée\n\n"
+              + "Tour à plusieurs échéances (B32) : les champs de cotisation portent sur"
+              + " l'échéance de référence (`?echeanceId=`, sinon l'échéance en cours) ;"
+              + " `echeancesDues`, `echeancesPayees` et `echeances[]` détaillent tout le tour."
               + "Les membres sont triés par `ordreJackpot` croissant puis par date d'adhésion."
               + " Les membres SORTI sont exclus.\n\n"
               + "Pagination : `?page=0&size=20` (tri par défaut `ordreJackpot,asc` puis"
@@ -439,7 +442,9 @@ public class CotisationController {
         content = @Content(schema = @Schema(implementation = CycleRecapCotisationResponse.class))),
     @ApiResponse(responseCode = "401", description = "JWT manquant ou expiré"),
     @ApiResponse(responseCode = "403", description = "Accès interdit"),
-    @ApiResponse(responseCode = "404", description = "Tontine ou cycle introuvable"),
+    @ApiResponse(
+        responseCode = "404",
+        description = "Tontine, cycle ou échéance introuvable (ECHEANCE_INTROUVABLE)"),
   })
   public ResponseEntity<CustomResponse> getCycleRecap(
       @Parameter(
@@ -450,6 +455,9 @@ public class CotisationController {
       @Parameter(description = "UUID du cycle", example = "660e8400-e29b-41d4-a716-446655440000")
           @PathVariable
           UUID cycleId,
+      @Parameter(description = "Échéance de référence (défaut : échéance en cours)")
+          @RequestParam(required = false)
+          UUID echeanceId,
       @PageableDefault(size = 20)
           @SortDefaults({
             @SortDefault(sort = "ordreJackpot", direction = Sort.Direction.ASC),
@@ -461,7 +469,7 @@ public class CotisationController {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
     Page<CycleRecapCotisationResponse> recap =
-        cotisationService.getCycleRecap(keycloakId, tontineId, cycleId, pageable);
+        cotisationService.getCycleRecap(keycloakId, tontineId, cycleId, echeanceId, pageable);
 
     return ResponseEntity.ok(
         new CustomResponse(

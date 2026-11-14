@@ -2,13 +2,15 @@ package com.africa.dinthialma_backend.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.africa.dinthialma_backend.common.util.Fuseau;
 import com.africa.dinthialma_backend.support.AbstractIntegrationTest;
 import com.africa.dinthialma_backend.support.ApiClient.Reponse;
 import com.africa.dinthialma_backend.support.TestDataFactory;
 import com.africa.dinthialma_backend.support.TestDataFactory.TontineEnCours;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -57,7 +59,9 @@ class CotisationParcoursIT extends AbstractIntegrationTest {
     assertThat(ligneSummary(t).path("cotisationDue").path("ponctualite").asText())
         .isEqualTo("NON_DECLAREE");
 
-    String hier = LocalDate.now().atTime(7, 30).toString();
+    // Instant présent arrondi à la minute : toujours passé et dans le tour du jour (une heure fixe
+    // comme 7h30 serait « dans le futur » pour un build lancé avant 7h30).
+    String hier = LocalDateTime.now(Fuseau.DAKAR).truncatedTo(ChronoUnit.MINUTES).toString();
     JsonNode encaissee =
         TestDataFactory.attendre(
                 api.post(
@@ -277,7 +281,10 @@ class CotisationParcoursIT extends AbstractIntegrationTest {
     byte[] octets = r.octets();
     assertThat(new byte[] {octets[0], octets[1], octets[2]}).containsExactly(0xEF, 0xBB, 0xBF);
     String[] lignes = new String(octets, StandardCharsets.UTF_8).substring(1).split("\r\n");
-    assertThat(lignes[0]).startsWith("Tour;Membre;Téléphone");
+    assertThat(lignes[0])
+        .startsWith("Tour;Membre;Téléphone")
+        .endsWith(";Échéance du tour;Ponctualité;Payée le;Rythme");
+    assertThat(lignes[1]).contains(";A_TEMPS;").endsWith(";chaque mois, avant 23h59");
     assertThat(lignes).hasSize(2);
 
     assertThat(api.get(cotisations(t) + "/export?format=xlsx", t.gestionnaire().jeton()).code())

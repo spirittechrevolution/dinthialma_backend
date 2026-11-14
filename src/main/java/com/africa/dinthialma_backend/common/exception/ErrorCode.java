@@ -122,7 +122,37 @@ public enum ErrorCode {
   /** Une priorité EN_ATTENTE ou ACCEPTEE existe déjà pour ce membre. */
   PRIORITE_DEJA_ACTIVE,
   /** Action réservée à une priorité EN_ATTENTE (acceptation, refus). */
-  PRIORITE_NOT_PENDING;
+  PRIORITE_NOT_PENDING,
+
+  // ─── Commissions ───────────────────────────────────────────────────────
+  /** Une commission de ce type existe déjà (ou figure deux fois dans la requête). */
+  COMMISSION_ALREADY_EXISTS,
+  /** Commission POURCENTAGE_JACKPOT supérieure à 100 %. */
+  COMMISSION_PERCENTAGE_TOO_HIGH,
+
+  // ─── Rythme et échéance (B26) ──────────────────────────────────────────
+  /**
+   * Rythme absent, unité inconnue ou intervalle hors bornes (JOUR 1–90, SEMAINE 1–26, MOIS 1–12).
+   */
+  RYTHME_INVALIDE,
+  /** Jour d'échéance incohérent avec l'unité du rythme. */
+  JOUR_ECHEANCE_INVALIDE,
+  /** Heure d'échéance hors format {@code HH:mm}. */
+  HEURE_ECHEANCE_INVALIDE,
+  /** Rythme (intervalle, unité) modifiable seulement en BROUILLON. */
+  RYTHME_NON_MODIFIABLE,
+  /** Échéance et rappels non modifiables : tontine TERMINEE. */
+  ECHEANCE_NON_MODIFIABLE,
+
+  // ─── Rythme du jackpot (B32) ───────────────────────────────────────────
+  /** cotisationsParTour < 1, ou ≠ 1 sur une tontine EVENEMENTIELLE. */
+  COTISATIONS_PAR_TOUR_INVALIDE,
+  /** cotisationsParTour / declenchementJackpot modifiables seulement en BROUILLON. */
+  COTISATIONS_PAR_TOUR_NON_MODIFIABLE,
+  /** Échéance inconnue (ou d'un autre tour / d'une autre tontine). */
+  ECHEANCE_INTROUVABLE,
+  /** Échéance pas encore ouverte : on ne paie pas d'avance. */
+  ECHEANCE_NON_OUVERTE;
 
   /** Code générique correspondant à un statut HTTP (repli quand aucun code métier n'est fourni). */
   public static ErrorCode fromStatus(HttpStatusCode status) {

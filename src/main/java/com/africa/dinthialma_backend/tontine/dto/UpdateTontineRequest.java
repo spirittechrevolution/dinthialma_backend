@@ -1,6 +1,8 @@
 package com.africa.dinthialma_backend.tontine.dto;
 
+import com.africa.dinthialma_backend.tontine.codeList.DeclenchementJackpot;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -38,9 +40,62 @@ public class UpdateTontineRequest {
   private BigDecimal montant;
 
   @Schema(
-      description = "Nouvelle fréquence (code FREQUENCE_TONTINE, null = inchangée)",
+      description =
+          "Nouvelle fréquence historique (null = inchangée), traduite en rythme ; ignorée si"
+              + " rythmeIntervalle ou rythmeUnite est fourni",
       example = "HEBDOMADAIRE")
   private String frequence;
+
+  // ─── Rythme et échéance (B26) ───────────────────────────────────────────
+
+  @Schema(
+      description =
+          "Nouvel intervalle du rythme (null = inchangé). Rythme modifiable seulement en"
+              + " BROUILLON (sinon 400 RYTHME_NON_MODIFIABLE).",
+      example = "3")
+  private Integer rythmeIntervalle;
+
+  @Schema(
+      description = "Nouvelle unité du rythme (null = inchangée)",
+      allowableValues = {"JOUR", "SEMAINE", "MOIS"},
+      example = "JOUR")
+  private String rythmeUnite;
+
+  @Schema(
+      description = "Nouveau jour d'échéance (null = inchangé, \"\" = aucun jour imposé)",
+      example = "DIMANCHE")
+  private String jourEcheance;
+
+  @Schema(description = "Nouvelle heure d'échéance HH:mm (null = inchangée)", example = "20:00")
+  private String heureEcheance;
+
+  @Schema(description = "Rappels avant échéance (champ absent = inchangé)")
+  @Valid
+  private RappelsEcheance rappels;
+
+  // ─── Rythme du jackpot (B32) ─────────────────────────────────────────────
+
+  @Schema(
+      description =
+          "ROTATIVE : nombre de cotisations par tour (≥ 1, défaut 1). Ex. chaque semaine, jackpot"
+              + " toutes les 4 cotisations → 4. EVENEMENTIELLE : 1 seulement (sinon 400"
+              + " COTISATIONS_PAR_TOUR_INVALIDE). Modifiable en BROUILLON seulement.",
+      example = "4")
+  private Integer cotisationsParTour;
+
+  @Schema(
+      description =
+          "Jackpot visé, brut avant commission (ROTATIVE) : l'app en déduit cotisationsParTour ="
+              + " jackpotVise ÷ (montant × nombreMembres ÷ nombreGagnants), arrondi au plus proche."
+              + " Ignoré si cotisationsParTour est fourni.",
+      example = "500000")
+  @Positive
+  private BigDecimal jackpotVise;
+
+  @Schema(
+      description = "Remise possible : FIN_DU_TOUR (défaut) ou TOUS_PAYES",
+      example = "FIN_DU_TOUR")
+  private DeclenchementJackpot declenchementJackpot;
 
   @Schema(
       description =

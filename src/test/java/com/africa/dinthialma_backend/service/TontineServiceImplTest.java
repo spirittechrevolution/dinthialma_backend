@@ -5,9 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -30,14 +33,20 @@ import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
 import com.africa.dinthialma_backend.notification.codeList.NotificationType;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.support.Fixtures;
+import com.africa.dinthialma_backend.tontine.calendrier.Rythme;
+import com.africa.dinthialma_backend.tontine.codeList.CommissionType;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
+import com.africa.dinthialma_backend.tontine.codeList.DeclenchementJackpot;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.MonRoleTontine;
 import com.africa.dinthialma_backend.tontine.codeList.RoleFiltreTontine;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
+import com.africa.dinthialma_backend.tontine.codeList.UniteRythme;
 import com.africa.dinthialma_backend.tontine.dto.ChangerOrdreBeneficiaireRequest;
+import com.africa.dinthialma_backend.tontine.dto.CreateCommissionRequest;
 import com.africa.dinthialma_backend.tontine.dto.CreateTontineRequest;
+import com.africa.dinthialma_backend.tontine.dto.RappelsEcheance;
 import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.dto.UpdateTontineRequest;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
@@ -46,8 +55,10 @@ import com.africa.dinthialma_backend.tontine.mapper.TontineMapper;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import com.africa.dinthialma_backend.tontine.service.impl.TontineServiceImpl;
+import com.africa.dinthialma_backend.tontine.service.interfaces.CommissionService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -60,6 +71,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mapstruct.factory.Mappers;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
@@ -82,6 +94,7 @@ class TontineServiceImplTest {
   @Mock private KeycloakAuthService keycloakAuthService;
   @Mock private AuditService auditService;
   @Mock private NotificationService notificationService;
+  @Mock private CommissionService commissionService;
   @InjectMocks private TontineServiceImpl service;
 
   private User gestionnaire;
@@ -293,6 +306,119 @@ class TontineServiceImplTest {
             .isInstanceOf(BadRequestException.class);
       }
     }
+
+    @Test
+    @DisplayName("rythme (B26) : intervalle, unité, jour, heure et rappels enregistrés")
+    void rythme() throws Exception {
+      CreateTontineRequest r = rotative();
+      r.setFrequence(null);
+      r.setRythmeIntervalle(1);
+      r.setRythmeUnite("SEMAINE");
+      r.setJourEcheance("dimanche");
+      r.setHeureEcheance("20:00");
+      r.setRappels(RappelsEcheance.builder().veille(false).heuresAvant(6).build());
+
+      TontineResponse t = service.createTontine(gestionnaire.getKeycloakId(), r);
+
+      assertThat(t.getFrequence()).isEqualTo("HEBDOMADAIRE");
+      assertThat(t.getRythmeIntervalle()).isEqualTo(1);
+      assertThat(t.getRythmeUnite()).isEqualTo(UniteRythme.SEMAINE);
+      assertThat(t.getJourEcheance()).isEqualTo("DIMANCHE");
+      assertThat(t.getHeureEcheance()).isEqualTo("20:00");
+      assertThat(t.getRappels().getVeille()).isFalse();
+      assertThat(t.getRappels().getHeuresAvant()).isEqualTo(6);
+
+      r.setRythmeIntervalle(3);
+      r.setRythmeUnite("JOUR");
+      r.setJourEcheance(null);
+      assertThat(service.createTontine(gestionnaire.getKeycloakId(), r).getFrequence())
+          .isEqualTo("PERSONNALISEE");
+    }
+
+    @Test
+    @DisplayName("fréquence seule : traduite, 23:59, rappels par défaut ; aucun rythme -> 400")
+    void frequenceSeule() throws Exception {
+      TontineResponse t = service.createTontine(gestionnaire.getKeycloakId(), rotative());
+      assertThat(t.getRythmeUnite()).isEqualTo(UniteRythme.MOIS);
+      assertThat(t.getRythmeIntervalle()).isEqualTo(1);
+      assertThat(t.getJourEcheance()).isNull();
+      assertThat(t.getHeureEcheance()).isEqualTo("23:59");
+      assertThat(t.getRappels().getVeille()).isTrue();
+      assertThat(t.getRappels().getHeuresAvant()).isEqualTo(3);
+
+      CreateTontineRequest sansRythme = rotative();
+      sansRythme.setFrequence(null);
+      assertThatThrownBy(() -> service.createTontine(gestionnaire.getKeycloakId(), sansRythme))
+          .isInstanceOfSatisfying(
+              BadRequestException.class,
+              e -> assertThat(e.getCode()).isEqualTo(ErrorCode.RYTHME_INVALIDE));
+      verify(tontineRepository, times(1)).save(any());
+    }
+
+    @Test
+    @DisplayName("B32 : cotisations par tour saisies ou déduites du jackpot visé ; déclenchement")
+    void rythmeJackpot() throws Exception {
+      CreateTontineRequest r = rotative();
+      r.setCotisationsParTour(4);
+      r.setDeclenchementJackpot(DeclenchementJackpot.TOUS_PAYES);
+      TontineResponse t = service.createTontine(gestionnaire.getKeycloakId(), r);
+      assertThat(t.getCotisationsParTour()).isEqualTo(4);
+      assertThat(t.getDeclenchementJackpot()).isEqualTo(DeclenchementJackpot.TOUS_PAYES);
+
+      // 5 000 F × 5 membres = 25 000 F par échéance → 100 000 F visés = 4
+      CreateTontineRequest vise = rotative();
+      vise.setJackpotVise(new BigDecimal("100000"));
+      TontineResponse v = service.createTontine(gestionnaire.getKeycloakId(), vise);
+      assertThat(v.getCotisationsParTour()).isEqualTo(4);
+      assertThat(v.getDeclenchementJackpot()).isEqualTo(DeclenchementJackpot.FIN_DU_TOUR);
+
+      // événementielle : 1 seulement, déclenchement forcé FIN_DU_TOUR
+      CreateTontineRequest e = requeteEvenementielle();
+      e.setDeclenchementJackpot(DeclenchementJackpot.TOUS_PAYES);
+      assertThat(service.createTontine(gestionnaire.getKeycloakId(), e).getDeclenchementJackpot())
+          .isEqualTo(DeclenchementJackpot.FIN_DU_TOUR);
+      e.setCotisationsParTour(2);
+      assertThatThrownBy(() -> service.createTontine(gestionnaire.getKeycloakId(), e))
+          .isInstanceOfSatisfying(
+              BadRequestException.class,
+              x -> assertThat(x.getCode()).isEqualTo(ErrorCode.COTISATIONS_PAR_TOUR_INVALIDE));
+    }
+
+    @Test
+    @DisplayName("commissions (B30) : vérifiées avant, enregistrées après la tontine")
+    void commissionsALaCreation() throws Exception {
+      when(roleRepository.existsByUserIdAndRole(gestionnaire.getId(), UserRole.ADMIN))
+          .thenReturn(true);
+      CreateTontineRequest r = rotative();
+      CreateCommissionRequest commission = new CreateCommissionRequest();
+      commission.setType(CommissionType.POURCENTAGE_JACKPOT);
+      commission.setValeur(new BigDecimal("5"));
+      r.setCommissions(List.of(commission));
+
+      service.createTontine(gestionnaire.getKeycloakId(), r);
+
+      InOrder ordre = inOrder(commissionService, tontineRepository);
+      ordre.verify(commissionService).verifierCommissionsInitiales(r.getCommissions());
+      ordre.verify(tontineRepository).save(any());
+      ordre
+          .verify(commissionService)
+          .enregistrerCommissionsInitiales(eq(gestionnaire), any(), eq(r.getCommissions()));
+    }
+
+    @Test
+    @DisplayName("commission refusée : aucune tontine enregistrée")
+    void commissionRefusee() throws Exception {
+      CreateTontineRequest r = rotative();
+      r.setCommissions(List.of(new CreateCommissionRequest()));
+      doThrow(new ConflictException("doublon", ErrorCode.COMMISSION_ALREADY_EXISTS))
+          .when(commissionService)
+          .verifierCommissionsInitiales(r.getCommissions());
+
+      assertThatThrownBy(() -> service.createTontine(gestionnaire.getKeycloakId(), r))
+          .isInstanceOf(ConflictException.class);
+      verify(tontineRepository, never()).save(any());
+      verify(commissionService, never()).enregistrerCommissionsInitiales(any(), any(), any());
+    }
   }
 
   @Nested
@@ -400,7 +526,7 @@ class TontineServiceImplTest {
       assertThat(t.getFrequence()).isEqualTo("HEBDOMADAIRE");
       verify(auditService)
           .log(gestionnaire, "tontines", tontine.getId(), "montant", "1000", "2000");
-      verify(auditService, org.mockito.Mockito.times(8))
+      verify(auditService, times(8))
           .log(eq(gestionnaire), eq("tontines"), eq(tontine.getId()), any(), any(), any());
     }
 
@@ -428,6 +554,90 @@ class TontineServiceImplTest {
       assertThatThrownBy(
               () -> service.updateTontine(gestionnaire.getKeycloakId(), tontine.getId(), r))
           .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    @DisplayName(
+        "rythme (B26) en BROUILLON : audité en libellé ; rappels modifiés ; inchangé = rien")
+    void rythme() throws Exception {
+      UpdateTontineRequest r = new UpdateTontineRequest();
+      r.setRythmeIntervalle(3);
+      r.setRythmeUnite("JOUR");
+      r.setHeureEcheance("18:00");
+      r.setRappels(RappelsEcheance.builder().heuresAvant(0).build());
+
+      TontineResponse t = service.updateTontine(gestionnaire.getKeycloakId(), tontine.getId(), r);
+
+      assertThat(t.getFrequence()).isEqualTo("PERSONNALISEE");
+      assertThat(t.getHeureEcheance()).isEqualTo("18:00");
+      assertThat(tontine.getRappelHeuresAvant()).isZero();
+      verify(auditService)
+          .log(
+              gestionnaire,
+              "tontines",
+              tontine.getId(),
+              "rythme",
+              "chaque mois, avant 23h59",
+              "tous les 3 jours, avant 18h00");
+
+      clearInvocations(auditService);
+      service.updateTontine(
+          gestionnaire.getKeycloakId(), tontine.getId(), new UpdateTontineRequest());
+      verify(auditService, never()).log(any(), any(), any(), eq("rythme"), any(), any());
+    }
+
+    @Test
+    @DisplayName("B32 en BROUILLON : jackpot visé recalculé, déclenchement audité ; sinon 400")
+    void rythmeJackpot() throws Exception {
+      tontine.setCotisationsParTour(1);
+      tontine.setDeclenchementJackpot(DeclenchementJackpot.FIN_DU_TOUR);
+      UpdateTontineRequest r = new UpdateTontineRequest();
+      r.setMontant(new BigDecimal("2000"));
+      r.setJackpotVise(new BigDecimal("30000")); // 2 000 F × 5 membres = 10 000 F → 3
+      r.setDeclenchementJackpot(DeclenchementJackpot.TOUS_PAYES);
+
+      TontineResponse t = service.updateTontine(gestionnaire.getKeycloakId(), tontine.getId(), r);
+
+      assertThat(t.getCotisationsParTour()).isEqualTo(3);
+      assertThat(t.getDeclenchementJackpot()).isEqualTo(DeclenchementJackpot.TOUS_PAYES);
+      verify(auditService)
+          .log(gestionnaire, "tontines", tontine.getId(), "cotisationsParTour", "1", "3");
+
+      tontine.setStatut(TontineStatut.ACTIVE);
+      for (Consumer<UpdateTontineRequest> champ :
+          List.<Consumer<UpdateTontineRequest>>of(
+              x -> x.setCotisationsParTour(2),
+              x -> x.setJackpotVise(BigDecimal.TEN),
+              x -> x.setDeclenchementJackpot(DeclenchementJackpot.FIN_DU_TOUR))) {
+        UpdateTontineRequest x = new UpdateTontineRequest();
+        champ.accept(x);
+        assertThatThrownBy(
+                () -> service.updateTontine(gestionnaire.getKeycloakId(), tontine.getId(), x))
+            .isInstanceOfSatisfying(
+                BadRequestException.class,
+                e ->
+                    assertThat(e.getCode())
+                        .isEqualTo(ErrorCode.COTISATIONS_PAR_TOUR_NON_MODIFIABLE));
+      }
+    }
+
+    @Test
+    @DisplayName("hors BROUILLON : rythme -> RYTHME_NON_MODIFIABLE")
+    void rythmeNonModifiable() {
+      tontine.setStatut(TontineStatut.ACTIVE);
+      for (Consumer<UpdateTontineRequest> champ :
+          List.<Consumer<UpdateTontineRequest>>of(
+              r -> r.setRythmeIntervalle(2),
+              r -> r.setRythmeUnite("JOUR"),
+              r -> r.setFrequence("HEBDOMADAIRE"))) {
+        UpdateTontineRequest r = new UpdateTontineRequest();
+        champ.accept(r);
+        assertThatThrownBy(
+                () -> service.updateTontine(gestionnaire.getKeycloakId(), tontine.getId(), r))
+            .isInstanceOfSatisfying(
+                BadRequestException.class,
+                e -> assertThat(e.getCode()).isEqualTo(ErrorCode.RYTHME_NON_MODIFIABLE));
+      }
     }
 
     @Test
@@ -495,6 +705,54 @@ class TontineServiceImplTest {
       assertThat(cyclesCrees.get(0).getDateFin()).isEqualTo(LocalDate.of(2026, 1, 31));
       assertThat(cyclesCrees.get(1).getDateDebut()).isEqualTo(LocalDate.of(2026, 2, 1));
       verify(membreRepository, never()).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("rythme avec jour d'échéance (B26) : chaque tour a son échéance à l'heure choisie")
+    void rythmeAvecJour() throws Exception {
+      tontine.setModeCycle(ModeCycle.AUTOMATIQUE);
+      tontine.setDateDebut(LocalDate.of(2026, 11, 11)); // mercredi
+      tontine.appliquerRythme(new Rythme(1, UniteRythme.SEMAINE, "DIMANCHE", LocalTime.of(20, 0)));
+      when(membreRepository.findByTontine_IdAndStatutAndDeletedAtIsNull(
+              tontine.getId(), MembreStatut.ACTIF))
+          .thenReturn(
+              List.of(
+                  Fixtures.membre(tontine, Fixtures.user("A"), 1),
+                  Fixtures.membre(tontine, Fixtures.user("B"), 2)));
+
+      service.activateTontine(gestionnaire.getKeycloakId(), tontine.getId());
+
+      assertThat(cyclesCrees).hasSize(2);
+      assertThat(cyclesCrees.get(0).getEcheanceAt())
+          .isEqualTo(LocalDate.of(2026, 11, 15).atTime(20, 0));
+      assertThat(cyclesCrees.get(1).getDateDebut()).isEqualTo(LocalDate.of(2026, 11, 16));
+      assertThat(cyclesCrees.get(1).getEcheanceAt())
+          .isEqualTo(LocalDate.of(2026, 11, 22).atTime(20, 0));
+      assertThat(cyclesCrees.get(1).getEcheances()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("B32 : chaque semaine le dimanche, 4 par tour → tours de 4 échéances enchaînés")
+    void quatreEcheancesParTour() throws Exception {
+      tontine.setModeCycle(ModeCycle.AUTOMATIQUE);
+      tontine.setDateDebut(LocalDate.of(2026, 11, 11)); // mercredi
+      tontine.appliquerRythme(new Rythme(1, UniteRythme.SEMAINE, "DIMANCHE", LocalTime.of(20, 0)));
+      tontine.setCotisationsParTour(4);
+      when(membreRepository.findByTontine_IdAndStatutAndDeletedAtIsNull(
+              tontine.getId(), MembreStatut.ACTIF))
+          .thenReturn(
+              List.of(
+                  Fixtures.membre(tontine, Fixtures.user("A"), 1),
+                  Fixtures.membre(tontine, Fixtures.user("B"), 2)));
+
+      service.activateTontine(gestionnaire.getKeycloakId(), tontine.getId());
+
+      assertThat(cyclesCrees).hasSize(2);
+      assertThat(cyclesCrees.get(0).getEcheances()).hasSize(4);
+      assertThat(cyclesCrees.get(0).getDateFin()).isEqualTo(LocalDate.of(2026, 12, 6));
+      assertThat(cyclesCrees.get(1).getDateDebut()).isEqualTo(LocalDate.of(2026, 12, 7));
+      assertThat(cyclesCrees.get(1).getEcheances().get(3).getEcheanceAt())
+          .isEqualTo(LocalDate.of(2027, 1, 3).atTime(20, 0));
     }
 
     @Test

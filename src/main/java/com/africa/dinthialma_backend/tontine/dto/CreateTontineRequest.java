@@ -1,8 +1,10 @@
 package com.africa.dinthialma_backend.tontine.dto;
 
+import com.africa.dinthialma_backend.tontine.codeList.DeclenchementJackpot;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -11,6 +13,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -22,7 +25,9 @@ import lombok.Setter;
             + "**ROTATIVE** : ordreBeneficiaire, nombreMembres, modeCycle et montant sont"
             + " obligatoires.\n"
             + "**EVENEMENTIELLE** : dateEcheance est obligatoire ; montant est obligatoire si"
-            + " montantLibre=false ; ordreBeneficiaire et nombreMembres sont ignorés.")
+            + " montantLibre=false ; ordreBeneficiaire et nombreMembres sont ignorés.\n\n"
+            + "**commissions** (optionnel) : enregistrées dans la même transaction que la"
+            + " tontine ; si l'une est refusée, rien n'est créé.")
 @Getter
 @Setter
 public class CreateTontineRequest {
@@ -52,11 +57,67 @@ public class CreateTontineRequest {
 
   @Schema(
       description =
-          "Fréquence de cotisation – code de la liste FREQUENCE_TONTINE."
-              + " Exemples : JOURNALIERE, HEBDOMADAIRE, BIMENSUEL, MENSUEL, TRIMESTRIEL.",
+          "Fréquence historique (compatibilité) : JOURNALIERE, HEBDOMADAIRE, BIMENSUEL, MENSUEL,"
+              + " TRIMESTRIEL. Traduite en rythme ; ignorée si rythmeIntervalle / rythmeUnite"
+              + " sont fournis. L'un ou l'autre est obligatoire (sinon 400 RYTHME_INVALIDE).",
       example = "MENSUEL")
-  @NotBlank
   private String frequence;
+
+  // ─── Rythme et échéance (B26) ───────────────────────────────────────────
+
+  @Schema(
+      description =
+          "« Tous les N … » (B26) : JOUR 1 à 90, SEMAINE 1 à 26, MOIS 1 à 12. À fournir avec"
+              + " rythmeUnite ; prime sur frequence.",
+      example = "3")
+  private Integer rythmeIntervalle;
+
+  @Schema(
+      description = "Unité du rythme (B26)",
+      allowableValues = {"JOUR", "SEMAINE", "MOIS"},
+      example = "JOUR")
+  private String rythmeUnite;
+
+  @Schema(
+      description =
+          "Jour d'échéance facultatif : SEMAINE → LUNDI…DIMANCHE ; MOIS → \"1\"…\"31\" ou"
+              + " \"DERNIER\" (29–31 absents du mois → dernier jour) ; JOUR → aucun. 1ʳᵉ échéance"
+              + " = prochaine occurrence strictement après dateDebut.",
+      example = "DIMANCHE")
+  private String jourEcheance;
+
+  @Schema(
+      description = "Heure limite de paiement HH:mm, heure de Dakar (défaut 23:59)",
+      example = "23:59")
+  private String heureEcheance;
+
+  @Schema(description = "Rappels avant échéance (défaut : veille 18h00 + 3 h avant)")
+  @Valid
+  private RappelsEcheance rappels;
+
+  // ─── Rythme du jackpot (B32) ─────────────────────────────────────────────
+
+  @Schema(
+      description =
+          "ROTATIVE : nombre de cotisations par tour (≥ 1, défaut 1). Ex. chaque semaine, jackpot"
+              + " toutes les 4 cotisations → 4. EVENEMENTIELLE : 1 seulement (sinon 400"
+              + " COTISATIONS_PAR_TOUR_INVALIDE). Modifiable en BROUILLON seulement.",
+      example = "4")
+  private Integer cotisationsParTour;
+
+  @Schema(
+      description =
+          "Jackpot visé, brut avant commission (ROTATIVE) : l'app en déduit cotisationsParTour ="
+              + " jackpotVise ÷ (montant × nombreMembres ÷ nombreGagnants), arrondi au plus proche."
+              + " Ignoré si cotisationsParTour est fourni.",
+      example = "500000")
+  @Positive
+  private BigDecimal jackpotVise;
+
+  @Schema(
+      description = "Remise possible : FIN_DU_TOUR (défaut) ou TOUS_PAYES",
+      example = "FIN_DU_TOUR")
+  private DeclenchementJackpot declenchementJackpot;
 
   @Schema(
       description =
@@ -131,4 +192,14 @@ public class CreateTontineRequest {
       example = "500")
   @Positive
   private BigDecimal montantMinimum;
+
+  // ─── Commissions (B30) ──────────────────────────────────────────────────
+
+  @Schema(
+      description =
+          "Commissions du gestionnaire, enregistrées avec la tontine (mêmes règles que POST"
+              + " /v1/tontines/{id}/commissions). Absent ou vide = aucune commission. Un type au"
+              + " plus une fois (409 COMMISSION_ALREADY_EXISTS) ; POURCENTAGE_JACKPOT ≤ 100"
+              + " (400 COMMISSION_PERCENTAGE_TOO_HIGH) ; valeur ≤ 0 → 400 VALIDATION_ERROR.")
+  private List<@NotNull @Valid CreateCommissionRequest> commissions;
 }

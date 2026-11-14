@@ -56,6 +56,10 @@ public final class ResponseMessageConstants {
   public static final String TONTINE_DELETE_SUCCESS = "Tontine supprimée avec succès";
   public static final String TONTINE_GET_SUCCESS = "Tontine récupérée avec succès";
   public static final String TONTINE_LIST_SUCCESS = "Liste des tontines récupérée avec succès";
+  public static final String TONTINE_SIMULATION_SUCCESS = "Calendrier simulé avec succès";
+  public static final String ECHEANCE_UPDATED = "Échéance et rappels mis à jour";
+  public static final String ECHEANCE_NOT_FOUND = "Échéance introuvable sur ce tour";
+  public static final String CYCLE_PROPOSITION_SUCCESS = "Tour proposé selon le rythme";
   public static final String TONTINE_NOT_FOUND = "Tontine introuvable";
   public static final String TONTINE_ACCESS_DENIED = "Accès non autorisé à cette tontine";
   public static final String TONTINE_ACTIVATED = "Tontine activée avec succès";
@@ -113,6 +117,10 @@ public final class ResponseMessageConstants {
   public static final String COMMISSION_NOT_FOUND = "Commission introuvable";
   public static final String COMMISSION_ALREADY_EXISTS =
       "Une commission de ce type existe déjà sur cette tontine";
+  public static final String COMMISSION_TYPE_EN_DOUBLE =
+      "Chaque type de commission ne peut figurer qu'une seule fois";
+  public static final String COMMISSION_POURCENTAGE_TROP_ELEVE =
+      "Une commission en pourcentage du jackpot ne peut pas dépasser 100 %";
 
   // Espace personnel (/v1/me)
   public static final String ME_SUMMARY_SUCCESS = "Résumé de mes cotisations récupéré avec succès";

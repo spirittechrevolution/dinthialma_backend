@@ -28,6 +28,7 @@ import com.africa.dinthialma_backend.member.service.interfaces.MembreService;
 import com.africa.dinthialma_backend.notification.codeList.NotificationType;
 import com.africa.dinthialma_backend.notification.dto.NotificationLiens;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
+import com.africa.dinthialma_backend.tontine.calendrier.Rythme;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
@@ -107,6 +108,12 @@ public class AdhesionServiceImpl implements AdhesionService {
             .tontineType(t.getTontineType())
             .montant(t.isMontantLibre() ? null : t.getMontant())
             .frequence(t.getFrequence())
+            .rythmeIntervalle(t.getRythme().intervalle())
+            .rythmeUnite(t.getRythme().unite())
+            .jourEcheance(t.getRythme().jourEcheance())
+            .heureEcheance(Rythme.formaterHeure(t.getRythme().heureEcheance()))
+            .cotisationsParTour(t.getCotisationsParTourEffectif())
+            .declenchementJackpot(t.getDeclenchementJackpot())
             .montantLibre(t.isMontantLibre())
             .montantMinimum(t.getMontantMinimum())
             .nomEvenement(t.getNomEvenement())

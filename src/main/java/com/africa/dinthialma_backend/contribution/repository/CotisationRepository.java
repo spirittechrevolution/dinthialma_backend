@@ -61,8 +61,8 @@ public interface CotisationRepository
   Optional<Cotisation> findByIdAndDeletedAtIsNull(UUID id);
 
   /**
-   * Vrai si le membre a une cotisation <b>active</b> sur le cycle (tout statut sauf REFUSE) :
-   * pendant applicatif de l'index unique partiel {@code uq_cot_cycle_membre_actif} (V027).
+   * Vrai si le membre a au moins une cotisation <b>active</b> sur le cycle (tout statut sauf
+   * REFUSE), toutes échéances confondues.
    */
   default boolean existsActiveByCycleAndMembre(UUID cycleId, UUID membreId) {
     return existsByCycle_IdAndMembre_IdAndStatutNotAndDeletedAtIsNull(
@@ -71,6 +71,21 @@ public interface CotisationRepository
 
   boolean existsByCycle_IdAndMembre_IdAndStatutNotAndDeletedAtIsNull(
       UUID cycleId, UUID membreId, CotisationStatut statut);
+
+  /**
+   * Vrai si le membre a une cotisation <b>active</b> (tout statut sauf REFUSE) sur l'échéance :
+   * pendant applicatif de l'index unique partiel {@code uq_cot_echeance_membre_actif} (V042, B32).
+   */
+  default boolean existsActiveByEcheanceAndMembre(UUID echeanceId, UUID membreId) {
+    return existsByEcheance_IdAndMembre_IdAndStatutNotAndDeletedAtIsNull(
+        echeanceId, membreId, CotisationStatut.REFUSE);
+  }
+
+  boolean existsByEcheance_IdAndMembre_IdAndStatutNotAndDeletedAtIsNull(
+      UUID echeanceId, UUID membreId, CotisationStatut statut);
+
+  /** Cotisations d'une échéance (rappels et cotisations manquantes, B32). */
+  List<Cotisation> findByEcheance_IdAndDeletedAtIsNull(UUID echeanceId);
 
   /** Cotisations par statut pour une tontine. */
   List<Cotisation> findByTontine_IdAndStatutAndDeletedAtIsNull(

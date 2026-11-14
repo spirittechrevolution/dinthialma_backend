@@ -1,10 +1,13 @@
 package com.africa.dinthialma_backend.admin.dto;
 
+import com.africa.dinthialma_backend.tontine.codeList.DeclenchementJackpot;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
+import com.africa.dinthialma_backend.tontine.codeList.UniteRythme;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 import lombok.Builder;
 import lombok.Getter;
@@ -101,6 +104,24 @@ public class MyDashboardResponse {
     @Schema(description = "Fréquence de cotisation", example = "MENSUEL")
     private String frequence;
 
+    @Schema(description = "« Tous les N … » (B26)", example = "1")
+    private Integer rythmeIntervalle;
+
+    @Schema(description = "Unité du rythme (B26)", example = "MOIS")
+    private UniteRythme rythmeUnite;
+
+    @Schema(description = "Jour d'échéance (LUNDI…DIMANCHE, 1…31, DERNIER)", example = "30")
+    private String jourEcheance;
+
+    @Schema(description = "Heure limite de paiement HH:mm (Dakar)", example = "23:59")
+    private String heureEcheance;
+
+    @Schema(description = "Cotisations (échéances) par tour (B32)", example = "4")
+    private Integer cotisationsParTour;
+
+    @Schema(description = "Remise du jackpot possible (B32)", example = "FIN_DU_TOUR")
+    private DeclenchementJackpot declenchementJackpot;
+
     @Schema(description = "Date de début de la tontine", example = "2026-01-01")
     private LocalDate dateDebut;
 
@@ -184,6 +205,11 @@ public class MyDashboardResponse {
 
     @Schema(description = "Date de fin prévue du cycle", example = "2024-07-31")
     private LocalDate dateFin;
+
+    @Schema(
+        description = "Limite de paiement du tour (B26), avec fuseau",
+        example = "2026-11-30T23:59:00Z")
+    private OffsetDateTime echeanceAt;
 
     @Schema(
         description = "Prénom + nom du bénéficiaire désigné – null si pas encore désigné",

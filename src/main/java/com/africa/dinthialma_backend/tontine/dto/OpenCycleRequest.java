@@ -23,8 +23,10 @@ public class OpenCycleRequest {
   private LocalDate dateDebut;
 
   @Schema(
-      description = "Date de fin prévue du cycle (doit être après dateDebut)",
+      description =
+          "Date de fin prévue du cycle (≥ dateDebut). Facultative : absente, elle est calculée"
+              + " selon le rythme de la tontine (B26). L'échéance du tour = ce jour à l'heure"
+              + " d'échéance.",
       example = "2024-07-31")
-  @NotNull
   private LocalDate dateFin;
 }
