@@ -1,5 +1,6 @@
 package com.africa.dinthialma_backend.adhesion.dto;
 
+import com.africa.dinthialma_backend.tontine.codeList.DeclenchementJackpot;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.codeList.UniteRythme;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -45,6 +46,12 @@ public class InvitationApercuResponse {
 
   @Schema(description = "Heure limite de paiement HH:mm (Dakar)", example = "23:59")
   private String heureEcheance;
+
+  @Schema(description = "Cotisations (échéances) par tour (B32)", example = "4")
+  private Integer cotisationsParTour;
+
+  @Schema(description = "Remise du jackpot possible (B32)", example = "FIN_DU_TOUR")
+  private DeclenchementJackpot declenchementJackpot;
 
   @Schema(description = "true = montant libre (EVENEMENTIELLE)")
   private boolean montantLibre;

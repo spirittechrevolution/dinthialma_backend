@@ -11,6 +11,7 @@ import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.common.exception.ErrorCode;
 import com.africa.dinthialma_backend.common.exception.ForbiddenException;
 import com.africa.dinthialma_backend.common.exception.NotFoundException;
+import com.africa.dinthialma_backend.common.util.Fuseau;
 import com.africa.dinthialma_backend.common.util.Montants;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.codeList.Ponctualite;
@@ -26,7 +27,6 @@ import com.africa.dinthialma_backend.notification.service.SchedulerService;
 import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.tontine.calendrier.CalendrierTours;
-import com.africa.dinthialma_backend.tontine.calendrier.Rythme;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.OrdreBeneficiaire;
@@ -36,6 +36,7 @@ import com.africa.dinthialma_backend.tontine.dto.BeneficiaireHistoriqueResponse;
 import com.africa.dinthialma_backend.tontine.dto.CycleResponse;
 import com.africa.dinthialma_backend.tontine.dto.CycleResponse.MembreDistributionInfo;
 import com.africa.dinthialma_backend.tontine.dto.OpenCycleRequest;
+import com.africa.dinthialma_backend.tontine.dto.PropositionTourResponse;
 import com.africa.dinthialma_backend.tontine.dto.SelectionnerBeneficiaireRequest;
 import com.africa.dinthialma_backend.tontine.entity.CycleGagnant;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
@@ -135,6 +136,37 @@ public class CycleServiceImpl implements CycleService {
   // ─── Ouverture manuelle ──────────────────────────────────────────────────
 
   @Override
+  @Transactional(readOnly = true)
+  public PropositionTourResponse proposerTour(
+      String keycloakId, UUID tontineId, LocalDate dateDebut) throws CustomException {
+    User caller = findUserByKeycloakId(keycloakId);
+    Tontine tontine = findTontineById(tontineId);
+    assertIsCreatorOrSuperAdmin(caller, tontine);
+    if (tontine.getTontineType() != TontineType.ROTATIVE
+        || tontine.getModeCycle() != ModeCycle.MANUEL) {
+      throw new BadRequestException(
+          "La proposition de tour concerne les tontines rotatives en mode MANUEL");
+    }
+    LocalDate debut = dateDebut != null ? dateDebut : LocalDate.now();
+    List<CalendrierTours.PeriodeTour> echeances =
+        CalendrierTours.echeancesDuTour(
+            tontine.getRythme(),
+            tontine.getCotisationsParTourEffectif(),
+            debut,
+            null,
+            cycleRepository
+                .findTopByTontine_IdAndDeletedAtIsNullOrderByNumeroCycleDesc(tontineId)
+                .map(CycleTontine::getDateFin)
+                .orElse(null));
+    return PropositionTourResponse.builder()
+        .dateDebut(debut)
+        .dateFin(echeances.get(echeances.size() - 1).fin())
+        .nombreEcheances(echeances.size())
+        .echeances(echeances.stream().map(e -> Fuseau.versOffset(e.echeanceAt())).toList())
+        .build();
+  }
+
+  @Override
   public CycleResponse openCycle(String keycloakId, UUID tontineId, OpenCycleRequest request)
       throws CustomException {
 
@@ -168,19 +200,18 @@ public class CycleServiceImpl implements CycleService {
         cycleRepository.findTopByTontine_IdAndDeletedAtIsNullOrderByNumeroCycleDesc(tontineId);
     int nextNum = precedent.map(c -> c.getNumeroCycle() + 1).orElse(1);
 
-    // Sans date de fin : celle du rythme (B26), comme pour les tours générés
-    Rythme rythme = tontine.getRythme();
-    LocalDate dateFin =
-        request.getDateFin() != null
-            ? request.getDateFin()
-            : rythme.finDuTour(
-                request.getDateDebut(), precedent.map(CycleTontine::getDateFin).orElse(null));
+    // Sans date de fin : les N échéances du rythme (B26/B32) ; date choisie : les échéances qui
+    // tombent avant, la dernière ramenée sur cette date
     CycleTontine cycle =
         CalendrierTours.tour(
             tontine,
             nextNum,
-            new CalendrierTours.PeriodeTour(
-                request.getDateDebut(), dateFin, rythme.echeanceAt(dateFin)),
+            CalendrierTours.echeancesDuTour(
+                tontine.getRythme(),
+                tontine.getCotisationsParTourEffectif(),
+                request.getDateDebut(),
+                request.getDateFin(),
+                precedent.map(CycleTontine::getDateFin).orElse(null)),
             CycleStatut.EN_COURS);
 
     CycleTontine saved = cycleRepository.save(cycle);

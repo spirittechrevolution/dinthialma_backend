@@ -4,7 +4,9 @@ import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.tontine.dto.BeneficiaireHistoriqueResponse;
 import com.africa.dinthialma_backend.tontine.dto.CycleResponse;
 import com.africa.dinthialma_backend.tontine.dto.OpenCycleRequest;
+import com.africa.dinthialma_backend.tontine.dto.PropositionTourResponse;
 import com.africa.dinthialma_backend.tontine.dto.SelectionnerBeneficiaireRequest;
+import java.time.LocalDate;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -26,6 +28,16 @@ public interface CycleService {
    * <p>Accès : membres + admin + SUPER_ADMIN.
    */
   CycleResponse getCycle(String keycloakId, UUID tontineId, UUID cycleId) throws CustomException;
+
+  /**
+   * Propose le prochain tour d'une rotative en mode MANUEL (B32) : sa date de fin et ses N
+   * échéances selon le rythme, à partir de {@code dateDebut} (défaut : aujourd'hui). Aucun effet en
+   * base.
+   *
+   * <p>Réservé au créateur de la tontine et au SUPER_ADMIN.
+   */
+  PropositionTourResponse proposerTour(String keycloakId, UUID tontineId, LocalDate dateDebut)
+      throws CustomException;
 
   /**
    * Ouvre un nouveau cycle manuellement (mode {@code MANUEL} uniquement).

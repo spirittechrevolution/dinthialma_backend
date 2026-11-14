@@ -142,7 +142,17 @@ public enum ErrorCode {
   /** Rythme (intervalle, unité) modifiable seulement en BROUILLON. */
   RYTHME_NON_MODIFIABLE,
   /** Échéance et rappels non modifiables : tontine TERMINEE. */
-  ECHEANCE_NON_MODIFIABLE;
+  ECHEANCE_NON_MODIFIABLE,
+
+  // ─── Rythme du jackpot (B32) ───────────────────────────────────────────
+  /** cotisationsParTour < 1, ou ≠ 1 sur une tontine EVENEMENTIELLE. */
+  COTISATIONS_PAR_TOUR_INVALIDE,
+  /** cotisationsParTour / declenchementJackpot modifiables seulement en BROUILLON. */
+  COTISATIONS_PAR_TOUR_NON_MODIFIABLE,
+  /** Échéance inconnue (ou d'un autre tour / d'une autre tontine). */
+  ECHEANCE_INTROUVABLE,
+  /** Échéance pas encore ouverte : on ne paie pas d'avance. */
+  ECHEANCE_NON_OUVERTE;
 
   /** Code générique correspondant à un statut HTTP (repli quand aucun code métier n'est fourni). */
   public static ErrorCode fromStatus(HttpStatusCode status) {

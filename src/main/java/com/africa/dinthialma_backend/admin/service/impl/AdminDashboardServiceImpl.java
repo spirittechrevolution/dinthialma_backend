@@ -407,6 +407,8 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
         .rythmeUnite(tontine.getRythme().unite())
         .jourEcheance(tontine.getRythme().jourEcheance())
         .heureEcheance(Rythme.formaterHeure(tontine.getRythme().heureEcheance()))
+        .cotisationsParTour(tontine.getCotisationsParTourEffectif())
+        .declenchementJackpot(tontine.getDeclenchementJackpot())
         .dateDebut(tontine.getDateDebut())
         .dateEcheance(evenementielle ? tontine.getDateEcheance() : null)
         .nomEvenement(evenementielle ? tontine.getNomEvenement() : null)

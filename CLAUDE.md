@@ -75,8 +75,8 @@
 
 | Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
 |----------|---------|------|--------|-------|-------------|-------|
-| `/` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 tout auth peut créer → devient ADMIN ; `commissions` optionnelles enregistrées dans la même transaction (B30 : une refusée = rien créé) ; rythme `rythmeIntervalle`/`rythmeUnite`/`jourEcheance`/`heureEcheance`/`rappels` ou `frequence` (B26) |
-| `/simulation` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 calendrier simulé (B26), sans effet en base : `nombreTours`, `premiereEcheance`, `derniereEcheance`, `echeances` (400 max) ; mêmes paramètres que la création |
+| `/` | POST | ✅ | ✅ | ✅ | ✅ | 🔒 tout auth peut créer → devient ADMIN ; `commissions` optionnelles enregistrées dans la même transaction (B30 : une refusée = rien créé) ; rythme `rythmeIntervalle`/`rythmeUnite`/`jourEcheance`/`heureEcheance`/`rappels` ou `frequence` (B26) ; `cotisationsParTour` ou `jackpotVise` (brut) + `declenchementJackpot` (B32, ROTATIVE ; BROUILLON seulement) |
+| `/simulation` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 calendrier simulé (B26), sans effet en base : `nombreTours`, `premiereEcheance`, `derniereEcheance`, `echeances` (400 max) ; mêmes paramètres que la création ; B32 : `cotisationsParTour` ou `jackpotVise` + `montant` → `cotisationsParTour`, `jackpotParTour`, `tours[]` avec leurs échéances |
 | `/` | GET | ✅ | ✅ | ✅ | ✅ | 🔒 SUPER_ADMIN voit tout ; autres voient les leurs ; `?role=GERE\|COTISE` ; chaque tontine porte `monRole`, `monMembreId`, `monStatutMembre` |
 | `/{id}` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 ¹membre de la tontine ²créateur |
 | `/{id}` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 BROUILLON seulement |
@@ -116,7 +116,8 @@
 | `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
 | `/{cycleId}` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
 | `/beneficiaires` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 historique des cycles TERMINE avec gagnants (pageable, tri numeroCycle ASC) |
-| `/` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 mode MANUEL uniquement ; `dateFin` facultative (absente = calculée selon le rythme, B26) |
+| `/proposition` | GET | ❌ | ❌ | ✅² | ✅ | 🔒 ROTATIVE MANUEL : tour proposé selon le rythme et `cotisationsParTour` (`?dateDebut=`, défaut aujourd'hui) : `dateFin`, `nombreEcheances`, `echeances` ; sans effet en base (B32) |
+| `/` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 mode MANUEL uniquement ; `dateFin` facultative (absente = les N échéances du rythme ; choisie = échéances jusqu'à cette date, la dernière ramenée dessus ; reliquat de moins d'une demi-période fusionné dans l'échéance précédente, B26/B32) |
 | `/{cycleId}/cloturer` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 EN_COURS → TERMINE, calcul jackpot + commissions |
 | `/{cycleId}/beneficiaire` | PATCH | ❌ | ❌ | ✅² | ✅ | 🔒 ordreBeneficiaire MANUEL ou HYBRIDE + cycle TERMINE sans gagnant ; `membreIds` vide = tirage aléatoire de `nombreGagnants` (priorités accordées servies d'abord) ; refuse doublons, membres non ACTIF et membres `aRecuJackpot` |
 
@@ -570,7 +571,9 @@ obligatoire** : sans Docker démarré, le build échoue (les `*IT` ne sont jamai
 
 | V040 | `create_rappels_envoyes.sql` | B26 : table `rappels_envoyes` (échéance, destinataire, nature, canal) + index unique anti-doublon (multi-instances) |
 
-Prochaine version disponible : **V041**
+| V041 | `add_rythme_jackpot.sql` | B32 : `tontines.cotisations_par_tour` (reprise 1), `declenchement_jackpot` (reprise FIN_DU_TOUR) |
+
+Prochaine version disponible : **V042**
 
 ---
 
@@ -927,6 +930,11 @@ cd docker && docker compose up -d
       lot 3 : rappels veille / N h avant + COTISATIONS_MANQUANTES (planifié, V040)    ✅
       → fix : notifications in-app des rappels de 8h jamais enregistrées (readOnly)
       lot 4 : export CSV des cotisations (échéance, ponctualité, rythme, en fin de ligne) ✅
+  B32 Rythme du jackpot (N cotisations par tour)
+      lot 1 : cotisationsParTour / jackpotVise / declenchementJackpot (V041), tours de N échéances,
+              proposition MANUEL, simulation par tour, échéances dans CycleResponse            ✅
+      lot 2 : cotisations par échéance (déclaration, ponctualité, récap, rappels)          🔲
+      lot 3 : jackpot prévu × N, remise TOUS_PAYES, tableaux de bord                       🔲
 ```
 
 ---
@@ -995,6 +1003,14 @@ l'ouverture manuelle et la simulation (`GET /v1/tontines/simulation`).
 - **À l'échéance** : le statut ne change pas (EN_RETARD seulement à la clôture, S01) ; pendant 24 h, une
   notification `COTISATIONS_MANQUANTES` (une seule) liste au gestionnaire les membres sans déclaration.
 - **Codes** : `RYTHME_INVALIDE`, `JOUR_ECHEANCE_INVALIDE`, `HEURE_ECHEANCE_INVALIDE`, `RYTHME_NON_MODIFIABLE`.
+- **B32 — N cotisations par tour** (ROTATIVE) : `cotisationsParTour` (≥ 1, défaut 1) ou `jackpotVise`
+  (brut : N = jackpot ÷ (montant × membres ÷ gagnants), arrondi au plus proche, `RythmeJackpot`) ;
+  EVENEMENTIELLE = 1 (`COTISATIONS_PAR_TOUR_INVALIDE`) ; modifiable en BROUILLON seulement
+  (`COTISATIONS_PAR_TOUR_NON_MODIFIABLE`). Un tour regroupe N échéances consécutives du rythme
+  (`CalendrierTours.grouper`) ; sa `dateFin` / `echeanceAt` sont celles de sa dernière échéance ; le nombre
+  de tours ne change pas. `CycleResponse` : `nombreEcheances`, `echeances[]` (statut calculé A_VENIR /
+  EN_COURS / ECHUE, `StatutEcheance`), `echeanceEnCours`. `declenchementJackpot` (FIN_DU_TOUR | TOUS_PAYES)
+  est enregistré ; son effet arrive au lot 3.
 
 ---
 

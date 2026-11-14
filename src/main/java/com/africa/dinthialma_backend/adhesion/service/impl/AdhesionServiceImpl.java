@@ -112,6 +112,8 @@ public class AdhesionServiceImpl implements AdhesionService {
             .rythmeUnite(t.getRythme().unite())
             .jourEcheance(t.getRythme().jourEcheance())
             .heureEcheance(Rythme.formaterHeure(t.getRythme().heureEcheance()))
+            .cotisationsParTour(t.getCotisationsParTourEffectif())
+            .declenchementJackpot(t.getDeclenchementJackpot())
             .montantLibre(t.isMontantLibre())
             .montantMinimum(t.getMontantMinimum())
             .nomEvenement(t.getNomEvenement())

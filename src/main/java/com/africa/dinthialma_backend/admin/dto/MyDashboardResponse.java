@@ -1,5 +1,6 @@
 package com.africa.dinthialma_backend.admin.dto;
 
+import com.africa.dinthialma_backend.tontine.codeList.DeclenchementJackpot;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.codeList.UniteRythme;
@@ -114,6 +115,12 @@ public class MyDashboardResponse {
 
     @Schema(description = "Heure limite de paiement HH:mm (Dakar)", example = "23:59")
     private String heureEcheance;
+
+    @Schema(description = "Cotisations (échéances) par tour (B32)", example = "4")
+    private Integer cotisationsParTour;
+
+    @Schema(description = "Remise du jackpot possible (B32)", example = "FIN_DU_TOUR")
+    private DeclenchementJackpot declenchementJackpot;
 
     @Schema(description = "Date de début de la tontine", example = "2026-01-01")
     private LocalDate dateDebut;

@@ -19,12 +19,14 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,6 +36,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -174,6 +177,29 @@ public class CycleController {
   }
 
   // ─── Ouverture manuelle ──────────────────────────────────────────────────
+
+  @GetMapping("/proposition")
+  @Operation(
+      summary = "Proposer le prochain tour (mode MANUEL)",
+      description =
+          "🔒 Rôles : créateur de la tontine, SUPER_ADMIN. Aucun effet en base.\n\n"
+              + "Date de fin et échéances du tour calculées selon le rythme et le nombre de"
+              + " cotisations par tour (B26/B32), à partir de `dateDebut` (défaut : aujourd'hui)."
+              + " Le gestionnaire garde cette date ou en choisit une autre à l'ouverture.")
+  public ResponseEntity<CustomResponse> proposerTour(
+      @PathVariable UUID tontineId,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+          LocalDate dateDebut,
+      HttpServletRequest httpRequest)
+      throws CustomException {
+    String keycloakId = headerParser.extractKeycloakId(httpRequest);
+    return ResponseEntity.ok(
+        new CustomResponse(
+            SUCCESS,
+            OK,
+            ResponseMessageConstants.CYCLE_PROPOSITION_SUCCESS,
+            cycleService.proposerTour(keycloakId, tontineId, dateDebut)));
+  }
 
   @PostMapping
   @Operation(

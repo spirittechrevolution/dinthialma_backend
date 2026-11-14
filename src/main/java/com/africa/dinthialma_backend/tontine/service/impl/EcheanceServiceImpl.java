@@ -121,13 +121,16 @@ public class EcheanceServiceImpl implements EcheanceService {
     LocalDate debut = precedente != null ? precedente.plusDays(1) : tontine.getDateDebut();
 
     boolean evenementielle = tontine.getTontineType() == TontineType.EVENEMENTIELLE;
-    List<PeriodeTour> periodes =
-        CalendrierTours.generer(
-            tontine.getRythme(),
-            debut,
-            evenementielle ? Integer.MAX_VALUE : aVenir.size(),
-            evenementielle ? tontine.getDateEcheance() : null,
-            precedente);
+    int parTour = tontine.getCotisationsParTourEffectif();
+    List<List<PeriodeTour>> periodes =
+        CalendrierTours.grouper(
+            CalendrierTours.generer(
+                tontine.getRythme(),
+                debut,
+                evenementielle ? Integer.MAX_VALUE : aVenir.size() * parTour,
+                evenementielle ? tontine.getDateEcheance() : null,
+                precedente),
+            parTour);
     appliquerPeriodes(tontine, aVenir, periodes);
     return aVenir.get(0).getNumeroCycle();
   }
@@ -137,7 +140,7 @@ public class EcheanceServiceImpl implements EcheanceService {
    * trop (événementielle) sont retirés (suppression logique, ils n'ont aucune cotisation).
    */
   private void appliquerPeriodes(
-      Tontine tontine, List<CycleTontine> aVenir, List<PeriodeTour> periodes) {
+      Tontine tontine, List<CycleTontine> aVenir, List<List<PeriodeTour>> periodes) {
     int numero = aVenir.get(0).getNumeroCycle();
     for (int i = 0; i < Math.max(aVenir.size(), periodes.size()); i++) {
       if (i >= periodes.size()) {

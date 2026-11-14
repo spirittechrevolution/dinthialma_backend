@@ -108,6 +108,61 @@ class TontineEtMembreIT extends AbstractIntegrationTest {
     assertThat(refus.code()).isEqualTo("JOUR_ECHEANCE_INVALIDE");
   }
 
+  @Test
+  @DisplayName("B32 : 4 cotisations par tour, proposition en mode manuel, jackpot simulé")
+  void quatreCotisationsParTour() {
+    Utilisateur g = donnees.inscrire();
+    LocalDate mercredi = LocalDate.now().with(TemporalAdjusters.next(DayOfWeek.WEDNESDAY));
+    Map<String, Object> hebdo = new HashMap<>();
+    hebdo.put("frequence", null);
+    hebdo.put("rythmeIntervalle", 1);
+    hebdo.put("rythmeUnite", "SEMAINE");
+    hebdo.put("jourEcheance", "DIMANCHE");
+    hebdo.put("cotisationsParTour", 4);
+    hebdo.put("declenchementJackpot", "TOUS_PAYES");
+    hebdo.put("modeCycle", "AUTOMATIQUE");
+    hebdo.put("dateDebut", mercredi.toString());
+
+    JsonNode tontine = donnees.creerTontine(g.jeton(), "Hebdo mensuel", hebdo);
+    assertThat(tontine.path("cotisationsParTour").asInt()).isEqualTo(4);
+    assertThat(tontine.path("declenchementJackpot").asText()).isEqualTo("TOUS_PAYES");
+    String tid = tontine.path("id").asText();
+    donnees.ajouterMembre(g.jeton(), tid, donnees.inscrire().phone());
+    donnees.ajouterMembre(g.jeton(), tid, donnees.inscrire().phone());
+    donnees.activer(g.jeton(), tid);
+
+    JsonNode tours = api.get("/v1/tontines/" + tid + "/cycles", g.jeton()).data().path("content");
+    assertThat(tours).hasSize(2);
+    assertThat(tours.get(0).path("nombreEcheances").asInt()).isEqualTo(4);
+    assertThat(tours.get(0).path("echeances")).hasSize(4);
+    assertThat(tours.get(0).path("dateFin").asText())
+        .isEqualTo(mercredi.plusDays(4).plusWeeks(3).toString());
+    assertThat(api.put("/v1/tontines/" + tid, g.jeton(), Map.of("cotisationsParTour", 2)).code())
+        .isEqualTo("COTISATIONS_PAR_TOUR_NON_MODIFIABLE");
+
+    // mode manuel : le tour proposé a 4 échéances
+    Map<String, Object> manuel = new HashMap<>(hebdo);
+    manuel.put("modeCycle", "MANUEL");
+    String tidManuel = donnees.creerTontine(g.jeton(), "Manuel hebdo", manuel).path("id").asText();
+    JsonNode proposition =
+        api.get(
+                "/v1/tontines/" + tidManuel + "/cycles/proposition?dateDebut=" + mercredi,
+                g.jeton())
+            .data();
+    assertThat(proposition.path("nombreEcheances").asInt()).isEqualTo(4);
+
+    JsonNode simulation =
+        api.get(
+                "/v1/tontines/simulation?rythmeIntervalle=1&rythmeUnite=SEMAINE&jourEcheance=DIMANCHE"
+                    + "&nombreMembres=10&montant=5000&jackpotVise=500000&dateDebut="
+                    + mercredi,
+                g.jeton())
+            .data();
+    assertThat(simulation.path("cotisationsParTour").asInt()).isEqualTo(10);
+    assertThat(simulation.path("jackpotParTour").asInt()).isEqualTo(500000);
+    assertThat(simulation.path("tours")).hasSize(10);
+  }
+
   /** Corps complet d'une tontine rotative (les surcharges priment). */
   private static Map<String, Object> corpsTontine(String nom, Map<String, Object> surcharges) {
     Map<String, Object> corps = new HashMap<>();

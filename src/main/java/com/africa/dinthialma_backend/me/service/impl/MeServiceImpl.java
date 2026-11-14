@@ -227,6 +227,8 @@ public class MeServiceImpl implements MeService {
         .rythmeUnite(t.getRythme().unite())
         .jourEcheance(t.getRythme().jourEcheance())
         .heureEcheance(Rythme.formaterHeure(t.getRythme().heureEcheance()))
+        .cotisationsParTour(t.getCotisationsParTourEffectif())
+        .declenchementJackpot(t.getDeclenchementJackpot())
         .nomEvenement(t.getNomEvenement())
         .dateEcheance(t.getDateEcheance())
         .monMembreId(m.getId())

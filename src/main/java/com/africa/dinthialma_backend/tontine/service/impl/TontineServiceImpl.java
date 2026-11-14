@@ -21,7 +21,9 @@ import com.africa.dinthialma_backend.notification.codeList.NotificationType;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.tontine.calendrier.CalendrierTours;
 import com.africa.dinthialma_backend.tontine.calendrier.Rythme;
+import com.africa.dinthialma_backend.tontine.calendrier.RythmeJackpot;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
+import com.africa.dinthialma_backend.tontine.codeList.DeclenchementJackpot;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.OrdreBeneficiaire;
 import com.africa.dinthialma_backend.tontine.codeList.RoleFiltreTontine;
@@ -101,6 +103,14 @@ public class TontineServiceImpl implements TontineService {
 
     BigDecimal montantEffectif = resolveMontant(request, type);
     RappelsEcheance rappels = request.getRappels();
+    int cotisationsParTour =
+        RythmeJackpot.cotisationsParTour(
+            type,
+            request.getCotisationsParTour(),
+            request.getJackpotVise(),
+            montantEffectif,
+            request.getNombreMembres() != null ? request.getNombreMembres() : 0,
+            request.getNombreGagnants());
 
     Tontine tontine =
         Tontine.builder()
@@ -118,6 +128,8 @@ public class TontineServiceImpl implements TontineService {
                 rappels == null || rappels.getHeuresAvant() == null
                     ? RAPPEL_HEURES_AVANT_PAR_DEFAUT
                     : rappels.getHeuresAvant())
+            .cotisationsParTour(cotisationsParTour)
+            .declenchementJackpot(declenchement(type, request.getDeclenchementJackpot()))
             .ordreBeneficiaire(
                 type == TontineType.EVENEMENTIELLE ? null : request.getOrdreBeneficiaire())
             .modeCycle(
@@ -217,11 +229,19 @@ public class TontineServiceImpl implements TontineService {
             "Le rythme ne peut être modifié qu'en statut BROUILLON",
             ErrorCode.RYTHME_NON_MODIFIABLE);
       }
+      if (request.getCotisationsParTour() != null
+          || request.getJackpotVise() != null
+          || request.getDeclenchementJackpot() != null) {
+        throw new BadRequestException(
+            "Le rythme du jackpot ne peut être modifié qu'en statut BROUILLON",
+            ErrorCode.COTISATIONS_PAR_TOUR_NON_MODIFIABLE);
+      }
       throw new BadRequestException("La tontine ne peut être modifiée qu'en statut BROUILLON");
     }
 
     appliquerRythme(caller, tontine, request);
     appliquerChampsCommuns(caller, tontine, request);
+    appliquerRythmeJackpot(caller, tontine, request);
     if (tontine.getTontineType() == TontineType.EVENEMENTIELLE) {
       appliquerChampsEvenementielle(caller, tontine, request);
     }
@@ -231,6 +251,42 @@ public class TontineServiceImpl implements TontineService {
   }
 
   /** Rythme, jour et heure d'échéance, rappels (B26) : chaque changement est audité. */
+  /**
+   * Cotisations par tour et déclenchement (B32), après les champs communs : le jackpot visé se
+   * calcule avec le montant et le nombre de membres éventuellement modifiés dans la même requête.
+   */
+  private void appliquerRythmeJackpot(User caller, Tontine tontine, UpdateTontineRequest request)
+      throws CustomException {
+    if (request.getCotisationsParTour() != null || request.getJackpotVise() != null) {
+      int n =
+          RythmeJackpot.cotisationsParTour(
+              tontine.getTontineType(),
+              request.getCotisationsParTour(),
+              request.getJackpotVise(),
+              tontine.getMontant(),
+              tontine.getNombreMembres(),
+              tontine.getNombreGagnants());
+      modifier(
+          caller,
+          tontine,
+          "cotisationsParTour",
+          tontine.getCotisationsParTour(),
+          n,
+          String::valueOf,
+          tontine::setCotisationsParTour);
+    }
+    if (request.getDeclenchementJackpot() != null) {
+      modifier(
+          caller,
+          tontine,
+          "declenchementJackpot",
+          tontine.getDeclenchementJackpot(),
+          declenchement(tontine.getTontineType(), request.getDeclenchementJackpot()),
+          DeclenchementJackpot::name,
+          tontine::setDeclenchementJackpot);
+    }
+  }
+
   private void appliquerRythme(User caller, Tontine tontine, UpdateTontineRequest request)
       throws CustomException {
     Rythme actuel = tontine.getRythme();
@@ -533,9 +589,14 @@ public class TontineServiceImpl implements TontineService {
 
     int n = tontine.getNombreGagnants();
     int nombreCycles = (int) Math.ceil((double) membres.size() / n);
+    // B32 : chaque tour regroupe N échéances consécutives du rythme
+    int parTour = tontine.getCotisationsParTourEffectif();
     enregistrerTours(
         tontine,
-        CalendrierTours.generer(tontine.getRythme(), tontine.getDateDebut(), nombreCycles, null));
+        CalendrierTours.grouper(
+            CalendrierTours.generer(
+                tontine.getRythme(), tontine.getDateDebut(), nombreCycles * parTour, null),
+            parTour));
 
     log.info(
         "Cycles ROTATIVE générés – tontineId={} membres={} gagnants/cycle={} cycles={}",
@@ -558,7 +619,7 @@ public class TontineServiceImpl implements TontineService {
     List<CalendrierTours.PeriodeTour> periodes =
         CalendrierTours.generer(
             tontine.getRythme(), tontine.getDateDebut(), Integer.MAX_VALUE, echeance);
-    enregistrerTours(tontine, periodes);
+    enregistrerTours(tontine, CalendrierTours.grouper(periodes, 1));
 
     log.info(
         "Sous-cycles EVENEMENTIELLE générés – tontineId={} nbCycles={} echéance={}",
@@ -567,16 +628,25 @@ public class TontineServiceImpl implements TontineService {
         echeance);
   }
 
-  /** Enregistre les tours (avec leur échéance) : le premier EN_COURS, les suivants EN_ATTENTE. */
-  private void enregistrerTours(Tontine tontine, List<CalendrierTours.PeriodeTour> periodes) {
-    for (int i = 0; i < periodes.size(); i++) {
+  /** Enregistre les tours (avec leurs échéances) : le premier EN_COURS, les suivants EN_ATTENTE. */
+  private void enregistrerTours(
+      Tontine tontine, List<List<CalendrierTours.PeriodeTour>> echeancesParTour) {
+    for (int i = 0; i < echeancesParTour.size(); i++) {
       cycleRepository.save(
           CalendrierTours.tour(
               tontine,
               i + 1,
-              periodes.get(i),
+              echeancesParTour.get(i),
               i == 0 ? CycleStatut.EN_COURS : CycleStatut.EN_ATTENTE));
     }
+  }
+
+  /** Déclenchement de la remise : réglage demandé (ROTATIVE), sinon FIN_DU_TOUR. */
+  private static DeclenchementJackpot declenchement(
+      TontineType type, DeclenchementJackpot demande) {
+    return type == TontineType.ROTATIVE && demande != null
+        ? demande
+        : DeclenchementJackpot.FIN_DU_TOUR;
   }
 
   // ─── Validation création ─────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 package com.africa.dinthialma_backend.tontine.dto;
 
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
+import com.africa.dinthialma_backend.tontine.codeList.DeclenchementJackpot;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.MonRoleTontine;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
@@ -58,6 +59,12 @@ public class TontineResponse {
 
   @Schema(description = "Rappels avant échéance")
   private RappelsEcheance rappels;
+
+  @Schema(description = "Cotisations (échéances) par tour (B32)", example = "4")
+  private Integer cotisationsParTour;
+
+  @Schema(description = "Remise du jackpot possible (B32)", example = "FIN_DU_TOUR")
+  private DeclenchementJackpot declenchementJackpot;
 
   @Schema(description = "Code de l'ordre des bénéficiaires (ROTATIVE uniquement)", example = "FIXE")
   private String ordreBeneficiaire;

@@ -38,11 +38,13 @@ import com.africa.dinthialma_backend.tontine.calendrier.Rythme;
 import com.africa.dinthialma_backend.tontine.codeList.CommissionType;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
+import com.africa.dinthialma_backend.tontine.codeList.StatutEcheance;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.codeList.UniteRythme;
 import com.africa.dinthialma_backend.tontine.dto.CycleResponse;
 import com.africa.dinthialma_backend.tontine.dto.OpenCycleRequest;
+import com.africa.dinthialma_backend.tontine.dto.PropositionTourResponse;
 import com.africa.dinthialma_backend.tontine.dto.SelectionnerBeneficiaireRequest;
 import com.africa.dinthialma_backend.tontine.entity.CycleGagnant;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
@@ -57,11 +59,13 @@ import com.africa.dinthialma_backend.tontine.repository.TontineCommissionReposit
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import com.africa.dinthialma_backend.tontine.service.impl.CycleServiceImpl;
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -288,6 +292,62 @@ class CycleServiceImplTest {
           .isEqualTo(OffsetDateTime.of(2026, 11, 22, 20, 0, 0, 0, ZoneOffset.UTC));
       verify(cycleRepository).save(enregistre.capture());
       assertThat(enregistre.getValue().getEcheances()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("B32 : 4 par tour → 4 échéances ; date de fin plus courte → moins d'échéances")
+    void quatreEcheances() throws Exception {
+      membresActifs(0);
+      tontine.appliquerRythme(new Rythme(1, UniteRythme.SEMAINE, "DIMANCHE", LocalTime.of(20, 0)));
+      tontine.setCotisationsParTour(4);
+      when(cycleRepository.findByTontine_IdAndStatutAndDeletedAtIsNull(
+              tontine.getId(), CycleStatut.EN_COURS))
+          .thenReturn(Optional.empty());
+      when(cycleRepository.findTopByTontine_IdAndDeletedAtIsNullOrderByNumeroCycleDesc(
+              tontine.getId()))
+          .thenReturn(Optional.empty());
+      LocalDate mercredi = LocalDate.now().with(TemporalAdjusters.next(DayOfWeek.WEDNESDAY));
+
+      CycleResponse complet = service.openCycle(kc, tontine.getId(), req(mercredi, null));
+      assertThat(complet.getNombreEcheances()).isEqualTo(4);
+      assertThat(complet.getEcheances()).hasSize(4);
+      assertThat(complet.getEcheances().getFirst().getStatut()).isEqualTo(StatutEcheance.A_VENIR);
+      assertThat(complet.getEcheanceEnCours()).isNull();
+      assertThat(complet.getDateFin()).isEqualTo(mercredi.plusDays(4).plusWeeks(3));
+
+      CycleResponse court =
+          service.openCycle(kc, tontine.getId(), req(mercredi, mercredi.plusDays(9)));
+      assertThat(court.getNombreEcheances()).isEqualTo(2);
+      assertThat(court.getDateFin()).isEqualTo(mercredi.plusDays(9));
+    }
+
+    @Test
+    @DisplayName(
+        "proposition de tour (MANUEL) : N échéances sans effet en base ; refus hors MANUEL")
+    void proposition() throws Exception {
+      tontine.appliquerRythme(new Rythme(1, UniteRythme.SEMAINE, "DIMANCHE", LocalTime.of(20, 0)));
+      tontine.setCotisationsParTour(4);
+      when(cycleRepository.findTopByTontine_IdAndDeletedAtIsNullOrderByNumeroCycleDesc(
+              tontine.getId()))
+          .thenReturn(Optional.empty());
+
+      PropositionTourResponse p =
+          service.proposerTour(kc, tontine.getId(), LocalDate.of(2026, 11, 11));
+      assertThat(p.getNombreEcheances()).isEqualTo(4);
+      assertThat(p.getDateFin()).isEqualTo(LocalDate.of(2026, 12, 6));
+      assertThat(p.getEcheances().get(0))
+          .isEqualTo(OffsetDateTime.of(2026, 11, 15, 20, 0, 0, 0, ZoneOffset.UTC));
+      assertThat(service.proposerTour(kc, tontine.getId(), null).getDateDebut())
+          .isEqualTo(LocalDate.now());
+      verify(cycleRepository, never()).save(any());
+
+      tontine.setModeCycle(ModeCycle.AUTOMATIQUE);
+      assertThatThrownBy(() -> service.proposerTour(kc, tontine.getId(), null))
+          .isInstanceOf(BadRequestException.class);
+      tontine.setModeCycle(ModeCycle.MANUEL);
+      tontine.setTontineType(TontineType.EVENEMENTIELLE);
+      assertThatThrownBy(() -> service.proposerTour(kc, tontine.getId(), null))
+          .isInstanceOf(BadRequestException.class);
     }
 
     @Test

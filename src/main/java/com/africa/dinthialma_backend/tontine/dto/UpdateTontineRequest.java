@@ -1,5 +1,6 @@
 package com.africa.dinthialma_backend.tontine.dto;
 
+import com.africa.dinthialma_backend.tontine.codeList.DeclenchementJackpot;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Future;
@@ -71,6 +72,30 @@ public class UpdateTontineRequest {
   @Schema(description = "Rappels avant échéance (champ absent = inchangé)")
   @Valid
   private RappelsEcheance rappels;
+
+  // ─── Rythme du jackpot (B32) ─────────────────────────────────────────────
+
+  @Schema(
+      description =
+          "ROTATIVE : nombre de cotisations par tour (≥ 1, défaut 1). Ex. chaque semaine, jackpot"
+              + " toutes les 4 cotisations → 4. EVENEMENTIELLE : 1 seulement (sinon 400"
+              + " COTISATIONS_PAR_TOUR_INVALIDE). Modifiable en BROUILLON seulement.",
+      example = "4")
+  private Integer cotisationsParTour;
+
+  @Schema(
+      description =
+          "Jackpot visé, brut avant commission (ROTATIVE) : l'app en déduit cotisationsParTour ="
+              + " jackpotVise ÷ (montant × nombreMembres ÷ nombreGagnants), arrondi au plus proche."
+              + " Ignoré si cotisationsParTour est fourni.",
+      example = "500000")
+  @Positive
+  private BigDecimal jackpotVise;
+
+  @Schema(
+      description = "Remise possible : FIN_DU_TOUR (défaut) ou TOUS_PAYES",
+      example = "FIN_DU_TOUR")
+  private DeclenchementJackpot declenchementJackpot;
 
   @Schema(
       description =

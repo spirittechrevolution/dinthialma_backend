@@ -4,6 +4,8 @@ import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import lombok.Getter;
 import lombok.Setter;
@@ -48,6 +50,22 @@ public class SimulationCalendrierRequest {
   @Schema(description = "ROTATIVE : gagnants par tour (défaut 1)", example = "1")
   @Min(1)
   private Integer nombreGagnants;
+
+  @Schema(description = "ROTATIVE : cotisations par tour (B32, défaut 1)", example = "4")
+  @Min(1)
+  private Integer cotisationsParTour;
+
+  @Schema(
+      description = "ROTATIVE : jackpot visé brut, si cotisationsParTour est absent (B32)",
+      example = "500000")
+  @Positive
+  private BigDecimal jackpotVise;
+
+  @Schema(
+      description = "Montant d'une cotisation (jackpot visé et jackpot par tour)",
+      example = "5000")
+  @Positive
+  private BigDecimal montant;
 
   @Schema(
       description = "EVENEMENTIELLE : date de l'événement (obligatoire)",

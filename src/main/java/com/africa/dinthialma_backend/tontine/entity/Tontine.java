@@ -4,6 +4,7 @@ import com.africa.dinthialma_backend.auth.entity.User;
 import com.africa.dinthialma_backend.common.base.BaseEntity;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.tontine.calendrier.Rythme;
+import com.africa.dinthialma_backend.tontine.codeList.DeclenchementJackpot;
 import com.africa.dinthialma_backend.tontine.codeList.ModeCycle;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
@@ -157,6 +158,22 @@ public class Tontine extends BaseEntity {
   /** Rappel N heures avant l'échéance (0 = aucun, 1 à 24). */
   @Column(name = "rappel_heures_avant", nullable = false)
   private int rappelHeuresAvant;
+
+  // ─── Rythme du jackpot (B32) ─────────────────────────────────────────────
+
+  /** Nombre de cotisations (échéances) par tour ; 1 = une cotisation par jackpot. */
+  @Column(name = "cotisations_par_tour", nullable = false)
+  private int cotisationsParTour;
+
+  /** Moment où la remise du jackpot devient possible. */
+  @Enumerated(EnumType.STRING)
+  @Column(name = "declenchement_jackpot", nullable = false, length = 20)
+  private DeclenchementJackpot declenchementJackpot;
+
+  /** Cotisations par tour, au moins 1 (objet non encore enregistré : 1). */
+  public int getCotisationsParTourEffectif() {
+    return Math.max(1, cotisationsParTour);
+  }
 
   /** Code d'invitation partageable (B16) – null = aucune invitation active. */
   @Column(name = "code_invitation", length = 20)

@@ -11,6 +11,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -22,6 +23,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
+import org.hibernate.annotations.BatchSize;
 
 /**
  * Cycle (période) d'une tontine.
@@ -75,6 +77,8 @@ public class CycleTontine extends BaseEntity {
 
   /** Échéances de cotisation du tour (une seule aujourd'hui ; plusieurs avec B32). */
   @OneToMany(mappedBy = "cycle", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+  @OrderBy("numero ASC")
+  @BatchSize(size = 50)
   @Builder.Default
   private List<EcheanceCycle> echeances = new ArrayList<>();
 

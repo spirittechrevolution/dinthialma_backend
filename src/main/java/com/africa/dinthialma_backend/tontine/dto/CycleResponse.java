@@ -37,6 +37,15 @@ public class CycleResponse {
       example = "2024-07-31T23:59:00Z")
   private OffsetDateTime echeanceAt;
 
+  @Schema(description = "Nombre d'échéances de cotisation du tour (B32)", example = "4")
+  private int nombreEcheances;
+
+  @Schema(description = "Échéances de cotisation du tour, dans l'ordre (B32)")
+  private List<EcheanceResponse> echeances;
+
+  @Schema(description = "Échéance ouverte en ce moment (absente si aucune)")
+  private EcheanceResponse echeanceEnCours;
+
   @Schema(
       description = "Jackpot brut = somme des cotisations VALIDÉES (calculé à la clôture)",
       example = "500000")

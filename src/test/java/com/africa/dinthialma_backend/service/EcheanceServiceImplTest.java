@@ -164,6 +164,50 @@ class EcheanceServiceImplTest {
   }
 
   @Test
+  @DisplayName("B32 : 2 cotisations par tour → chaque tour à venir garde 2 échéances recalées")
+  void deuxEcheancesParTour() throws Exception {
+    tontine.setCotisationsParTour(2);
+    tours.add(
+        CalendrierTours.tour(
+            tontine,
+            1,
+            List.of(
+                new PeriodeTour(
+                    LocalDate.of(2026, 11, 9),
+                    LocalDate.of(2026, 11, 15),
+                    LocalDate.of(2026, 11, 15).atTime(23, 59)),
+                new PeriodeTour(
+                    LocalDate.of(2026, 11, 16),
+                    LocalDate.of(2026, 11, 22),
+                    LocalDate.of(2026, 11, 22).atTime(23, 59))),
+            CycleStatut.EN_COURS));
+    tours.add(
+        CalendrierTours.tour(
+            tontine,
+            2,
+            List.of(
+                new PeriodeTour(
+                    LocalDate.of(2026, 11, 23),
+                    LocalDate.of(2026, 11, 29),
+                    LocalDate.of(2026, 11, 29).atTime(23, 59)),
+                new PeriodeTour(
+                    LocalDate.of(2026, 11, 30),
+                    LocalDate.of(2026, 12, 6),
+                    LocalDate.of(2026, 12, 6).atTime(23, 59))),
+            CycleStatut.EN_ATTENTE));
+
+    service.modifierEcheance(kc, tontine.getId(), requete("SAMEDI", null));
+
+    CycleTontine aVenir = tours.get(1);
+    assertThat(aVenir.getEcheances()).hasSize(2);
+    assertThat(aVenir.getEcheances().get(0).getEcheanceAt().toLocalDate())
+        .isEqualTo(LocalDate.of(2026, 11, 28));
+    assertThat(aVenir.getEcheances().get(1).getEcheanceAt().toLocalDate())
+        .isEqualTo(LocalDate.of(2026, 12, 5));
+    assertThat(aVenir.getDateFin()).isEqualTo(LocalDate.of(2026, 12, 5));
+  }
+
+  @Test
   @DisplayName("événementielle : un tour à venir de moins quand les périodes s'allongent")
   void evenementielleRetrait() throws Exception {
     tontine.setTontineType(TontineType.EVENEMENTIELLE);

@@ -3,6 +3,7 @@ package com.africa.dinthialma_backend.me.dto;
 import com.africa.dinthialma_backend.contribution.codeList.Ponctualite;
 import com.africa.dinthialma_backend.me.codeList.StatutCotisationDue;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
+import com.africa.dinthialma_backend.tontine.codeList.DeclenchementJackpot;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.codeList.UniteRythme;
@@ -84,6 +85,12 @@ public class MeSummaryResponse {
 
     @Schema(description = "Heure limite de paiement HH:mm (Dakar)", example = "23:59")
     private String heureEcheance;
+
+    @Schema(description = "Cotisations (échéances) par tour (B32)", example = "4")
+    private Integer cotisationsParTour;
+
+    @Schema(description = "Remise du jackpot possible (B32)", example = "FIN_DU_TOUR")
+    private DeclenchementJackpot declenchementJackpot;
 
     @Schema(description = "Nom de l'événement (EVENEMENTIELLE)", nullable = true)
     private String nomEvenement;

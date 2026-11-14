@@ -9,6 +9,7 @@ import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.dto.SimulationCalendrierRequest;
 import com.africa.dinthialma_backend.tontine.dto.SimulationCalendrierResponse;
 import com.africa.dinthialma_backend.tontine.service.impl.CalendrierServiceImpl;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -31,6 +32,38 @@ class CalendrierServiceImplTest {
 
   private static OffsetDateTime utc(int annee, int mois, int jour, int heure, int minute) {
     return OffsetDateTime.of(annee, mois, jour, heure, minute, 0, 0, ZoneOffset.UTC);
+  }
+
+  @Test
+  @DisplayName(
+      "B32 : chaque semaine le dimanche, 4 par tour, 10 membres, 5 000 F → 10 tours, 200 000 F")
+  void quatreParTour() throws Exception {
+    SimulationCalendrierRequest r = requete();
+    r.setRythmeIntervalle(1);
+    r.setRythmeUnite("SEMAINE");
+    r.setJourEcheance("DIMANCHE");
+    r.setDateDebut(LocalDate.of(2026, 11, 11));
+    r.setCotisationsParTour(4);
+    r.setMontant(new BigDecimal("5000"));
+
+    SimulationCalendrierResponse s = service.simuler(r);
+    assertThat(s.getNombreTours()).isEqualTo(10);
+    assertThat(s.getCotisationsParTour()).isEqualTo(4);
+    assertThat(s.getJackpotParTour()).isEqualByComparingTo("200000");
+    assertThat(s.getEcheances()).hasSize(40);
+    assertThat(s.getTours()).hasSize(10);
+    assertThat(s.getTours().get(0).getEcheances()).hasSize(4);
+    assertThat(s.getTours().get(0).getDateFin()).isEqualTo(LocalDate.of(2026, 12, 6));
+    assertThat(s.getTours().get(1).getDateDebut()).isEqualTo(LocalDate.of(2026, 12, 7));
+
+    // jackpot visé de 500 000 F → 10 cotisations par tour
+    r.setCotisationsParTour(null);
+    r.setJackpotVise(new BigDecimal("500000"));
+    assertThat(service.simuler(r).getCotisationsParTour()).isEqualTo(10);
+    // sans montant : pas de jackpot calculé
+    r.setJackpotVise(null);
+    r.setMontant(null);
+    assertThat(service.simuler(r).getJackpotParTour()).isNull();
   }
 
   @Test
