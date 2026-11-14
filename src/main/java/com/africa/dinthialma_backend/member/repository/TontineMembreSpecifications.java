@@ -43,7 +43,27 @@ public final class TontineMembreSpecifications {
 
   /**
    * Membres ayant ({@code aPaye=true}) ou n'ayant pas ({@code false}) une cotisation <b>active</b>
-   * (EN_ATTENTE ou VALIDE, hors REFUSE) sur le cycle donné. Ignoré si l'un des deux est null.
+   * (EN_ATTENTE ou VALIDE, hors REFUSE) sur l'échéance donnée (B32). Ignoré si l'un des deux est
+   * null.
+   */
+  public static Specification<TontineMembre> paiementSurEcheance(UUID echeanceId, Boolean aPaye) {
+    if (echeanceId == null || aPaye == null) return null;
+    return (root, query, cb) -> {
+      Subquery<Integer> sub = query.subquery(Integer.class);
+      Root<Cotisation> c = sub.from(Cotisation.class);
+      sub.select(cb.literal(1))
+          .where(
+              cb.equal(c.get("membre"), root),
+              cb.equal(c.get("echeance").get("id"), echeanceId),
+              cb.isNull(c.get("deletedAt")),
+              c.get("statut").in(CotisationStatut.EN_ATTENTE, CotisationStatut.VALIDE));
+      return aPaye ? cb.exists(sub) : cb.not(cb.exists(sub));
+    };
+  }
+
+  /**
+   * Membres ayant ({@code aPaye=true}) ou n'ayant pas ({@code false}) au moins une cotisation
+   * <b>active</b> (EN_ATTENTE ou VALIDE) sur le cycle, toutes échéances confondues.
    */
   public static Specification<TontineMembre> paiementSurCycle(UUID cycleId, Boolean aPaye) {
     if (cycleId == null || aPaye == null) return null;

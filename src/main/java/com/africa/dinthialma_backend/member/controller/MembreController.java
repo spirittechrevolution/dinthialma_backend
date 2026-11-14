@@ -76,7 +76,9 @@ public class MembreController {
               + "- `q` : prénom, nom ou téléphone (insensible à la casse, « + » ignoré)\n"
               + "- `cycleId` + `aPaye` : `aPaye=false` = membres sans cotisation active"
               + " (EN_ATTENTE ou VALIDE) sur ce cycle, `aPaye=true` = membres ayant payé ou"
-              + " déclaré. Un `cycleId` hors tontine renvoie 404.\n\n"
+              + " déclaré. Un `cycleId` hors tontine renvoie 404.\n"
+              + "- `echeanceId` + `aPaye` : même filtre sur une échéance précise du tour (B32),"
+              + " prioritaire sur `cycleId` ; hors tontine → 404 `ECHEANCE_INTROUVABLE`.\n\n"
               + "Pagination : `?page=0&size=20&sort=ordreJackpot,asc`")
   @ApiResponses({
     @ApiResponse(
@@ -104,6 +106,9 @@ public class MembreController {
                   "Cycle de référence pour le filtre aPaye (doit appartenir à la tontine)")
           @RequestParam(required = false)
           UUID cycleId,
+      @Parameter(description = "Échéance de référence pour le filtre aPaye (B32)")
+          @RequestParam(required = false)
+          UUID echeanceId,
       @Parameter(
               description =
                   "Avec cycleId : true = membres ayant une cotisation active (EN_ATTENTE ou"
@@ -117,7 +122,8 @@ public class MembreController {
 
     String keycloakId = headerParser.extractKeycloakId(httpRequest);
     Page<MembreResponse> membres =
-        membreService.listMembres(keycloakId, tontineId, statut, q, cycleId, aPaye, pageable);
+        membreService.listMembres(
+            keycloakId, tontineId, statut, q, cycleId, echeanceId, aPaye, pageable);
 
     return ResponseEntity.ok(
         new CustomResponse(SUCCESS, OK, ResponseMessageConstants.MEMBER_LIST_SUCCESS, membres));

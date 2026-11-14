@@ -3,12 +3,15 @@ package com.africa.dinthialma_backend.me.dto;
 import com.africa.dinthialma_backend.contribution.codeList.Ponctualite;
 import com.africa.dinthialma_backend.me.codeList.StatutCotisationDue;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
+import com.africa.dinthialma_backend.tontine.codeList.DeclenchementJackpot;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
+import com.africa.dinthialma_backend.tontine.codeList.UniteRythme;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 import lombok.Builder;
@@ -70,6 +73,24 @@ public class MeSummaryResponse {
 
     @Schema(description = "Fréquence de cotisation", example = "MENSUEL")
     private String frequence;
+
+    @Schema(description = "« Tous les N … » (B26)", example = "1")
+    private Integer rythmeIntervalle;
+
+    @Schema(description = "Unité du rythme (B26)", example = "MOIS")
+    private UniteRythme rythmeUnite;
+
+    @Schema(description = "Jour d'échéance (LUNDI…DIMANCHE, 1…31, DERNIER)", example = "30")
+    private String jourEcheance;
+
+    @Schema(description = "Heure limite de paiement HH:mm (Dakar)", example = "23:59")
+    private String heureEcheance;
+
+    @Schema(description = "Cotisations (échéances) par tour (B32)", example = "4")
+    private Integer cotisationsParTour;
+
+    @Schema(description = "Remise du jackpot possible (B32)", example = "FIN_DU_TOUR")
+    private DeclenchementJackpot declenchementJackpot;
 
     @Schema(description = "Nom de l'événement (EVENEMENTIELLE)", nullable = true)
     private String nomEvenement;
@@ -156,9 +177,16 @@ public class MeSummaryResponse {
 
     @Schema(description = "Fin du tour")
     private LocalDate dateFin;
+
+    @Schema(
+        description = "Limite de paiement du tour (B26), avec fuseau",
+        example = "2026-11-30T23:59:00Z")
+    private OffsetDateTime echeanceAt;
   }
 
-  @Schema(description = "Ma cotisation attendue sur le tour en cours")
+  @Schema(
+      description =
+          "Ma cotisation attendue sur le tour en cours, à l'échéance courante du tour (B32)")
   @Getter
   @Builder
   public static class CotisationDue {
@@ -177,8 +205,29 @@ public class MeSummaryResponse {
     @Schema(description = "Plancher en mode libre", nullable = true)
     private BigDecimal montantMinimum;
 
-    @Schema(description = "Date limite (= fin du tour en cours)")
+    @Schema(description = "Date limite de l'échéance courante (= fin du tour s'il n'en a qu'une)")
     private LocalDate dateLimite;
+
+    @Schema(description = "Échéance courante du tour (à payer par défaut)", nullable = true)
+    private UUID echeanceId;
+
+    @Schema(description = "Rang de l'échéance courante (1 à N)", example = "2", nullable = true)
+    private Integer numeroEcheance;
+
+    @Schema(description = "Nombre d'échéances du tour", example = "4")
+    private int nombreEcheances;
+
+    @Schema(
+        description = "Limite de paiement de l'échéance courante, avec fuseau",
+        example = "2026-11-29T20:00:00Z",
+        nullable = true)
+    private OffsetDateTime echeanceAt;
+
+    @Schema(
+        description =
+            "Échéances échues du tour sans déclaration retenue (à régulariser avec echeanceId)",
+        example = "1")
+    private int echeancesEnRetard;
 
     @Schema(
         description = "Situation de ma cotisation sur ce tour",

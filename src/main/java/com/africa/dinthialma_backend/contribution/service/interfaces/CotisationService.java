@@ -145,10 +145,12 @@ public interface CotisationService {
    * @param keycloakId sub JWT de l'admin appelant
    * @param tontineId identifiant de la tontine
    * @param cycleId identifiant du cycle
+   * @param echeanceId échéance de référence des champs de cotisation (null = échéance en cours)
    * @param pageable pagination (tri par défaut : ordreJackpot ASC, createdAt ASC)
    */
   Page<CycleRecapCotisationResponse> getCycleRecap(
-      String keycloakId, UUID tontineId, UUID cycleId, Pageable pageable) throws CustomException;
+      String keycloakId, UUID tontineId, UUID cycleId, UUID echeanceId, Pageable pageable)
+      throws CustomException;
 
   /**
    * Retourne le total cumulé cotisé (VALIDÉ) par membre, tous cycles confondus, pour une tontine.

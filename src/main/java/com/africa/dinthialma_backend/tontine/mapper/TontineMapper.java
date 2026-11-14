@@ -2,12 +2,16 @@ package com.africa.dinthialma_backend.tontine.mapper;
 
 import com.africa.dinthialma_backend.auth.entity.User;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
+import com.africa.dinthialma_backend.tontine.calendrier.Rythme;
 import com.africa.dinthialma_backend.tontine.codeList.MonRoleTontine;
+import com.africa.dinthialma_backend.tontine.dto.RappelsEcheance;
 import com.africa.dinthialma_backend.tontine.dto.TontineResponse;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
+import java.time.LocalTime;
 import java.util.UUID;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.Named;
 
 /** Conversions des tontines. */
 @Mapper
@@ -17,7 +21,22 @@ public interface TontineMapper {
   @Mapping(target = "monRole", ignore = true)
   @Mapping(target = "monMembreId", ignore = true)
   @Mapping(target = "monStatutMembre", ignore = true)
+  @Mapping(target = "rappels", source = "tontine", qualifiedByName = "rappels")
   TontineResponse toResponse(Tontine tontine, int nombreMembresActuels);
+
+  /** Rappels avant échéance de la tontine (B26). */
+  @Named("rappels")
+  default RappelsEcheance rappels(Tontine tontine) {
+    return RappelsEcheance.builder()
+        .veille(tontine.isRappelVeille())
+        .heuresAvant(tontine.getRappelHeuresAvant())
+        .build();
+  }
+
+  /** Heure d'échéance au format HH:mm. */
+  default String heure(LocalTime heure) {
+    return Rythme.formaterHeure(heure);
+  }
 
   TontineResponse.CreateurInfo toCreateurInfo(User user);
 

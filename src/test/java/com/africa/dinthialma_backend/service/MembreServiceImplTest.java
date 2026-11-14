@@ -38,8 +38,10 @@ import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.support.Fixtures;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
+import com.africa.dinthialma_backend.tontine.entity.EcheanceCycle;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
+import com.africa.dinthialma_backend.tontine.repository.EcheanceCycleRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import java.util.List;
 import java.util.Optional;
@@ -69,6 +71,7 @@ class MembreServiceImplTest {
   @Spy private MembreMapper membreMapper = Mappers.getMapper(MembreMapper.class);
   @Mock private TontineRepository tontineRepository;
   @Mock private CycleTontineRepository cycleRepository;
+  @Mock private EcheanceCycleRepository echeanceRepository;
   @Mock private UserRepository userRepository;
   @Mock private UserRoleAssignmentRepository roleRepository;
   @Mock private KeycloakAuthService keycloakAuthService;
@@ -392,6 +395,7 @@ class MembreServiceImplTest {
                       "awa",
                       null,
                       null,
+                      null,
                       page)
                   .getContent())
           .extracting(MembreResponse::getOrdreJackpot)
@@ -412,6 +416,7 @@ class MembreServiceImplTest {
                       null,
                       null,
                       cycleAilleurs,
+                      null,
                       true,
                       page))
           .isInstanceOf(NotFoundException.class);
@@ -419,8 +424,56 @@ class MembreServiceImplTest {
       assertThatThrownBy(
               () ->
                   service.listMembres(
-                      etranger.getKeycloakId(), tontine.getId(), null, null, null, null, page))
+                      etranger.getKeycloakId(),
+                      tontine.getId(),
+                      null,
+                      null,
+                      null,
+                      null,
+                      null,
+                      page))
           .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    @DisplayName("filtre aPaye par échéance (B32) : échéance de la tontine acceptée, sinon 404")
+    @SuppressWarnings("unchecked")
+    void parEcheance() throws Exception {
+      UUID echeanceId = UUID.randomUUID();
+      when(echeanceRepository.findByIdAndCycle_Tontine_IdAndDeletedAtIsNull(
+              echeanceId, tontine.getId()))
+          .thenReturn(Optional.of(new EcheanceCycle()));
+      when(membreRepository.findAll(any(Specification.class), eq(page)))
+          .thenReturn(new PageImpl<>(List.of()));
+      assertThat(
+              service.listMembres(
+                  gestionnaire.getKeycloakId(),
+                  tontine.getId(),
+                  null,
+                  null,
+                  null,
+                  echeanceId,
+                  false,
+                  page))
+          .isEmpty();
+
+      UUID ailleurs = UUID.randomUUID();
+      assertThatThrownBy(
+              () ->
+                  service.listMembres(
+                      gestionnaire.getKeycloakId(),
+                      tontine.getId(),
+                      null,
+                      null,
+                      null,
+                      ailleurs,
+                      true,
+                      page))
+          .isInstanceOf(NotFoundException.class)
+          .satisfies(
+              e ->
+                  assertThat(((CustomException) e).getCode())
+                      .isEqualTo(ErrorCode.ECHEANCE_INTROUVABLE));
     }
 
     @Test
@@ -442,6 +495,7 @@ class MembreServiceImplTest {
                   null,
                   null,
                   cycle.getId(),
+                  null,
                   false,
                   page))
           .isEmpty();

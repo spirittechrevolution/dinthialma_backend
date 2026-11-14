@@ -49,11 +49,14 @@ import com.africa.dinthialma_backend.support.Fixtures;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
+import com.africa.dinthialma_backend.tontine.entity.EcheanceCycle;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
+import com.africa.dinthialma_backend.tontine.repository.EcheanceCycleRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -83,6 +86,7 @@ class CotisationServiceImplTest {
   @Spy private CotisationMapper cotisationMapper = Mappers.getMapper(CotisationMapper.class);
   @Mock private TontineRepository tontineRepository;
   @Mock private CycleTontineRepository cycleRepository;
+  @Mock private EcheanceCycleRepository echeanceRepository;
   @Mock private TontineMembreRepository membreRepository;
   @Mock private UserRepository userRepository;
   @Mock private UserRoleAssignmentRepository roleRepository;
@@ -601,6 +605,7 @@ class CotisationServiceImplTest {
     void export() throws Exception {
       Cotisation c = existante(CotisationStatut.REFUSE);
       c.setMotifRefus("doublon");
+      c.getCycle().setEcheanceAt(LocalDate.of(2026, 11, 22).atTime(20, 0));
       when(cotisationRepository.findAll(any(Specification.class), any(Pageable.class)))
           .thenReturn(new PageImpl<>(List.of(c)));
 
@@ -611,9 +616,11 @@ class CotisationServiceImplTest {
       String contenu = new String(f.contenu(), StandardCharsets.UTF_8);
       assertThat(f.nomFichier()).isEqualTo("cotisations-" + tontine.getId() + ".csv");
       assertThat(contenu)
-          .contains("Tour", "Montant (FCFA)")
+          .contains("Tour;Membre;Téléphone;", ";Note;Échéance du tour;Ponctualité;Payée le;Rythme")
           .contains("Awa Test")
-          .contains("doublon");
+          .contains("doublon")
+          // B26 : échéance du tour, ponctualité (refusée = non déclarée), rythme lisible
+          .contains(";2026-11-22T20:00;NON_DECLAREE;;chaque mois, avant 23h59");
       assertThat(contenu.lines().filter(l -> !l.isBlank())).hasSize(2);
 
       assertThatThrownBy(
@@ -759,7 +766,8 @@ class CotisationServiceImplTest {
 
       List<CycleRecapCotisationResponse> r =
           service
-              .getCycleRecap(gestionnaire.getKeycloakId(), tontine.getId(), cycle.getId(), page)
+              .getCycleRecap(
+                  gestionnaire.getKeycloakId(), tontine.getId(), cycle.getId(), null, page)
               .getContent();
 
       assertThat(r.get(0).getCotisationId()).isEqualTo(active.getId());
@@ -776,7 +784,7 @@ class CotisationServiceImplTest {
           .thenReturn(Page.empty(page));
       assertThat(
               service.getCycleRecap(
-                  gestionnaire.getKeycloakId(), tontine.getId(), cycle.getId(), page))
+                  gestionnaire.getKeycloakId(), tontine.getId(), cycle.getId(), null, page))
           .isEmpty();
       verify(cotisationRepository, never())
           .findByCycle_IdAndMembre_IdInAndDeletedAtIsNull(any(), any());
@@ -787,7 +795,7 @@ class CotisationServiceImplTest {
       assertThatThrownBy(
               () ->
                   service.getCycleRecap(
-                      gestionnaire.getKeycloakId(), tontine.getId(), inconnu, page))
+                      gestionnaire.getKeycloakId(), tontine.getId(), inconnu, null, page))
           .isInstanceOf(NotFoundException.class);
     }
 
@@ -822,6 +830,152 @@ class CotisationServiceImplTest {
       assertThatThrownBy(
               () -> service.getTontineRecapTotal(awa.getKeycloakId(), tontine.getId(), page))
           .isInstanceOf(ForbiddenException.class);
+    }
+  }
+
+  @Nested
+  @DisplayName("cotisations par échéance (B32)")
+  class ParEcheance {
+
+    private final LocalDate aujourdhui = LocalDate.now();
+    private EcheanceCycle passee;
+    private EcheanceCycle enCours;
+    private EcheanceCycle aVenir;
+
+    private EcheanceCycle echeance(int numero, LocalDate debut, LocalDate fin) {
+      EcheanceCycle e =
+          EcheanceCycle.builder()
+              .id(UUID.randomUUID())
+              .cycle(cycle)
+              .numero(numero)
+              .dateDebut(debut)
+              .echeanceAt(fin.atTime(23, 59))
+              .build();
+      cycle.getEcheances().add(e);
+      lenient()
+          .when(echeanceRepository.findByIdAndCycle_IdAndDeletedAtIsNull(e.getId(), cycle.getId()))
+          .thenReturn(Optional.of(e));
+      return e;
+    }
+
+    @BeforeEach
+    void troisEcheances() {
+      cycle.setDateDebut(aujourdhui.minusDays(14));
+      passee = echeance(1, aujourdhui.minusDays(14), aujourdhui.minusDays(8));
+      enCours = echeance(2, aujourdhui.minusDays(7), aujourdhui.plusDays(2));
+      aVenir = echeance(3, aujourdhui.plusDays(3), aujourdhui.plusDays(9));
+    }
+
+    @Test
+    @DisplayName("sans echeanceId : échéance en cours, unicité par échéance, libellé 2/3")
+    void echeanceParDefaut() throws Exception {
+      CotisationResponse r =
+          service.recordCotisation(awa.getKeycloakId(), tontine.getId(), declaration("1000"));
+
+      assertThat(r.getEcheanceId()).isEqualTo(enCours.getId());
+      assertThat(r.getNumeroEcheance()).isEqualTo(2);
+      assertThat(r.getEcheanceAt()).isNotNull();
+      verify(cotisationRepository).existsActiveByEcheanceAndMembre(enCours.getId(), membre.getId());
+      verify(cotisationRepository, never()).existsActiveByCycleAndMembre(any(), any());
+      verify(whatsappService, times(2)).send(anyString(), contains("tour 1, échéance 2/3"));
+    }
+
+    @Test
+    @DisplayName(
+        "déjà payée sur l'échéance -> 409 ; future -> ECHEANCE_NON_OUVERTE ; inconnue -> 404")
+    void refus() {
+      when(cotisationRepository.existsActiveByEcheanceAndMembre(enCours.getId(), membre.getId()))
+          .thenReturn(true);
+      assertThatThrownBy(
+              () ->
+                  service.recordCotisation(
+                      awa.getKeycloakId(), tontine.getId(), declaration("1000")))
+          .satisfies(e -> code(e, ErrorCode.COTISATION_ALREADY_EXISTS));
+
+      RecordCotisationRequest future = declaration("1000");
+      future.setEcheanceId(aVenir.getId());
+      assertThatThrownBy(
+              () -> service.recordCotisation(awa.getKeycloakId(), tontine.getId(), future))
+          .satisfies(e -> code(e, ErrorCode.ECHEANCE_NON_OUVERTE));
+
+      RecordCotisationRequest inconnue = declaration("1000");
+      inconnue.setEcheanceId(UUID.randomUUID());
+      assertThatThrownBy(
+              () -> service.recordCotisation(awa.getKeycloakId(), tontine.getId(), inconnue))
+          .isInstanceOf(NotFoundException.class)
+          .satisfies(e -> code(e, ErrorCode.ECHEANCE_INTROUVABLE));
+      verify(cotisationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("encaissement : régularisation d'une échéance passée, ponctualité EN_RETARD")
+    void regularisation() throws Exception {
+      AdminRecordCotisationRequest r = saisie("1000", null);
+      r.setEcheanceId(passee.getId());
+      r.setDatePaiement(LocalDateTime.now().minusMinutes(5));
+
+      CotisationResponse c =
+          service.adminRecordCotisation(gestionnaire.getKeycloakId(), tontine.getId(), r);
+
+      assertThat(c.getEcheanceId()).isEqualTo(passee.getId());
+      assertThat(c.getNumeroEcheance()).isEqualTo(1);
+      assertThat(c.getPonctualite()).isEqualTo(Ponctualite.EN_RETARD);
+      assertThat(c.getStatut()).isEqualTo(CotisationStatut.VALIDE);
+    }
+
+    @Test
+    @DisplayName("récap : échéance en cours par défaut, dues / payées, détail ; filtre echeanceId")
+    void recap() throws Exception {
+      Pageable page = PageRequest.of(0, 20);
+      TontineMembre fatou = Fixtures.membre(tontine, Fixtures.user("Fatou"), 2);
+      when(membreRepository.findByTontine_IdAndStatutNotAndDeletedAtIsNull(
+              tontine.getId(), MembreStatut.SORTI, page))
+          .thenReturn(new PageImpl<>(List.of(membre, fatou)));
+      Cotisation payee = Fixtures.cotisation(membre, cycle, CotisationStatut.VALIDE);
+      payee.setEcheance(passee);
+      Cotisation declaree = Fixtures.cotisation(membre, cycle, CotisationStatut.EN_ATTENTE);
+      declaree.setEcheance(enCours);
+      when(cotisationRepository.findByCycle_IdAndMembre_IdInAndDeletedAtIsNull(
+              eq(cycle.getId()), anyList()))
+          .thenReturn(List.of(payee, declaree));
+
+      List<CycleRecapCotisationResponse> r =
+          service
+              .getCycleRecap(
+                  gestionnaire.getKeycloakId(), tontine.getId(), cycle.getId(), null, page)
+              .getContent();
+      CycleRecapCotisationResponse awaLigne = r.get(0);
+      assertThat(awaLigne.getEcheanceId()).isEqualTo(enCours.getId());
+      assertThat(awaLigne.getNumeroEcheance()).isEqualTo(2);
+      assertThat(awaLigne.getStatutCotisation()).isEqualTo(CotisationStatut.EN_ATTENTE);
+      assertThat(awaLigne.getNombreEcheances()).isEqualTo(3);
+      assertThat(awaLigne.getEcheancesDues()).isEqualTo(2);
+      assertThat(awaLigne.getEcheancesPayees()).isEqualTo(1);
+      assertThat(awaLigne.getEcheances())
+          .extracting(CycleRecapCotisationResponse.EcheanceRecap::isOuverte)
+          .containsExactly(true, true, false);
+      assertThat(r.get(1).getStatutCotisation()).isNull();
+      assertThat(r.get(1).getEcheancesPayees()).isZero();
+
+      CycleRecapCotisationResponse filtree =
+          service
+              .getCycleRecap(
+                  gestionnaire.getKeycloakId(),
+                  tontine.getId(),
+                  cycle.getId(),
+                  passee.getId(),
+                  page)
+              .getContent()
+              .get(0);
+      assertThat(filtree.getStatutCotisation()).isEqualTo(CotisationStatut.VALIDE);
+      assertThat(filtree.getNumeroEcheance()).isEqualTo(1);
+
+      UUID inconnue = UUID.randomUUID();
+      assertThatThrownBy(
+              () ->
+                  service.getCycleRecap(
+                      gestionnaire.getKeycloakId(), tontine.getId(), cycle.getId(), inconnue, page))
+          .satisfies(e -> code(e, ErrorCode.ECHEANCE_INTROUVABLE));
     }
   }
 }

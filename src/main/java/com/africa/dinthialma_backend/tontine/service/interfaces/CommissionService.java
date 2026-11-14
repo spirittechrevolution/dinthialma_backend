@@ -1,9 +1,12 @@
 package com.africa.dinthialma_backend.tontine.service.interfaces;
 
+import com.africa.dinthialma_backend.auth.entity.User;
 import com.africa.dinthialma_backend.common.exception.CustomException;
 import com.africa.dinthialma_backend.tontine.dto.CommissionResponse;
 import com.africa.dinthialma_backend.tontine.dto.CreateCommissionRequest;
 import com.africa.dinthialma_backend.tontine.dto.UpdateCommissionRequest;
+import com.africa.dinthialma_backend.tontine.entity.Tontine;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -23,6 +26,29 @@ public interface CommissionService {
    */
   CommissionResponse createCommission(
       String keycloakId, UUID tontineId, CreateCommissionRequest request) throws CustomException;
+
+  /**
+   * Vérifie les commissions demandées à la création d'une tontine (B30), avant tout enregistrement.
+   * Règles : un type au plus une fois, pourcentage du jackpot ≤ 100 %.
+   *
+   * <p>À appeler <b>avant</b> d'enregistrer la tontine : une {@link CustomException} (vérifiée)
+   * n'annule pas la transaction.
+   *
+   * @param commissions commissions demandées ({@code null} ou vide = aucune)
+   */
+  void verifierCommissionsInitiales(List<CreateCommissionRequest> commissions)
+      throws CustomException;
+
+  /**
+   * Enregistre, dans la transaction de création de la tontine, les commissions déjà vérifiées par
+   * {@link #verifierCommissionsInitiales(List)}.
+   *
+   * @param createur créateur de la tontine (auteur de l'audit)
+   * @param tontine tontine qui vient d'être enregistrée
+   * @param commissions commissions demandées ({@code null} ou vide = aucune)
+   */
+  void enregistrerCommissionsInitiales(
+      User createur, Tontine tontine, List<CreateCommissionRequest> commissions);
 
   /**
    * Liste les commissions actives d'une tontine.

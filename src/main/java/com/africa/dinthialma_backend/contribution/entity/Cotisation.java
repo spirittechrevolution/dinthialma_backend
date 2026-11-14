@@ -5,6 +5,7 @@ import com.africa.dinthialma_backend.common.base.BaseEntity;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
+import com.africa.dinthialma_backend.tontine.entity.EcheanceCycle;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -56,6 +57,14 @@ public class Cotisation extends BaseEntity {
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "cycle_id", nullable = false)
   private CycleTontine cycle;
+
+  /**
+   * Échéance du tour couverte par cette cotisation (B32) : une cotisation active max par membre et
+   * par échéance. Null seulement pour une donnée antérieure sans échéance (repli sur le tour).
+   */
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "echeance_id")
+  private EcheanceCycle echeance;
 
   /** Montant cotisé. */
   @Column(name = "montant", nullable = false, precision = 12, scale = 2)
