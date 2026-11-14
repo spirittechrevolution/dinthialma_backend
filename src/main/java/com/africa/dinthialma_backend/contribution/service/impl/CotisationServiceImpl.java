@@ -17,6 +17,7 @@ import com.africa.dinthialma_backend.common.util.CsvExport;
 import com.africa.dinthialma_backend.common.util.CsvWriter;
 import com.africa.dinthialma_backend.common.util.FichierExport;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
+import com.africa.dinthialma_backend.contribution.codeList.Ponctualite;
 import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
 import com.africa.dinthialma_backend.contribution.dto.CotisationResponse;
 import com.africa.dinthialma_backend.contribution.dto.CycleRecapCotisationResponse;
@@ -601,6 +602,10 @@ public class CotisationServiceImpl implements CotisationService {
                     0, CsvWriter.MAX_LIGNES, Sort.by("cycle.numeroCycle", "createdAt").ascending()))
             .getContent();
 
+    // Colonnes historiques inchangées (lecture par position), puis ajouts B26 / S01 en fin de
+    // ligne : échéance du tour, ponctualité, date de paiement en main propre et rythme lisible
+    // (même valeur sur chaque ligne, pour que le fichier reste un tableau réimportable).
+    String rythme = tontine.getRythme().libelle();
     CsvWriter csv =
         new CsvWriter()
             .ligne(
@@ -614,7 +619,11 @@ public class CotisationServiceImpl implements CotisationService {
                 "Déclarée le",
                 "Validée le",
                 "Motif refus",
-                "Note");
+                "Note",
+                "Échéance du tour",
+                "Ponctualité",
+                "Payée le",
+                "Rythme");
     for (Cotisation c : cotisations) {
       var u = c.getMembre().getUser();
       csv.ligne(
@@ -628,7 +637,11 @@ public class CotisationServiceImpl implements CotisationService {
           c.getCreatedAt(),
           c.getDateValidation(),
           c.getMotifRefus(),
-          c.getNote());
+          c.getNote(),
+          c.getCycle().getEcheanceAt(),
+          Ponctualite.de(c),
+          c.getDatePaiement(),
+          rythme);
     }
     return FichierExport.csv("cotisations-" + tontineId + ".csv", csv.toBytes());
   }

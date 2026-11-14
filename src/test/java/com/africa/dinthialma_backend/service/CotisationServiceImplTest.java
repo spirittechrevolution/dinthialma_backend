@@ -54,6 +54,7 @@ import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -601,6 +602,7 @@ class CotisationServiceImplTest {
     void export() throws Exception {
       Cotisation c = existante(CotisationStatut.REFUSE);
       c.setMotifRefus("doublon");
+      c.getCycle().setEcheanceAt(LocalDate.of(2026, 11, 22).atTime(20, 0));
       when(cotisationRepository.findAll(any(Specification.class), any(Pageable.class)))
           .thenReturn(new PageImpl<>(List.of(c)));
 
@@ -611,9 +613,11 @@ class CotisationServiceImplTest {
       String contenu = new String(f.contenu(), StandardCharsets.UTF_8);
       assertThat(f.nomFichier()).isEqualTo("cotisations-" + tontine.getId() + ".csv");
       assertThat(contenu)
-          .contains("Tour", "Montant (FCFA)")
+          .contains("Tour;Membre;Téléphone;", ";Note;Échéance du tour;Ponctualité;Payée le;Rythme")
           .contains("Awa Test")
-          .contains("doublon");
+          .contains("doublon")
+          // B26 : échéance du tour, ponctualité (refusée = non déclarée), rythme lisible
+          .contains(";2026-11-22T20:00;NON_DECLAREE;;chaque mois, avant 23h59");
       assertThat(contenu.lines().filter(l -> !l.isBlank())).hasSize(2);
 
       assertThatThrownBy(

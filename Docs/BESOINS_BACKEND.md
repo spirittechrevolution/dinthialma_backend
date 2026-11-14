@@ -422,6 +422,8 @@ Points d'attention :
   - « chaque mois le 31 » → 30/11, 31/12, 28/02 (ou 29), 31/03 ;
   - une déclaration à 23h58 le jour d'échéance, validée le lendemain → **pas en retard** ;
   - une tontine créée avec l'ancien `frequence: "MENSUEL"` fonctionne comme avant.
+- **✅ Livré (2026-11-14)**, en 4 lots : rythme, échéances et simulation (V039) ; échéance et rappels modifiables en cours (`PATCH /tontines/{id}/echeance`, `REGLES_MODIFIEES`) ; rappels veille / N h avant et `COTISATIONS_MANQUANTES` (V040) ; export CSV (colonnes ajoutées en fin de ligne).
+  - **Écarts assumés** : à l'échéance, le statut ne passe pas `EN_RETARD` (règle S01 : seulement à la clôture), seule la notification `COTISATIONS_MANQUANTES` part ; avec un jour d'échéance fixe, la 1ʳᵉ échéance est l'occurrence **suivante** (jamais le jour même du démarrage) ; `rappels` n'est exposé que dans `TontineResponse` ; le statut d'une échéance (A_VENIR / EN_COURS / ECHUE) sera calculé avec B32 ; WhatsApp des rappels envoyé hors 21h–8h (aiguillage complet avec B31) ; l'export du fil d'activité (`/me/activite/export`) n'a pas reçu ces colonnes.
 
 ### B27 — Amendes de retard (tontines rotatives)
 - **Écrans** : Créer une tontine et Réglages (règle d'amende), À valider (section « Retards à traiter »), Fiche Tontine (membre : « À régler »), Payer (payer une amende), Historique, Caisse (B29).

@@ -191,7 +191,7 @@
 | Endpoint | Méthode | Accès | Notes |
 |----------|---------|-------|-------|
 | `/v1/public/config` | GET | 🌐 public | `supportWhatsapp`, `supportEmail`, `versionMinimaleApp` (bloquante), `versionRecommandeeApp` (bandeau) — env `SUPPORT_WHATSAPP`, `SUPPORT_EMAIL`, `APP_VERSION_MINIMALE`, `APP_VERSION_RECOMMANDEE` ; champ absent si non configuré ; versions en SemVer strict `X.Y.Z`, sinon le backend refuse de démarrer |
-| `/v1/tontines/{id}/cotisations/export` | GET | créateur, SUPER_ADMIN | export CSV (`format=csv`, `cycleId`, `statut`) |
+| `/v1/tontines/{id}/cotisations/export` | GET | créateur, SUPER_ADMIN | export CSV (`format=csv`, `cycleId`, `statut`) ; colonnes historiques inchangées, puis (B26) `Échéance du tour`, `Ponctualité`, `Payée le`, `Rythme` (libellé lisible) en fin de ligne |
 | `/v1/code-list/{id}` | DELETE | SUPER_ADMIN | suppression logique ; valeurs système refusées (`CODE_LIST_SYSTEM_VALUE`) ; recréer restaure |
 
 > `GET /v1/qr/{token}` (tout auth) : résout un QR membre → identité sans téléphone + `dansMesTontines` (tontines gérées par l'appelant : membreId, statut, `aPayeCycleEnCours`). Préfixe `t_` réservé aux invitations (B16).
@@ -926,7 +926,7 @@ cd docker && docker compose up -d
       lot 2 : échéance/rappels modifiables en cours (REGLES_MODIFIEES)                ✅
       lot 3 : rappels veille / N h avant + COTISATIONS_MANQUANTES (planifié, V040)    ✅
       → fix : notifications in-app des rappels de 8h jamais enregistrées (readOnly)
-      lot 4 : exports CSV (rythme lisible, echeanceAt)                                🔲
+      lot 4 : export CSV des cotisations (échéance, ponctualité, rythme, en fin de ligne) ✅
 ```
 
 ---
