@@ -1,7 +1,9 @@
 package com.africa.dinthialma_backend.contribution.codeList;
 
+import com.africa.dinthialma_backend.common.util.Fuseau;
 import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
+import com.africa.dinthialma_backend.tontine.entity.EcheanceCycle;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -23,21 +25,30 @@ public enum Ponctualite {
 
   /**
    * Ponctualité d'une cotisation : {@code datePaiement} si renseignée (paiement remis au
-   * gestionnaire), sinon date de déclaration, comparée à l'échéance du tour. Une cotisation absente
-   * ou refusée ne compte pas.
+   * gestionnaire), sinon date de déclaration, comparée à l'échéance qu'elle couvre (B32), à défaut
+   * à celle du tour. Une cotisation absente ou refusée ne compte pas.
    */
   public static Ponctualite de(Cotisation cotisation) {
     if (cotisation == null || cotisation.getStatut() == CotisationStatut.REFUSE) {
       return NON_DECLAREE;
     }
+    // Sans date de saisie, la cotisation est en cours de création (réponse avant écriture en base)
     LocalDateTime date =
         cotisation.getDatePaiement() != null
             ? cotisation.getDatePaiement()
-            : cotisation.getCreatedAt();
-    if (date == null || cotisation.getCycle() == null) {
+            : cotisation.getCreatedAt() != null ? cotisation.getCreatedAt() : Fuseau.maintenant();
+    if (cotisation.getEcheance() != null) {
+      return date.isBefore(finEcheance(cotisation.getEcheance())) ? A_TEMPS : EN_RETARD;
+    }
+    if (cotisation.getCycle() == null) {
       return A_TEMPS;
     }
     return date.isBefore(finEcheance(cotisation.getCycle())) ? A_TEMPS : EN_RETARD;
+  }
+
+  /** Premier instant après une échéance : la minute d'échéance est incluse en entier. */
+  public static LocalDateTime finEcheance(EcheanceCycle echeance) {
+    return echeance.getEcheanceAt().truncatedTo(ChronoUnit.MINUTES).plusMinutes(1);
   }
 
   /**

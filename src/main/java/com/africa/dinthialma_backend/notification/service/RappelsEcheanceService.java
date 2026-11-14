@@ -12,6 +12,7 @@ import com.africa.dinthialma_backend.notification.codeList.NatureRappel;
 import com.africa.dinthialma_backend.notification.codeList.NotificationType;
 import com.africa.dinthialma_backend.notification.dto.NotificationLiens;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
+import com.africa.dinthialma_backend.tontine.calendrier.EcheancesTour;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
@@ -121,7 +122,7 @@ public class RappelsEcheanceService {
       return;
     }
 
-    List<TontineMembre> sansDeclaration = sansDeclaration(echeance.getCycle());
+    List<TontineMembre> sansDeclaration = sansDeclaration(echeance);
     if (sansDeclaration.isEmpty()) {
       return;
     }
@@ -136,11 +137,17 @@ public class RappelsEcheanceService {
     }
   }
 
-  /** Membres actifs sans déclaration retenue (aucune, ou seulement refusée) sur le tour. */
-  private List<TontineMembre> sansDeclaration(CycleTontine cycle) {
+  /**
+   * Membres actifs sans déclaration retenue (aucune, ou seulement refusée) sur l'échéance (B32).
+   * Une cotisation sans échéance enregistrée (donnée antérieure) couvre l'échéance de son tour.
+   */
+  private List<TontineMembre> sansDeclaration(EcheanceCycle echeance) {
+    CycleTontine cycle = echeance.getCycle();
     Set<UUID> declarants =
         cotisationRepository.findByCycle_IdAndDeletedAtIsNull(cycle.getId()).stream()
             .filter(c -> c.getStatut() != CotisationStatut.REFUSE)
+            .filter(
+                c -> c.getEcheance() == null || c.getEcheance().getId().equals(echeance.getId()))
             .map(c -> c.getMembre().getId())
             .collect(Collectors.toSet());
     return membreRepository
@@ -224,12 +231,19 @@ public class RappelsEcheanceService {
         gestionnaire.getId(),
         NotificationType.COTISATIONS_MANQUANTES,
         "Cotisations manquantes",
-        messageManquantes(cycle, sansDeclaration),
+        messageManquantes(echeance, sansDeclaration),
         tontine.getId(),
         NotificationLiens.cycle(cycle.getId(), null));
   }
 
-  private static String messageManquantes(CycleTontine cycle, List<TontineMembre> sansDeclaration) {
+  private static String messageManquantes(
+      EcheanceCycle echeance, List<TontineMembre> sansDeclaration) {
+    CycleTontine cycle = echeance.getCycle();
+    int nombreEcheances = EcheancesTour.actives(cycle).size();
+    String quoi =
+        nombreEcheances > 1
+            ? "Échéance " + echeance.getNumero() + "/" + nombreEcheances + " du tour n°"
+            : "Échéance du tour n°";
     int n = sansDeclaration.size();
     String noms =
         sansDeclaration.stream()
@@ -239,7 +253,7 @@ public class RappelsEcheanceService {
     if (n > 5) {
       noms += "…";
     }
-    return "Échéance du tour n°"
+    return quoi
         + cycle.getNumeroCycle()
         + " de "
         + cycle.getTontine().getNom()

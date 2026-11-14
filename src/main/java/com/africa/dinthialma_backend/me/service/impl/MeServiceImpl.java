@@ -33,12 +33,14 @@ import com.africa.dinthialma_backend.me.service.interfaces.MeService;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.member.repository.TontineMembreRepository;
+import com.africa.dinthialma_backend.tontine.calendrier.EcheancesTour;
 import com.africa.dinthialma_backend.tontine.calendrier.Rythme;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import com.africa.dinthialma_backend.tontine.entity.DistributionEvenementielle;
+import com.africa.dinthialma_backend.tontine.entity.EcheanceCycle;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.CycleGagnantRepository;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
@@ -46,6 +48,7 @@ import com.africa.dinthialma_backend.tontine.repository.DistributionEvenementiel
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -148,7 +151,7 @@ public class MeServiceImpl implements MeService {
       Map<UUID, Object[]> jackpotsParMembre,
       Map<UUID, Long> toursParTontine,
       Map<UUID, CycleTontine> cycleEnCoursParTontine,
-      Map<UUID, Cotisation> cotisationEnCoursParMembre) {}
+      Map<UUID, List<Cotisation>> cotisationsEnCoursParMembre) {}
 
   private AgregatsSummary chargerAgregats(List<TontineMembre> memberships) {
     List<UUID> membreIds = memberships.stream().map(TontineMembre::getId).toList();
@@ -198,7 +201,8 @@ public class MeServiceImpl implements MeService {
     return jackpots;
   }
 
-  private Map<UUID, Cotisation> cotisationsEnCours(
+  /** Cotisations des tours en cours, par membership (toutes échéances). */
+  private Map<UUID, List<Cotisation>> cotisationsEnCours(
       Collection<CycleTontine> cyclesEnCours, List<UUID> membreIds) {
     if (cyclesEnCours.isEmpty()) {
       return Map.of();
@@ -207,7 +211,7 @@ public class MeServiceImpl implements MeService {
     return cotisationRepository
         .findByCycle_IdInAndMembre_IdInAndDeletedAtIsNull(cycleIds, membreIds)
         .stream()
-        .collect(Collectors.toMap(c -> c.getMembre().getId(), c -> c, Cotisation::plusPertinente));
+        .collect(Collectors.groupingBy(c -> c.getMembre().getId()));
   }
 
   private MeSummaryResponse.TontineCotisant ligneTontine(
@@ -243,7 +247,11 @@ public class MeServiceImpl implements MeService {
         .toursTotal(agregats.toursParTontine().getOrDefault(t.getId(), 0L))
         .cycleEnCours(cycleEnCours(cycle))
         .cotisationDue(
-            buildCotisationDue(t, m, cycle, agregats.cotisationEnCoursParMembre().get(m.getId())))
+            buildCotisationDue(
+                t,
+                m,
+                cycle,
+                agregats.cotisationsEnCoursParMembre().getOrDefault(m.getId(), List.of())))
         .gestionnaire(gestionnaire(t.getCreePar()))
         .build();
   }
@@ -274,16 +282,25 @@ public class MeServiceImpl implements MeService {
   }
 
   /**
-   * Cotisation due sur le tour en cours. Null si pas de tour en cours, tontine non ACTIVE ou
-   * membership non ACTIF (aucun paiement attendu).
+   * Cotisation due sur l'échéance courante du tour en cours (B32). Null si pas de tour en cours,
+   * tontine non ACTIVE ou membership non ACTIF (aucun paiement attendu).
    */
   private MeSummaryResponse.CotisationDue buildCotisationDue(
-      Tontine tontine, TontineMembre membre, CycleTontine cycle, Cotisation cotisation) {
+      Tontine tontine, TontineMembre membre, CycleTontine cycle, List<Cotisation> cotisations) {
     if (cycle == null
         || tontine.getStatut() != TontineStatut.ACTIVE
         || membre.getStatut() != MembreStatut.ACTIF) {
       return null;
     }
+    LocalDateTime maintenant = Fuseau.maintenant();
+    EcheanceCycle courante = EcheancesTour.courante(cycle, maintenant).orElse(null);
+    Cotisation cotisation = retenueSur(courante, cotisations);
+    int echeancesEnRetard =
+        (int)
+            EcheancesTour.actives(cycle).stream()
+                .filter(e -> EcheancesTour.echue(e, maintenant))
+                .filter(e -> !declaree(retenueSur(e, cotisations)))
+                .count();
 
     // Seul un refus sur ce tour : le membre doit déclarer à nouveau
     String motifRefus = null;
@@ -304,12 +321,36 @@ public class MeServiceImpl implements MeService {
         .montant(tontine.getMontantAttenduParMembre())
         .montantLibre(tontine.isMontantLibre())
         .montantMinimum(tontine.getMontantMinimum())
-        .dateLimite(cycle.getDateFin())
+        .dateLimite(courante != null ? courante.getEcheanceAt().toLocalDate() : cycle.getDateFin())
+        .echeanceId(courante != null ? courante.getId() : null)
+        .numeroEcheance(courante != null ? courante.getNumero() : null)
+        .nombreEcheances(EcheancesTour.actives(cycle).size())
+        .echeanceAt(courante != null ? Fuseau.versOffset(courante.getEcheanceAt()) : null)
+        .echeancesEnRetard(echeancesEnRetard)
         .statut(statut)
         .cotisationId(cotisation != null ? cotisation.getId() : null)
         .ponctualite(Ponctualite.de(cotisation))
         .motifDernierRefus(motifRefus)
         .build();
+  }
+
+  /**
+   * Cotisation retenue d'un membre sur une échéance (active d'abord, sinon dernier refus) ; une
+   * cotisation sans échéance enregistrée compte pour toutes. Échéance null : sur tout le tour.
+   */
+  private static Cotisation retenueSur(EcheanceCycle echeance, List<Cotisation> cotisations) {
+    return cotisations.stream()
+        .filter(
+            c ->
+                echeance == null
+                    || c.getEcheance() == null
+                    || c.getEcheance().getId().equals(echeance.getId()))
+        .reduce(Cotisation::plusPertinente)
+        .orElse(null);
+  }
+
+  private static boolean declaree(Cotisation cotisation) {
+    return cotisation != null && cotisation.getStatut() != CotisationStatut.REFUSE;
   }
 
   private static BigDecimal zeroSiNul(BigDecimal valeur) {

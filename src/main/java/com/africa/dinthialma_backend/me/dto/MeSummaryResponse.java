@@ -184,7 +184,9 @@ public class MeSummaryResponse {
     private OffsetDateTime echeanceAt;
   }
 
-  @Schema(description = "Ma cotisation attendue sur le tour en cours")
+  @Schema(
+      description =
+          "Ma cotisation attendue sur le tour en cours, à l'échéance courante du tour (B32)")
   @Getter
   @Builder
   public static class CotisationDue {
@@ -203,8 +205,29 @@ public class MeSummaryResponse {
     @Schema(description = "Plancher en mode libre", nullable = true)
     private BigDecimal montantMinimum;
 
-    @Schema(description = "Date limite (= fin du tour en cours)")
+    @Schema(description = "Date limite de l'échéance courante (= fin du tour s'il n'en a qu'une)")
     private LocalDate dateLimite;
+
+    @Schema(description = "Échéance courante du tour (à payer par défaut)", nullable = true)
+    private UUID echeanceId;
+
+    @Schema(description = "Rang de l'échéance courante (1 à N)", example = "2", nullable = true)
+    private Integer numeroEcheance;
+
+    @Schema(description = "Nombre d'échéances du tour", example = "4")
+    private int nombreEcheances;
+
+    @Schema(
+        description = "Limite de paiement de l'échéance courante, avec fuseau",
+        example = "2026-11-29T20:00:00Z",
+        nullable = true)
+    private OffsetDateTime echeanceAt;
+
+    @Schema(
+        description =
+            "Échéances échues du tour sans déclaration retenue (à régulariser avec echeanceId)",
+        example = "1")
+    private int echeancesEnRetard;
 
     @Schema(
         description = "Situation de ma cotisation sur ce tour",

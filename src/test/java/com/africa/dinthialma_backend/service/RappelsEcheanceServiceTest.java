@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 
 import com.africa.dinthialma_backend.auth.entity.User;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
+import com.africa.dinthialma_backend.contribution.entity.Cotisation;
 import com.africa.dinthialma_backend.contribution.repository.CotisationRepository;
 import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import com.africa.dinthialma_backend.member.entity.TontineMembre;
@@ -305,5 +306,47 @@ class RappelsEcheanceServiceTest {
     assertThat(RappelsEcheanceService.francs(new BigDecimal("1000000.00")))
         .isEqualTo("1 000 000 F");
     assertThat(RappelsEcheanceService.francs(new BigDecimal("500"))).isEqualTo("500 F");
+  }
+
+  @Test
+  @DisplayName(
+      "B32 : payé sur l'échéance 1 seulement -> rappelé pour l'échéance 2, signalement 2/2")
+  void parEcheance() {
+    LocalDate fin1 = ECHEANCE.toLocalDate().minusDays(7);
+    CycleTontine deuxEcheances =
+        CalendrierTours.tour(
+            tontine,
+            5,
+            List.of(
+                new PeriodeTour(fin1.minusDays(6), fin1, fin1.atTime(20, 0)),
+                new PeriodeTour(fin1.plusDays(1), ECHEANCE.toLocalDate(), ECHEANCE)),
+            CycleStatut.EN_COURS);
+    deuxEcheances.setId(UUID.randomUUID());
+    EcheanceCycle premiere = deuxEcheances.getEcheances().get(0);
+    premiere.setId(UUID.randomUUID());
+    EcheanceCycle seconde = deuxEcheances.getEcheances().get(1);
+    seconde.setId(UUID.randomUUID());
+    when(echeanceRepository.findActivesEntre(any(), any(), any(), any()))
+        .thenReturn(List.of(seconde));
+    Cotisation surPremiere = Fixtures.cotisation(payeur, deuxEcheances, CotisationStatut.VALIDE);
+    surPremiere.setEcheance(premiere);
+    Cotisation surSeconde = Fixtures.cotisation(absent, deuxEcheances, CotisationStatut.VALIDE);
+    surSeconde.setEcheance(seconde);
+    when(cotisationRepository.findByCycle_IdAndDeletedAtIsNull(deuxEcheances.getId()))
+        .thenReturn(List.of(surPremiere, surSeconde));
+
+    service.traiter(ECHEANCE.minusHours(1));
+    // payeur (échéance 1 seulement) et Awa (rien) sont rappelés, Moussa a payé l'échéance 2
+    verifierRappels(2, "Plus que 3 h");
+
+    service.traiter(ECHEANCE.plusHours(1));
+    verify(notificationService)
+        .notify(
+            eq(gestionnaire.getId()),
+            eq(NotificationType.COTISATIONS_MANQUANTES),
+            anyString(),
+            argThat(m -> m.startsWith("Échéance 2/2 du tour n°5") && m.contains("2 membres")),
+            eq(tontine.getId()),
+            any());
   }
 }

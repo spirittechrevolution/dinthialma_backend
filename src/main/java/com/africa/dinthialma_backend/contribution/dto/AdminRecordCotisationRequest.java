@@ -31,6 +31,15 @@ public class AdminRecordCotisationRequest {
   @NotNull
   private UUID cycleId;
 
+  @Schema(
+      description =
+          "Échéance du tour payée (B32). Facultatif : par défaut l'échéance en cours (la dernière"
+              + " ouverte). À renseigner pour régulariser une échéance passée ; une échéance pas"
+              + " encore ouverte est refusée (ECHEANCE_NON_OUVERTE).",
+      example = "550e8400-e29b-41d4-a716-446655440010",
+      nullable = true)
+  private UUID echeanceId;
+
   @Schema(description = "Montant cotisé en FCFA", example = "5000")
   @NotNull
   @Positive

@@ -11,7 +11,7 @@ import lombok.Setter;
 @Schema(
     description =
         "Corps de la requête d'enregistrement d'une cotisation par le membre."
-            + " Une seule cotisation par membre par cycle est autorisée."
+            + " Une seule cotisation active par membre et par échéance du tour."
             + " La cotisation est créée en statut EN_ATTENTE – l'admin devra la valider.")
 @Getter
 @Setter
@@ -22,6 +22,15 @@ public class RecordCotisationRequest {
       example = "550e8400-e29b-41d4-a716-446655440002")
   @NotNull
   private UUID cycleId;
+
+  @Schema(
+      description =
+          "Échéance du tour payée (B32). Facultatif : par défaut l'échéance en cours (la dernière"
+              + " ouverte). À renseigner pour régulariser une échéance passée ; une échéance pas"
+              + " encore ouverte est refusée (ECHEANCE_NON_OUVERTE).",
+      example = "550e8400-e29b-41d4-a716-446655440010",
+      nullable = true)
+  private UUID echeanceId;
 
   @Schema(
       description =

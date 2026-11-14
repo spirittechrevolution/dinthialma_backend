@@ -90,7 +90,7 @@
 
 | Endpoint | Méthode | USER | MEMBER | ADMIN | SUPER_ADMIN | Notes |
 |----------|---------|------|--------|-------|-------------|-------|
-| `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 filtres `?statut=`, `?q=` (nom, téléphone), `?cycleId=&aPaye=true\|false` (cotisation active ou non sur le cycle ; cycle hors tontine → 404) |
+| `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 filtres `?statut=`, `?q=` (nom, téléphone), `?cycleId=&aPaye=true\|false` (cotisation active ou non sur le cycle ; cycle hors tontine → 404) ; `?echeanceId=&aPaye=` (B32, prioritaire, hors tontine → `ECHEANCE_INTROUVABLE`) |
 | `/` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 ajout par **phone** (+ firstName/lastName si numéro inconnu) **ou** par **qrToken** `m_…` (QR scanné, compte existant, numéro jamais exposé) ; exactement un des deux (`MEMBER_IDENTIFIER_REQUIRED`) |
 | `/{membreId}` | DELETE | ❌ | ❌ | ✅² | ✅ | 🔒 soft delete, statut → SORTI |
 | `/{membreId}/statut` | PATCH | ❌ | ❌ | ✅² | ✅ | 🔒 ACTIF / SUSPENDU / SORTI |
@@ -101,12 +101,12 @@
 |----------|---------|------|--------|-------|-------------|-------|
 | `/` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 ¹MEMBER voit les siennes seulement ; filtres `?cycleId=`, `?membreId=` (admin uniquement, ignoré pour MEMBER), `?statut=` (multi) et `?q=` (nom, téléphone, référence) — filtre tontine toujours appliqué |
 | `/{id}` | GET | ❌ | ✅¹ | ✅² | ✅ | 🔒 |
-| `/` | POST | ❌ | ✅¹ | ❌ | ✅ | 🔒 le cotisant enregistre son paiement |
-| `/admin` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 saisie admin pour n'importe quel membre (y compris PRE_ENROLLED), créée directement VALIDE ; `datePaiement` optionnelle (≤ maintenant, ≥ début du tour) pour la ponctualité |
+| `/` | POST | ❌ | ✅¹ | ❌ | ✅ | 🔒 le cotisant enregistre son paiement ; B32 : `echeanceId` facultatif (défaut = échéance courante), une cotisation active par membre **et par échéance** (409), échéance future → `ECHEANCE_NON_OUVERTE`, inconnue → 404 `ECHEANCE_INTROUVABLE`, échéance passée = régularisation |
+| `/admin` | POST | ❌ | ❌ | ✅² | ✅ | 🔒 saisie admin pour n'importe quel membre (y compris PRE_ENROLLED), créée directement VALIDE ; `datePaiement` optionnelle (≤ maintenant, ≥ début du tour) pour la ponctualité ; `echeanceId` comme la déclaration (B32) |
 | `/{id}` | PATCH | ❌ | ❌ | ✅² | ✅ | 🔒 correction (champs non-null) : EN_ATTENTE ou VALIDE + cycle EN_COURS ; refusé si cycle TERMINE ou EN_RETARD |
 | `/{id}/valider` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 EN_ATTENTE → VALIDE |
 | `/{id}/refuser` | PUT | ❌ | ❌ | ✅² | ✅ | 🔒 EN_ATTENTE → REFUSE, `motif` obligatoire ; notifie le membre (`COTISATION_REFUSEE`) ; le membre peut redéclarer sur le même cycle |
-| `/recap/{cycleId}` | GET | ❌ | ❌ | ✅² | ✅ | 🔒 statut de cotisation par membre pour un cycle (pageable, SORTI exclus) |
+| `/recap/{cycleId}` | GET | ❌ | ❌ | ✅² | ✅ | 🔒 statut de cotisation par membre pour un cycle (pageable, SORTI exclus) ; B32 : champs sur l'échéance de référence (`?echeanceId=`, défaut courante) + `nombreEcheances`, `echeancesDues`, `echeancesPayees`, `echeances[]` |
 | `/recap-total` | GET | ❌ | ❌ | ✅² | ✅ | 🔒 total VALIDÉ cumulé par membre, tous cycles (pageable, SORTI exclus) |
 
 ### 🔄 Cycles (`/v1/tontines/{tontineId}/cycles`)
@@ -573,7 +573,9 @@ obligatoire** : sans Docker démarré, le build échoue (les `*IT` ne sont jamai
 
 | V041 | `add_rythme_jackpot.sql` | B32 : `tontines.cotisations_par_tour` (reprise 1), `declenchement_jackpot` (reprise FIN_DU_TOUR) |
 
-Prochaine version disponible : **V042**
+| V042 | `add_echeance_to_cotisations.sql` | B32 : `cotisations.echeance_id` (reprise sur l'échéance du tour) ; `uq_cot_cycle_membre_actif` remplacé par `uq_cot_echeance_membre_actif` (échéance, membre) |
+
+Prochaine version disponible : **V043**
 
 ---
 
@@ -933,7 +935,7 @@ cd docker && docker compose up -d
   B32 Rythme du jackpot (N cotisations par tour)
       lot 1 : cotisationsParTour / jackpotVise / declenchementJackpot (V041), tours de N échéances,
               proposition MANUEL, simulation par tour, échéances dans CycleResponse            ✅
-      lot 2 : cotisations par échéance (déclaration, ponctualité, récap, rappels)          🔲
+      lot 2 : cotisations par échéance (déclaration, ponctualité, récap, rappels, V042)    ✅
       lot 3 : jackpot prévu × N, remise TOUS_PAYES, tableaux de bord                       🔲
 ```
 
@@ -1011,6 +1013,13 @@ l'ouverture manuelle et la simulation (`GET /v1/tontines/simulation`).
   de tours ne change pas. `CycleResponse` : `nombreEcheances`, `echeances[]` (statut calculé A_VENIR /
   EN_COURS / ECHUE, `StatutEcheance`), `echeanceEnCours`. `declenchementJackpot` (FIN_DU_TOUR | TOUS_PAYES)
   est enregistré ; son effet arrive au lot 3.
+- **B32 lot 2 — paiement par échéance** (`EcheancesTour`) : la 1ʳᵉ échéance d'un tour est ouverte dès
+  l'ouverture du tour (comportement d'avant B32), les suivantes à leur `dateDebut` ; l'échéance **courante**
+  (payée par défaut) est la dernière ouverte. Cotisation rattachée à son échéance (`Cotisation.echeance`,
+  V042) : unicité, ponctualité (`Ponctualite.de` sur l'échéance), récap, rappels / `COTISATIONS_MANQUANTES`
+  et `cotisationDue` (`/me/summary` : `echeanceId`, `numeroEcheance`, `nombreEcheances`, `echeanceAt`,
+  `echeancesEnRetard`) se calculent par échéance. Restent au niveau du tour jusqu'au lot 3 : tableaux de
+  bord, `aPayeCycleEnCours` (QR), rappel quotidien de 8h, `toursPayes`.
 
 ---
 

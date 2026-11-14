@@ -31,6 +31,7 @@ import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
+import com.africa.dinthialma_backend.tontine.repository.EcheanceCycleRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -53,6 +54,7 @@ public class MembreServiceImpl implements MembreService {
   private final MembreMapper membreMapper;
   private final TontineRepository tontineRepository;
   private final CycleTontineRepository cycleRepository;
+  private final EcheanceCycleRepository echeanceRepository;
   private final UserRepository userRepository;
   private final UserRoleAssignmentRepository roleAssignmentRepository;
   private final KeycloakAuthService keycloakAuthService;
@@ -232,6 +234,7 @@ public class MembreServiceImpl implements MembreService {
       MembreStatut statut,
       String q,
       UUID cycleId,
+      UUID echeanceId,
       Boolean aPaye,
       Pageable pageable)
       throws CustomException {
@@ -244,14 +247,24 @@ public class MembreServiceImpl implements MembreService {
         && cycleRepository.findByIdAndTontine_IdAndDeletedAtIsNull(cycleId, tontineId).isEmpty()) {
       throw new NotFoundException(ResponseMessageConstants.CYCLE_NOT_FOUND);
     }
+    if (echeanceId != null
+        && echeanceRepository
+            .findByIdAndCycle_Tontine_IdAndDeletedAtIsNull(echeanceId, tontineId)
+            .isEmpty()) {
+      throw new NotFoundException(
+          ResponseMessageConstants.ECHEANCE_NOT_FOUND, ErrorCode.ECHEANCE_INTROUVABLE);
+    }
 
+    // L'échéance, plus précise, prime sur le tour pour le filtre aPaye (B32)
     return membreRepository
         .findAll(
             Specification.allOf(
                 TontineMembreSpecifications.deTontine(tontineId),
                 TontineMembreSpecifications.statut(statut),
                 TontineMembreSpecifications.recherche(q),
-                TontineMembreSpecifications.paiementSurCycle(cycleId, aPaye)),
+                echeanceId != null
+                    ? TontineMembreSpecifications.paiementSurEcheance(echeanceId, aPaye)
+                    : TontineMembreSpecifications.paiementSurCycle(cycleId, aPaye)),
             pageable)
         .map(membreMapper::toResponse);
   }

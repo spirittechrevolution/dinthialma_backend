@@ -5,6 +5,7 @@ import com.africa.dinthialma_backend.tontine.codeList.TontineStatut;
 import com.africa.dinthialma_backend.tontine.entity.EcheanceCycle;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -28,4 +29,10 @@ public interface EcheanceCycleRepository extends JpaRepository<EcheanceCycle, UU
       @Param("a") LocalDateTime a,
       @Param("statutTour") CycleStatut statutTour,
       @Param("statutTontine") TontineStatut statutTontine);
+
+  /** Échéance active d'un tour donné (paiement d'une échéance désignée, B32). */
+  Optional<EcheanceCycle> findByIdAndCycle_IdAndDeletedAtIsNull(UUID id, UUID cycleId);
+
+  /** Échéance active d'une tontine donnée (filtres par échéance, B32). */
+  Optional<EcheanceCycle> findByIdAndCycle_Tontine_IdAndDeletedAtIsNull(UUID id, UUID tontineId);
 }

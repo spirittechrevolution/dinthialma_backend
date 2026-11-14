@@ -7,6 +7,8 @@ import com.africa.dinthialma_backend.member.codeList.MembreStatut;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 import lombok.Builder;
 import lombok.Getter;
@@ -19,10 +21,12 @@ import lombok.Getter;
  */
 @Schema(
     description =
-        "Vue récapitulatif par membre pour un cycle donné."
-            + " statutCotisation null = aucune cotisation soumise pour ce cycle.")
+        "Vue récapitulatif par membre pour un cycle donné. Les champs de cotisation portent sur"
+            + " l'échéance de référence (echeanceId : celle du filtre, sinon l'échéance en cours) ;"
+            + " statutCotisation null = aucune cotisation soumise pour cette échéance. Le détail"
+            + " par échéance est dans echeances (B32).")
 @Getter
-@Builder
+@Builder(toBuilder = true)
 public class CycleRecapCotisationResponse {
 
   // ─── Membre ───────────────────────────────────────────────────────────────
@@ -94,4 +98,63 @@ public class CycleRecapCotisationResponse {
 
   @Schema(description = "Utilisateur ayant enregistré la cotisation (null si aucune)")
   private CotisationResponse.SaisiePar enregistrePar;
+
+  // ─── Échéances du tour (B32) ──────────────────────────────────────────────
+
+  @Schema(description = "Échéance de référence des champs de cotisation ci-dessus", nullable = true)
+  private UUID echeanceId;
+
+  @Schema(description = "Rang de l'échéance de référence (1 à N)", example = "2", nullable = true)
+  private Integer numeroEcheance;
+
+  @Schema(description = "Limite de paiement de l'échéance de référence, avec fuseau")
+  private OffsetDateTime echeanceAt;
+
+  @Schema(description = "Nombre d'échéances du tour", example = "4")
+  private int nombreEcheances;
+
+  @Schema(
+      description = "Échéances déjà ouvertes au paiement (dues à ce jour, en cours comprise)",
+      example = "2")
+  private int echeancesDues;
+
+  @Schema(description = "Échéances couvertes par une cotisation VALIDE", example = "1")
+  private int echeancesPayees;
+
+  @Schema(description = "Détail par échéance du tour, dans l'ordre")
+  private List<EcheanceRecap> echeances;
+
+  /** Situation du membre sur une échéance du tour. */
+  @Getter
+  @Builder
+  @Schema(description = "Situation du membre sur une échéance du tour")
+  public static class EcheanceRecap {
+
+    @Schema(description = "UUID de l'échéance")
+    private UUID echeanceId;
+
+    @Schema(description = "Rang dans le tour (1 à N)", example = "1")
+    private int numero;
+
+    @Schema(description = "Limite de paiement, avec fuseau")
+    private OffsetDateTime echeanceAt;
+
+    @Schema(description = "Échéance ouverte au paiement (due à ce jour)")
+    private boolean ouverte;
+
+    @Schema(description = "Cotisation retenue sur l'échéance (null si aucune)", nullable = true)
+    private UUID cotisationId;
+
+    @Schema(
+        description = "Statut de la cotisation (null = aucune)",
+        allowableValues = {"EN_ATTENTE", "VALIDE", "EN_RETARD", "REFUSE"},
+        nullable = true)
+    private CotisationStatut statutCotisation;
+
+    @Schema(description = "Montant (null si aucune cotisation)", nullable = true)
+    private BigDecimal montant;
+
+    @Schema(description = "Ponctualité sur cette échéance")
+    private Ponctualite ponctualite;
+  }
 }

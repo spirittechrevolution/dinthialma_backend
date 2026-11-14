@@ -10,6 +10,7 @@ import com.africa.dinthialma_backend.member.entity.TontineMembre;
 import com.africa.dinthialma_backend.support.Fixtures;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
+import com.africa.dinthialma_backend.tontine.entity.EcheanceCycle;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import java.time.LocalDate;
 import org.junit.jupiter.api.BeforeEach;
@@ -63,6 +64,25 @@ class PonctualiteTest {
     assertThat(Ponctualite.de(limite)).isEqualTo(Ponctualite.A_TEMPS);
     assertThat(Ponctualite.de(declaree(CotisationStatut.VALIDE, 22, 20, 1)))
         .isEqualTo(Ponctualite.EN_RETARD);
+  }
+
+  @Test
+  @DisplayName("B32 : comparée à l'échéance couverte, pas à la fin du tour")
+  void parEcheance() {
+    EcheanceCycle premiere =
+        EcheanceCycle.builder()
+            .cycle(cycle)
+            .numero(1)
+            .dateDebut(LocalDate.of(2026, 11, 2))
+            .echeanceAt(LocalDate.of(2026, 11, 8).atTime(20, 0))
+            .build();
+    Cotisation regularisee = declaree(CotisationStatut.VALIDE, 15, 10, 0);
+    regularisee.setEcheance(premiere);
+    // à temps pour la fin du tour (22/11), mais en retard pour l'échéance du 8
+    assertThat(Ponctualite.de(regularisee)).isEqualTo(Ponctualite.EN_RETARD);
+    Cotisation aTemps = declaree(CotisationStatut.VALIDE, 8, 20, 0);
+    aTemps.setEcheance(premiere);
+    assertThat(Ponctualite.de(aTemps)).isEqualTo(Ponctualite.A_TEMPS);
   }
 
   @Test

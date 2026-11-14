@@ -5,6 +5,7 @@ import com.africa.dinthialma_backend.contribution.codeList.Ponctualite;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 import lombok.Builder;
 import lombok.Getter;
@@ -28,6 +29,17 @@ public class CotisationResponse {
 
   @Schema(description = "Numéro du cycle concerné", example = "5")
   private Integer numeroCycle;
+
+  @Schema(description = "UUID de l'échéance du tour couverte par cette cotisation (B32)")
+  private UUID echeanceId;
+
+  @Schema(description = "Rang de l'échéance dans le tour (1 à N)", example = "2")
+  private Integer numeroEcheance;
+
+  @Schema(
+      description = "Limite de paiement de l'échéance, avec fuseau",
+      example = "2026-11-29T20:00:00Z")
+  private OffsetDateTime echeanceAt;
 
   @Schema(description = "Informations du cotisant")
   private MembreInfo membre;

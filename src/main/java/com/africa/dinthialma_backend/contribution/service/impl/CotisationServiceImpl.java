@@ -16,6 +16,7 @@ import com.africa.dinthialma_backend.common.exception.NotFoundException;
 import com.africa.dinthialma_backend.common.util.CsvExport;
 import com.africa.dinthialma_backend.common.util.CsvWriter;
 import com.africa.dinthialma_backend.common.util.FichierExport;
+import com.africa.dinthialma_backend.common.util.Fuseau;
 import com.africa.dinthialma_backend.contribution.codeList.CotisationStatut;
 import com.africa.dinthialma_backend.contribution.codeList.Ponctualite;
 import com.africa.dinthialma_backend.contribution.dto.AdminRecordCotisationRequest;
@@ -37,11 +38,14 @@ import com.africa.dinthialma_backend.notification.codeList.NotificationType;
 import com.africa.dinthialma_backend.notification.dto.NotificationLiens;
 import com.africa.dinthialma_backend.notification.service.WhatsappService;
 import com.africa.dinthialma_backend.notification.service.interfaces.NotificationService;
+import com.africa.dinthialma_backend.tontine.calendrier.EcheancesTour;
 import com.africa.dinthialma_backend.tontine.codeList.CycleStatut;
 import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
+import com.africa.dinthialma_backend.tontine.entity.EcheanceCycle;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
+import com.africa.dinthialma_backend.tontine.repository.EcheanceCycleRepository;
 import com.africa.dinthialma_backend.tontine.repository.TontineRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -70,6 +74,7 @@ public class CotisationServiceImpl implements CotisationService {
   private final CotisationMapper cotisationMapper;
   private final TontineRepository tontineRepository;
   private final CycleTontineRepository cycleRepository;
+  private final EcheanceCycleRepository echeanceRepository;
   private final TontineMembreRepository membreRepository;
   private final UserRepository userRepository;
   private final UserRoleAssignmentRepository roleAssignmentRepository;
@@ -101,12 +106,9 @@ public class CotisationServiceImpl implements CotisationService {
           ErrorCode.NO_CYCLE_IN_PROGRESS);
     }
 
-    // Unicité cycle/membre
-    if (cotisationRepository.existsActiveByCycleAndMembre(cycle.getId(), membre.getId())) {
-      throw new ConflictException(
-          "Vous avez déjà enregistré une cotisation pour ce cycle",
-          ErrorCode.COTISATION_ALREADY_EXISTS);
-    }
+    EcheanceCycle echeance = echeancePayee(cycle, request.getEcheanceId());
+    verifierUnicite(
+        cycle, echeance, membre, "Vous avez déjà enregistré une cotisation pour cette échéance");
 
     validateMontantCotisation(tontine, request.getMontant());
 
@@ -115,6 +117,7 @@ public class CotisationServiceImpl implements CotisationService {
             .tontine(tontine)
             .membre(membre)
             .cycle(cycle)
+            .echeance(echeance)
             .montant(request.getMontant())
             .methodePaiement(request.getMethodePaiement())
             .referenceTransaction(request.getReferenceTransaction())
@@ -134,7 +137,7 @@ public class CotisationServiceImpl implements CotisationService {
 
     String montantStr = request.getMontant().toPlainString() + " FCFA";
     String tontineName = tontine.getNom();
-    int numCycle = cycle.getNumeroCycle();
+    String numCycle = periode(cycle, echeance);
 
     // Notif membre — confirmation de soumission
     try {
@@ -144,7 +147,7 @@ public class CotisationServiceImpl implements CotisationService {
               + montantStr
               + " pour la tontine *"
               + tontineName
-              + "* (cycle "
+              + "* ("
               + numCycle
               + ")"
               + " a bien été soumise. En attente de validation par votre gestionnaire.");
@@ -191,7 +194,7 @@ public class CotisationServiceImpl implements CotisationService {
               + montantStr
               + " pour la tontine *"
               + tontineName
-              + "* (cycle "
+              + "* ("
               + numCycle
               + ")."
               + " Veuillez valider.");
@@ -226,11 +229,9 @@ public class CotisationServiceImpl implements CotisationService {
           ErrorCode.NO_CYCLE_IN_PROGRESS);
     }
 
-    if (cotisationRepository.existsActiveByCycleAndMembre(cycle.getId(), membre.getId())) {
-      throw new ConflictException(
-          "Une cotisation existe déjà pour ce membre sur ce cycle",
-          ErrorCode.COTISATION_ALREADY_EXISTS);
-    }
+    EcheanceCycle echeance = echeancePayee(cycle, request.getEcheanceId());
+    verifierUnicite(
+        cycle, echeance, membre, "Une cotisation existe déjà pour ce membre sur cette échéance");
 
     validateMontantCotisation(tontine, request.getMontant());
     verifierDatePaiement(request.getDatePaiement(), cycle);
@@ -240,6 +241,7 @@ public class CotisationServiceImpl implements CotisationService {
             .tontine(tontine)
             .membre(membre)
             .cycle(cycle)
+            .echeance(echeance)
             .montant(request.getMontant())
             .methodePaiement(request.getMethodePaiement())
             .referenceTransaction(request.getReferenceTransaction())
@@ -266,7 +268,7 @@ public class CotisationServiceImpl implements CotisationService {
     String tontineName = tontine.getNom();
     String ref = request.getReferenceTransaction();
     boolean isPreEnrolled = AccountStatus.PRE_ENROLLED == membre.getUser().getAccountStatus();
-    int numCycle = cycle.getNumeroCycle();
+    String numCycle = periode(cycle, echeance);
 
     // Notification in-app membre — cotisation enregistrée et validée (sauf PRE_ENROLLED)
     if (!isPreEnrolled) {
@@ -287,7 +289,7 @@ public class CotisationServiceImpl implements CotisationService {
                   + montantStr
                   + " pour la tontine *"
                   + tontineName
-                  + "* (cycle "
+                  + "* ("
                   + numCycle
                   + ")."
                   + "\nInscrivez-vous sur Dinthialma pour suivre vos cotisations en temps réel."
@@ -296,7 +298,7 @@ public class CotisationServiceImpl implements CotisationService {
                       + montantStr
                       + " pour la tontine *"
                       + tontineName
-                      + "* (cycle "
+                      + "* ("
                       + numCycle
                       + ")"
                       + " a été enregistrée et validée.\nRéférence : "
@@ -305,7 +307,7 @@ public class CotisationServiceImpl implements CotisationService {
                       + montantStr
                       + " pour la tontine *"
                       + tontineName
-                      + "* (cycle "
+                      + "* ("
                       + numCycle
                       + ")"
                       + " a été enregistrée et validée.";
@@ -324,7 +326,7 @@ public class CotisationServiceImpl implements CotisationService {
               + membreNom
               + " pour la tontine *"
               + tontineName
-              + "* (cycle "
+              + "* ("
               + numCycle
               + ").");
     } catch (Exception e) {
@@ -396,7 +398,7 @@ public class CotisationServiceImpl implements CotisationService {
     String montantStr = saved.getMontant().toPlainString() + " FCFA";
     String tontineName = saved.getTontine().getNom();
     String ref = saved.getReferenceTransaction();
-    int numCycle = saved.getCycle().getNumeroCycle();
+    String numCycle = periode(saved.getCycle(), saved.getEcheance());
 
     // Notif membre — cotisation validée
     try {
@@ -406,7 +408,7 @@ public class CotisationServiceImpl implements CotisationService {
                   + montantStr
                   + " pour la tontine *"
                   + tontineName
-                  + "* (cycle "
+                  + "* ("
                   + numCycle
                   + ")"
                   + " a été validée.\nRéférence : "
@@ -415,7 +417,7 @@ public class CotisationServiceImpl implements CotisationService {
                   + montantStr
                   + " pour la tontine *"
                   + tontineName
-                  + "* (cycle "
+                  + "* ("
                   + numCycle
                   + ")"
                   + " a été validée.";
@@ -434,7 +436,7 @@ public class CotisationServiceImpl implements CotisationService {
               + memberNom
               + " pour la tontine *"
               + tontineName
-              + "* (cycle "
+              + "* ("
               + numCycle
               + ").");
     } catch (Exception e) {
@@ -491,7 +493,7 @@ public class CotisationServiceImpl implements CotisationService {
 
     String montantStr = saved.getMontant().toPlainString() + " FCFA";
     String tontineName = saved.getTontine().getNom();
-    int numCycle = saved.getCycle().getNumeroCycle();
+    String numCycle = periode(saved.getCycle(), saved.getEcheance());
 
     // Notification in-app membre — cotisation refusée (non bloquant)
     notificationService.notify(
@@ -516,7 +518,7 @@ public class CotisationServiceImpl implements CotisationService {
               + montantStr
               + " pour la tontine *"
               + tontineName
-              + "* (cycle "
+              + "* ("
               + numCycle
               + ") a été refusée.\nMotif : "
               + motif
@@ -638,7 +640,7 @@ public class CotisationServiceImpl implements CotisationService {
           c.getDateValidation(),
           c.getMotifRefus(),
           c.getNote(),
-          c.getCycle().getEcheanceAt(),
+          c.getEcheance() != null ? c.getEcheance().getEcheanceAt() : c.getCycle().getEcheanceAt(),
           Ponctualite.de(c),
           c.getDatePaiement(),
           rythme);
@@ -773,14 +775,28 @@ public class CotisationServiceImpl implements CotisationService {
   @Override
   @Transactional(readOnly = true)
   public Page<CycleRecapCotisationResponse> getCycleRecap(
-      String keycloakId, UUID tontineId, UUID cycleId, Pageable pageable) throws CustomException {
+      String keycloakId, UUID tontineId, UUID cycleId, UUID echeanceId, Pageable pageable)
+      throws CustomException {
 
     User caller = findUserByKeycloakId(keycloakId);
     Tontine tontine = findTontineById(tontineId);
     assertIsCreatorOrSuperAdmin(caller, tontine);
 
     // Vérifie que le cycle appartient bien à la tontine
-    findCycleById(tontineId, cycleId);
+    CycleTontine cycle = findCycleById(tontineId, cycleId);
+    LocalDateTime maintenant = Fuseau.maintenant();
+    List<EcheanceCycle> echeances = EcheancesTour.actives(cycle);
+    EcheanceCycle reference =
+        echeanceId == null
+            ? EcheancesTour.courante(cycle, maintenant).orElse(null)
+            : echeances.stream()
+                .filter(e -> e.getId().equals(echeanceId))
+                .findFirst()
+                .orElseThrow(
+                    () ->
+                        new NotFoundException(
+                            ResponseMessageConstants.ECHEANCE_NOT_FOUND,
+                            ErrorCode.ECHEANCE_INTROUVABLE));
 
     Page<TontineMembre> membres =
         membreRepository.findByTontine_IdAndStatutNotAndDeletedAtIsNull(
@@ -790,14 +806,30 @@ public class CotisationServiceImpl implements CotisationService {
     }
 
     List<UUID> membreIds = membres.getContent().stream().map(TontineMembre::getId).toList();
-    Map<UUID, Cotisation> cotisationByMembre =
-        cotisationRepository
-            .findByCycle_IdAndMembre_IdInAndDeletedAtIsNull(cycleId, membreIds)
-            .stream()
+    List<Cotisation> cotisations =
+        cotisationRepository.findByCycle_IdAndMembre_IdInAndDeletedAtIsNull(cycleId, membreIds);
+    Map<UUID, Cotisation> parMembre =
+        cotisations.stream()
             .collect(
                 Collectors.toMap(c -> c.getMembre().getId(), c -> c, Cotisation::plusPertinente));
+    Map<UUID, Map<UUID, Cotisation>> parMembreEtEcheance =
+        cotisations.stream()
+            .filter(c -> c.getEcheance() != null)
+            .collect(
+                Collectors.groupingBy(
+                    c -> c.getMembre().getId(),
+                    Collectors.toMap(
+                        c -> c.getEcheance().getId(), c -> c, Cotisation::plusPertinente)));
 
-    return membres.map(m -> cotisationMapper.toRecap(m, cotisationByMembre.get(m.getId())));
+    return membres.map(
+        m ->
+            cotisationMapper.toRecap(
+                m,
+                echeances,
+                reference,
+                parMembreEtEcheance.getOrDefault(m.getId(), Map.of()),
+                parMembre.get(m.getId()),
+                maintenant));
   }
 
   // ─── Récapitulatif total par membre ───────────────────────────────────────
@@ -833,6 +865,55 @@ public class CotisationServiceImpl implements CotisationService {
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
+
+  /**
+   * Échéance payée (B32) : celle désignée (régularisation d'une échéance passée), sinon l'échéance
+   * courante du tour. Null seulement pour un tour sans échéance enregistrée (donnée antérieure).
+   */
+  private EcheanceCycle echeancePayee(CycleTontine cycle, UUID echeanceId) throws CustomException {
+    LocalDateTime maintenant = Fuseau.maintenant();
+    if (echeanceId == null) {
+      return EcheancesTour.courante(cycle, maintenant).orElse(null);
+    }
+    EcheanceCycle echeance =
+        echeanceRepository
+            .findByIdAndCycle_IdAndDeletedAtIsNull(echeanceId, cycle.getId())
+            .orElseThrow(
+                () ->
+                    new NotFoundException(
+                        ResponseMessageConstants.ECHEANCE_NOT_FOUND,
+                        ErrorCode.ECHEANCE_INTROUVABLE));
+    if (!EcheancesTour.ouverte(echeance, maintenant)) {
+      throw new BadRequestException(
+          "Cette échéance n'est pas encore ouverte au paiement (à partir du "
+              + echeance.getDateDebut()
+              + ")",
+          ErrorCode.ECHEANCE_NON_OUVERTE);
+    }
+    return echeance;
+  }
+
+  /** Une cotisation active max par membre et par échéance (par tour sans échéance enregistrée). */
+  private void verifierUnicite(
+      CycleTontine cycle, EcheanceCycle echeance, TontineMembre membre, String message)
+      throws CustomException {
+    boolean existe =
+        echeance != null
+            ? cotisationRepository.existsActiveByEcheanceAndMembre(echeance.getId(), membre.getId())
+            : cotisationRepository.existsActiveByCycleAndMembre(cycle.getId(), membre.getId());
+    if (existe) {
+      throw new ConflictException(message, ErrorCode.COTISATION_ALREADY_EXISTS);
+    }
+  }
+
+  /** Libellé du tour dans les messages : « cycle 3 », ou « tour 3, échéance 2/4 » (B32). */
+  private static String periode(CycleTontine cycle, EcheanceCycle echeance) {
+    int nombre = EcheancesTour.actives(cycle).size();
+    if (echeance == null || nombre <= 1) {
+      return "cycle " + cycle.getNumeroCycle();
+    }
+    return "tour " + cycle.getNumeroCycle() + ", échéance " + echeance.getNumero() + "/" + nombre;
+  }
 
   private User findUserByKeycloakId(String keycloakId) throws CustomException {
     return userRepository

@@ -47,6 +47,7 @@ import com.africa.dinthialma_backend.tontine.codeList.TontineType;
 import com.africa.dinthialma_backend.tontine.entity.CycleGagnant;
 import com.africa.dinthialma_backend.tontine.entity.CycleTontine;
 import com.africa.dinthialma_backend.tontine.entity.DistributionEvenementielle;
+import com.africa.dinthialma_backend.tontine.entity.EcheanceCycle;
 import com.africa.dinthialma_backend.tontine.entity.Tontine;
 import com.africa.dinthialma_backend.tontine.repository.CycleGagnantRepository;
 import com.africa.dinthialma_backend.tontine.repository.CycleTontineRepository;
@@ -234,6 +235,55 @@ class MeServiceImplTest {
       assertThat(r.getTontines().get(1).getCotisationDue()).isNull();
       assertThat(r.getTontines().get(2).getCotisationDue()).isNull();
       assertThat(r.getNombreCotisationsDues()).isZero();
+    }
+
+    @Test
+    @DisplayName("B32 : due sur l'échéance courante, échéances échues impayées comptées")
+    void parEcheance() throws Exception {
+      Tontine t = Fixtures.tontine(gestionnaire);
+      TontineMembre m = Fixtures.membre(t, moi, 1);
+      mesAdhesions(m);
+      CycleTontine c = Fixtures.cycle(t, 1, CycleStatut.EN_COURS);
+      LocalDate j = LocalDate.now();
+      EcheanceCycle passee = echeance(c, 1, j.minusDays(14), j.minusDays(8));
+      EcheanceCycle courante = echeance(c, 2, j.minusDays(7), j.plusDays(2));
+      echeance(c, 3, j.plusDays(3), j.plusDays(9));
+      when(cycleRepository.findByTontine_IdInAndStatutAndDeletedAtIsNull(
+              anyList(), eq(CycleStatut.EN_COURS)))
+          .thenReturn(List.of(c));
+      Cotisation refuseeSurPassee = Fixtures.cotisation(m, c, CotisationStatut.REFUSE);
+      refuseeSurPassee.setEcheance(passee);
+      Cotisation declaree = Fixtures.cotisation(m, c, CotisationStatut.EN_ATTENTE);
+      declaree.setEcheance(courante);
+      when(cotisationRepository.findByCycle_IdInAndMembre_IdInAndDeletedAtIsNull(
+              anyList(), anyList()))
+          .thenReturn(List.of(refuseeSurPassee, declaree));
+
+      MeSummaryResponse.CotisationDue due =
+          service.getSummary(kc).getTontines().get(0).getCotisationDue();
+
+      assertThat(due.getStatut()).isEqualTo(StatutCotisationDue.EN_ATTENTE);
+      assertThat(due.getCotisationId()).isEqualTo(declaree.getId());
+      assertThat(due.getEcheanceId()).isEqualTo(courante.getId());
+      assertThat(due.getNumeroEcheance()).isEqualTo(2);
+      assertThat(due.getNombreEcheances()).isEqualTo(3);
+      assertThat(due.getDateLimite()).isEqualTo(j.plusDays(2));
+      assertThat(due.getEcheanceAt()).isNotNull();
+      // échéance 1 échue avec seulement un refus : à régulariser
+      assertThat(due.getEcheancesEnRetard()).isEqualTo(1);
+    }
+
+    private EcheanceCycle echeance(CycleTontine c, int numero, LocalDate debut, LocalDate fin) {
+      EcheanceCycle e =
+          EcheanceCycle.builder()
+              .id(UUID.randomUUID())
+              .cycle(c)
+              .numero(numero)
+              .dateDebut(debut)
+              .echeanceAt(fin.atTime(23, 59))
+              .build();
+      c.getEcheances().add(e);
+      return e;
     }
 
     @Test
