@@ -2,13 +2,15 @@ package com.africa.dinthialma_backend.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.africa.dinthialma_backend.common.util.Fuseau;
 import com.africa.dinthialma_backend.support.AbstractIntegrationTest;
 import com.africa.dinthialma_backend.support.ApiClient.Reponse;
 import com.africa.dinthialma_backend.support.TestDataFactory;
 import com.africa.dinthialma_backend.support.TestDataFactory.TontineEnCours;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -57,7 +59,9 @@ class CotisationParcoursIT extends AbstractIntegrationTest {
     assertThat(ligneSummary(t).path("cotisationDue").path("ponctualite").asText())
         .isEqualTo("NON_DECLAREE");
 
-    String hier = LocalDate.now().atTime(7, 30).toString();
+    // Instant présent arrondi à la minute : toujours passé et dans le tour du jour (une heure fixe
+    // comme 7h30 serait « dans le futur » pour un build lancé avant 7h30).
+    String hier = LocalDateTime.now(Fuseau.DAKAR).truncatedTo(ChronoUnit.MINUTES).toString();
     JsonNode encaissee =
         TestDataFactory.attendre(
                 api.post(

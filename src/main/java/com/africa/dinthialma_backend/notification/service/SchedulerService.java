@@ -60,7 +60,9 @@ public class SchedulerService {
    * </ul>
    */
   @Scheduled(cron = "0 0 8 * * *")
-  @Transactional(readOnly = true)
+  // Transaction en écriture : les notifications in-app créées ici doivent être enregistrées
+  // (en readOnly, Hibernate ne les écrit jamais, sans erreur visible).
+  @Transactional
   public void rappelCotisationsEnAttente() {
     List<CycleTontine> cyclesEnCours =
         cycleRepository.findByStatutAndDeletedAtIsNull(CycleStatut.EN_COURS);
@@ -210,7 +212,9 @@ public class SchedulerService {
    * Vérifie aussi les tours de jackpot ROTATION dans 3 jours → notifie le futur bénéficiaire.
    */
   @Scheduled(cron = "0 0 8 * * *")
-  @Transactional(readOnly = true)
+  // Transaction en écriture : les notifications in-app créées ici doivent être enregistrées
+  // (en readOnly, Hibernate ne les écrit jamais, sans erreur visible).
+  @Transactional
   public void rappelsCyclesProches() {
     LocalDate dans2Jours = LocalDate.now().plusDays(2);
     LocalDate dans3Jours = LocalDate.now().plusDays(3);

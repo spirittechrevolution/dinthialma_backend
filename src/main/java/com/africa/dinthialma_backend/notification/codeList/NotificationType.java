@@ -74,5 +74,11 @@ public enum NotificationType {
    * Règles de la tontine modifiées en cours (B26 : jour ou heure d'échéance) ; s'appliquent aux
    * tours pas encore commencés (destinataires : membres actifs).
    */
-  REGLES_MODIFIEES
+  REGLES_MODIFIEES,
+
+  /**
+   * Échéance passée avec des membres actifs qui n'ont pas déclaré leur cotisation (B26) ; le statut
+   * des cotisations ne change pas (destinataire : gestionnaire).
+   */
+  COTISATIONS_MANQUANTES
 }

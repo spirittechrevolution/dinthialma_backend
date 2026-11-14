@@ -276,7 +276,7 @@ src/main/java/com/africa/dinthialma_backend/
 │       ├── interfaces/ CotisationService
 │       └── impl/       CotisationServiceImpl
 ├── notification/   ✅ SMS (LAfricaMobile) + notifications in-app
-│   ├── codeList/       NotificationType (21 valeurs)
+│   ├── codeList/       NotificationType (22 valeurs)
 │   ├── controller/     NotificationController
 │   ├── dto/            NotificationResponse
 │   ├── entity/         UserNotification
@@ -568,7 +568,9 @@ obligatoire** : sans Docker démarré, le build échoue (les `*IT` ne sont jamai
 | V038 | `add_date_paiement_to_cotisations.sql` | `cotisations.date_paiement` (paiement remis en main propre, compte pour la ponctualité) |
 | V039 | `add_rythme_et_echeances.sql` | B26 : `tontines.rythme_intervalle`, `rythme_unite`, `jour_echeance`, `heure_echeance`, `rappel_veille`, `rappel_heures_avant` (reprise depuis `frequence`) ; `cycles_tontine.echeance_at` ; table `echeances_cycle` (1 par tour existant) ; seed FREQUENCE_TONTINE `PERSONNALISEE` |
 
-Prochaine version disponible : **V040**
+| V040 | `create_rappels_envoyes.sql` | B26 : table `rappels_envoyes` (échéance, destinataire, nature, canal) + index unique anti-doublon (multi-instances) |
+
+Prochaine version disponible : **V041**
 
 ---
 
@@ -701,6 +703,8 @@ Prochaine version disponible : **V040**
 | Rappel cotisation ROTATIVE (scheduler 8h) | ✅ |
 | Rappels EVENEMENTIELLE J-X avec compte à rebours | ✅ |
 | Rappels EVENEMENTIELLE jours clés J-30/7/3/1 (tous membres) | ✅ |
+| Rappels d'échéance B26 : veille 18h00 + N h avant (toutes les 5 min, une fois par échéance/membre/canal) | ✅ |
+| Cotisations manquantes après l'échéance → gestionnaire (B26) | ✅ |
 | Annonce jackpot ROTATIVE (à la clôture du cycle) | ✅ |
 | Distribution finale EVENEMENTIELLE (WhatsApp individuel + résumé admin) | ✅ |
 
@@ -715,7 +719,7 @@ Prochaine version disponible : **V040**
 | Marquer tout lu (bulk `@Modifying`) | ✅ | 🔒 tout auth |
 | `notify()` non-bloquant (try/catch interne, jamais de rollback) | ✅ | INFRA |
 
-#### Mapping événements → `NotificationType` (21 valeurs)
+#### Mapping événements → `NotificationType` (22 valeurs)
 
 | Événement | Type | Destinataire |
 |-----------|------|--------------|
@@ -729,6 +733,8 @@ Prochaine version disponible : **V040**
 | Distribution finale (EVENEMENTIELLE) | `DISTRIBUTION_FINALE` | Chaque membre |
 | Cycle clôturé avec retards | `PAIEMENT_EN_RETARD` | Admin |
 | Scheduler 8h – cotisation non payée ou période non cotisée | `RAPPEL_COTISATION` | Membre concerné |
+| Veille 18h00 / N h avant l'échéance, membre sans déclaration (B26) | `RAPPEL_COTISATION` | Membre concerné (in-app + WhatsApp hors 21h–8h) |
+| Échéance passée avec des membres sans déclaration (B26) | `COTISATIONS_MANQUANTES` | Gestionnaire |
 | Jackpot du membre dans 3 jours (ROTATIVE ROTATION) | `TOUR_PROCHE` | Futur bénéficiaire |
 | Cycle se termine dans 2 jours | `CYCLE_BIENTOT_CLOTURE` | Admin |
 | Cycle MANUEL ouvert | `CYCLE_OUVERT` | Membres actifs |
@@ -918,7 +924,8 @@ cd docker && docker compose up -d
   B26 Rythme libre, jour et heure d'échéance (lot 1 : modèle, V039, tours + échéances,
       simulation, ouverture manuelle sans dateFin, ponctualité sur echeanceAt)        ✅
       lot 2 : échéance/rappels modifiables en cours (REGLES_MODIFIEES)                ✅
-      lot 3 : rappels veille / N h avant + COTISATIONS_MANQUANTES (planifié)          🔲
+      lot 3 : rappels veille / N h avant + COTISATIONS_MANQUANTES (planifié, V040)    ✅
+      → fix : notifications in-app des rappels de 8h jamais enregistrées (readOnly)
       lot 4 : exports CSV (rythme lisible, echeanceAt)                                🔲
 ```
 
@@ -976,7 +983,17 @@ l'ouverture manuelle et la simulation (`GET /v1/tontines/simulation`).
   s'arrête à la prochaine occurrence (jamais rallongé). Audit `echeance` ; membres actifs notifiés
   (`REGLES_MODIFIEES`), sauf en BROUILLON ; un changement de rappels seul n'est pas notifié.
 - **Rappels** : `rappels.veille` (18h00 la veille) et `rappels.heuresAvant` (0–24, défaut 3).
-- **À l'échéance** : le statut ne change pas (EN_RETARD seulement à la clôture, S01).
+  `RappelsEcheanceService` (toutes les 5 min, `zone = Africa/Dakar`) lit les **échéances** (pas le « tour en cours »)
+  des tours EN_COURS de tontines ACTIVE et prévient les membres actifs sans déclaration retenue (refusée = non
+  déclarée). « N h avant » remplace la veille s'il n'est pas encore parti. Anti-doublon : `JournalRappels`
+  réserve une ligne `rappels_envoyes` **avant** l'envoi (index unique, transaction séparée). WhatsApp : pas
+  d'envoi de 21h00 à 8h00, reporté au premier passage autorisé tant que la fenêtre est ouverte ; in-app immédiat.
+- **Fuseau** : la JVM est fixée sur `Africa/Dakar` (bloc statique de `DinthialmaBackendApplication`) ; `Fuseau`
+  dans `common/util`.
+- **Planificateurs et notifications** : une méthode qui appelle `notify()` ne doit **jamais** être
+  `@Transactional(readOnly = true)` (la notification n'est pas écrite, sans erreur).
+- **À l'échéance** : le statut ne change pas (EN_RETARD seulement à la clôture, S01) ; pendant 24 h, une
+  notification `COTISATIONS_MANQUANTES` (une seule) liste au gestionnaire les membres sans déclaration.
 - **Codes** : `RYTHME_INVALIDE`, `JOUR_ECHEANCE_INVALIDE`, `HEURE_ECHEANCE_INVALIDE`, `RYTHME_NON_MODIFIABLE`.
 
 ---
